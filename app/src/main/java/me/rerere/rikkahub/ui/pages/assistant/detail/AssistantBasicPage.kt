@@ -18,6 +18,9 @@ import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
@@ -41,6 +44,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.ExecutionPermission
 import me.rerere.rikkahub.ui.components.ai.ModelField
 import me.rerere.rikkahub.ui.components.ai.ModelListSheet
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
@@ -63,6 +67,13 @@ import org.koin.core.parameter.parametersOf
 import kotlin.math.roundToInt
 import kotlin.uuid.Uuid
 import me.rerere.rikkahub.data.model.Tag as DataTag
+
+private fun ExecutionPermission.labelRes(): Int = when (this) {
+    ExecutionPermission.READ_ONLY -> R.string.assistant_page_execution_permission_read_only
+    ExecutionPermission.READ_WRITE -> R.string.assistant_page_execution_permission_read_write
+    ExecutionPermission.APPROVAL -> R.string.assistant_page_execution_permission_approval
+    ExecutionPermission.FULL -> R.string.assistant_page_execution_permission_full
+}
 
 @Composable
 fun AssistantBasicPage(id: String) {
@@ -194,6 +205,25 @@ internal fun AssistantBasicContent(
                 supportingContent = { Text(stringResource(R.string.assistant_page_plan_mode_desc)) },
                 headlineContent = { Text(stringResource(R.string.assistant_page_plan_mode)) },
             )
+            formItem(
+                headlineContent = { Text(stringResource(R.string.assistant_page_execution_permission)) },
+                supportingContent = { Text(stringResource(R.string.assistant_page_execution_permission_desc)) },
+            ) {
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    ExecutionPermission.entries.forEachIndexed { index, permission ->
+                        SegmentedButton(
+                            selected = assistant.executionPermission == permission,
+                            onClick = { onUpdate(assistant.copy(executionPermission = permission)) },
+                            shape = SegmentedButtonDefaults.itemShape(index, ExecutionPermission.entries.size),
+                        ) {
+                            Text(
+                                text = stringResource(permission.labelRes()),
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                }
+            }
             switchItem(
                 checked = assistant.enableNotification,
                 onCheckedChange = { onUpdate(assistant.copy(enableNotification = it)) },

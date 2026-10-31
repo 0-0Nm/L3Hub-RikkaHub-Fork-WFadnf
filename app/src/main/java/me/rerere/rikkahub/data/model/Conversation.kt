@@ -44,6 +44,8 @@ data class Conversation(
     val subAgentState: String? = null,
     // 会话级任务清单，由 todo_write 工具维护
     val todos: List<TodoItem> = emptyList(),
+    // 写下这份清单的消息节点：删掉或重新生成这条消息时清单一起清空
+    val todosOwnerNodeId: Uuid? = null,
     @Transient
     val newConversation: Boolean = false
 ) {

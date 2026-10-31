@@ -110,12 +110,14 @@ import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.QuickMessage
+import me.rerere.rikkahub.data.model.TodoItem
 import me.rerere.rikkahub.service.MessageQueueState
 import me.rerere.rikkahub.service.QueuedMessage
 import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionContext
 import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionItem
 import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionList
 import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionProvider
+import me.rerere.rikkahub.ui.components.message.ConversationTodoCard
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionRecordAudio
@@ -147,6 +149,8 @@ fun ChatInput(
     // 会话视角下的助手和模型：会话开始后以会话上固定的配置为准
     assistant: Assistant,
     chatModel: Model?,
+    // 会话任务清单, 由 todo_write 工具维护, 显示在输入区最上方
+    todos: List<TodoItem> = emptyList(),
     // 当前会话已占用的上下文 token(最近一次回复的真实用量)
     contextTokens: Int? = null,
     usageTokenSpeed: Float? = null,
@@ -271,6 +275,14 @@ fun ChatInput(
                 .animateContentSize(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            if (todos.isNotEmpty()) {
+                ConversationTodoCard(
+                    todos = todos,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                )
+            }
             MessageQueuePanel(
                 state = messageQueue,
                 onRemove = onRemoveQueuedMessage,

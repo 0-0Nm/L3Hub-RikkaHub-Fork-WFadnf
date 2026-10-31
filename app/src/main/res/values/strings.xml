@@ -2055,6 +2055,12 @@
   <string name="workspace_revert_failed">Undo failed: %1$s</string>
   <string name="assistant_page_plan_mode">Plan mode</string>
   <string name="assistant_page_plan_mode_desc">Only read-only tools are allowed: file writes, git changes and command execution are rejected until you switch it off.</string>
+  <string name="assistant_page_execution_permission">Execution permission</string>
+  <string name="assistant_page_execution_permission_desc">Read only: only tools that read. Read &amp; write: file writes run without asking, commands still ask. Ask first: every write and command asks, like before. Automatic: nothing asks.</string>
+  <string name="assistant_page_execution_permission_read_only">Read only</string>
+  <string name="assistant_page_execution_permission_read_write">Read &amp; write</string>
+  <string name="assistant_page_execution_permission_approval">Ask first</string>
+  <string name="assistant_page_execution_permission_full">Automatic</string>
   <string name="workspace_detail_tool_list">List directory</string>
   <string name="workspace_detail_tool_glob">Match files</string>
   <string name="workspace_detail_tool_grep">Search contents</string>

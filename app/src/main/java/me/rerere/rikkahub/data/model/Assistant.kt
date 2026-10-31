@@ -33,6 +33,8 @@ data class Assistant(
     val enableNotification: Boolean = true,
     // 计划模式：只允许只读工具，写文件/执行命令/改仓库一律拒绝
     val planMode: Boolean = false,
+    // 工作区工具的审批档位：只读 / 读写 / 审批 / 自动
+    val executionPermission: ExecutionPermission = ExecutionPermission.APPROVAL,
     val enableMemory: Boolean = false,
     val useGlobalMemory: Boolean = false, // 使用全局共享记忆而非助手隔离记忆
     val autoConsolidateMemory: Boolean = true, // 对话停下来后在后台自动整理记忆; 关闭后只能手动整理
@@ -79,6 +81,26 @@ data class Assistant(
 
     val primaryWorkspaceId: Uuid?
         get() = workspaceId ?: workspaceIds.firstOrNull()
+}
+
+/**
+ * 工作区工具的执行权限档位。
+ *
+ * 只影响「写文件 / 执行命令 / 改仓库 / 跑测试」，读类工具在任何档位下都能用。
+ */
+@Serializable
+enum class ExecutionPermission {
+    /** 只读：只注册读类工具，shell 也只允许只读命令 */
+    READ_ONLY,
+
+    /** 读写：写文件免审批，执行命令仍然要确认 */
+    READ_WRITE,
+
+    /** 审批：写操作和命令按工具默认值与工作区里的开关逐条确认（旧行为） */
+    APPROVAL,
+
+    /** 自动：全部放行，不再逐条确认 */
+    FULL,
 }
 
 @Serializable

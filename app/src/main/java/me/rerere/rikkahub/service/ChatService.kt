@@ -198,7 +198,13 @@ class ChatService(
     /** todo_write 工具直接写库，这里同步内存里的会话状态，聊天页卡片才能立刻刷新 */
     fun syncTodos(conversationId: Uuid, todos: List<TodoItem>) {
         sessionManager.get(conversationId)?.update { current ->
-            if (current.todos == todos) current else current.copy(todos = todos)
+            // 清单跟着写下它的那条消息走：记住写入时的最后一个节点
+            val ownerNodeId = current.messageNodes.lastOrNull()?.id
+            if (current.todos == todos && current.todosOwnerNodeId == ownerNodeId) {
+                current
+            } else {
+                current.copy(todos = todos, todosOwnerNodeId = ownerNodeId)
+            }
         }
     }
 
@@ -701,13 +707,26 @@ class ChatService(
                         ?: return@launchGenerationJob
 
                     if (node.role == MessageRole.USER) {
+                        var todosCleared = false
                         session.tryUpdate { conversation ->
                             val index = conversation.messageNodes.indexOfFirst { it.id == node.id }
                             // 查找之后这条消息被删掉了
                             if (index == -1) return@tryUpdate null
-                            conversation.copy(messageNodes = conversation.messageNodes.take(index + 1))
+                            val keptNodes = conversation.messageNodes.take(index + 1)
+                            // 截掉的消息里就有清单的来源时，清单一起清掉
+                            val ownerRemoved = conversation.todosOwnerNodeId?.let { owner ->
+                                keptNodes.none { it.id == owner }
+                            } == true
+                            if (ownerRemoved) todosCleared = true
+                            conversation.copy(
+                                messageNodes = keptNodes,
+                                todos = if (ownerRemoved) emptyList() else conversation.todos,
+                                todosOwnerNodeId = if (ownerRemoved) null else conversation.todosOwnerNodeId,
+                            )
                         } ?: return@launchGenerationJob
                         session.flush()
+                        // 整条保存会把库里还在的清单当成内存没同步捡回来，清空要单独落库
+                        if (todosCleared) conversationRepo.updateTodos(conversationId, emptyList())
                         runTurn(session)
                     } else {
                         runTurn(session, regenerateNodeId = node.id)
@@ -1667,10 +1686,21 @@ class ChatService(
         messageId: Uuid,
         failIfMissing: Boolean = true,
     ) {
+        var todosCleared = false
         mutate(conversationId) { conversation ->
-            conversation.deleteMessage(messageId)
+            val nodeId = conversation.getMessageNodeByMessageId(messageId)?.id
+            val updated = conversation.deleteMessage(messageId)
                 ?: if (failIfMissing) throw NotFoundException("Message not found") else conversation
+            // 清单是这条消息写下的，消息没了清单也就没有来源
+            if (nodeId != null && nodeId == updated.todosOwnerNodeId) {
+                todosCleared = true
+                updated.copy(todos = emptyList(), todosOwnerNodeId = null)
+            } else {
+                updated
+            }
         }
+        // 整条保存会把库里还在的清单当成内存没同步捡回来，清空要单独落库
+        if (todosCleared) conversationRepo.updateTodos(conversationId, emptyList())
     }
 
     suspend fun deleteMessage(

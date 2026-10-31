@@ -81,6 +81,7 @@ class ChatToolFactory(
             cwds = workspaceCwds,
             conversationId = conversationId,
             planMode = assistant.planMode,
+            executionPermission = assistant.executionPermission,
         )
         val tools = buildList {
             if (assistant.enableMemory) {

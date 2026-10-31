@@ -107,7 +107,9 @@ fun createTodoTools(
                             }
                         })
                         put("hint", "Keep the list updated with todo_write as you work.")
-                    }.toString()
+                    }.toString() +
+                        "\n\nCurrent todo list:\n" +
+                        formatTodoLines(items)
                 )
             )
         },
@@ -132,6 +134,12 @@ private fun JsonObject.parseStatus(): TodoStatus {
 /** 拼进系统提示词的任务清单, 用纯文本以免模型误以为是工具结果 */
 fun buildTodoPrompt(todos: List<TodoItem>): String = buildString {
     appendLine("## Current task list")
+    append(formatTodoLines(todos))
+    append("Keep this list up to date with todo_write as you make progress. It survives context compression; the user sees it as a pinned card.")
+}
+
+/** 清单的纯文本形式：一行一条，带状态标记 */
+private fun formatTodoLines(todos: List<TodoItem>): String = buildString {
     todos.forEach { item ->
         val mark = when (item.status) {
             TodoStatus.COMPLETED -> "[x]"
@@ -140,5 +148,4 @@ fun buildTodoPrompt(todos: List<TodoItem>): String = buildString {
         }
         appendLine("- $mark ${item.content}")
     }
-    append("Keep this list up to date with todo_write as you make progress. It survives context compression; the user sees it as a pinned card.")
 }

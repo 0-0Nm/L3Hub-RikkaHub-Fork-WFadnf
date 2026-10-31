@@ -52,6 +52,8 @@ import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.TodoItem
+import me.rerere.rikkahub.data.model.TodoStatus
 import me.rerere.rikkahub.ui.components.ai.ProviderQuotaText
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.ui.theme.TerminalPalette
@@ -184,6 +186,7 @@ fun TerminalChatInput(
     assistant: Assistant,
     onUpdateAssistant: (Assistant) -> Unit,
     onInterject: () -> Unit,
+    todos: List<TodoItem> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     val text = state.textContent.text.toString()
@@ -206,6 +209,17 @@ fun TerminalChatInput(
             softWrap = false,
             overflow = TextOverflow.Clip,
         )
+        if (todos.isNotEmpty()) {
+            val completed = todos.count { it.status == TodoStatus.COMPLETED }
+            val current = todos.firstOrNull { it.status == TodoStatus.IN_PROGRESS }?.content
+            Text(
+                text = "todos $completed/${todos.size}" + if (current != null) " · $current" else "",
+                style = TerminalTextStyle,
+                color = TerminalPalette.GreenDim,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         TerminalContextLine(
             contextTokens = contextTokens,
             warnTokens = chatModel?.warnContextTokens,

@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import me.rerere.ai.ui.UIMessage
+import me.rerere.rikkahub.data.ai.tools.TODO_WRITE_TOOL_NAME
 import me.rerere.rikkahub.data.datastore.ConversationSortOrder
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
@@ -442,6 +443,12 @@ class ConversationRepository(
             todos = runCatching {
                 JsonInstant.decodeFromString<List<TodoItem>>(conversationEntity.todos.ifEmpty { "[]" })
             }.getOrDefault(emptyList()),
+            // 清单是最后一次 todo_write 所在的节点写下的：这个节点没单独落库，读回来时按节点内容还原
+            todosOwnerNodeId = messageNodes.lastOrNull { node ->
+                node.messages.any { message ->
+                    message.getTools().any { tool -> tool.toolName == TODO_WRITE_TOOL_NAME }
+                }
+            }?.id,
         )
     }
 

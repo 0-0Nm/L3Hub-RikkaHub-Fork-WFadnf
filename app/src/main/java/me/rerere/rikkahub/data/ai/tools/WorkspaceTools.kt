@@ -15,6 +15,7 @@ import me.rerere.ai.ui.DiffMetadata
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.toMetadata
 import me.rerere.rikkahub.data.files.FilesManager
+import me.rerere.rikkahub.data.model.ExecutionPermission
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.data.workspace.ApplyOutcome
 import me.rerere.rikkahub.data.workspace.FileDiff
@@ -89,6 +90,7 @@ internal data class WorkspaceTarget(
     val layout: WorkspaceLayout,
     val approvalOverrides: Map<String, Boolean>,
     val supportsFileWrite: Boolean,
+    val executionPermission: ExecutionPermission = ExecutionPermission.APPROVAL,
 )
 
 suspend fun createWorkspaceTools(
@@ -97,7 +99,10 @@ suspend fun createWorkspaceTools(
     cwds: Map<String, String> = emptyMap(),
     conversationId: Uuid? = null,
     planMode: Boolean = false,
+    executionPermission: ExecutionPermission = ExecutionPermission.APPROVAL,
 ): List<Tool> {
+    // 只读档位沿用计划模式的过滤规则: 写文件 / 改仓库 / 跑测试都不注册, shell 只放只读命令
+    val readOnly = planMode || executionPermission == ExecutionPermission.READ_ONLY
     val targets = workspaceIds
         .map { it.trim() }
         .filter { it.isNotEmpty() }
@@ -115,6 +120,7 @@ suspend fun createWorkspaceTools(
                 layout = layout,
                 approvalOverrides = workspace.toolApprovalOverrides(),
                 supportsFileWrite = workspace.capabilities().fileWriteTools,
+                executionPermission = executionPermission,
             )
         }
         .toList()
@@ -129,15 +135,15 @@ suspend fun createWorkspaceTools(
         val snapshots = conversationId?.let {
             runCatching { getKoin().get<WorkspaceSnapshotStore>() }.getOrNull()
         }
-        // 计划模式只放只读工具：写文件、跑测试这类有副作用的工具直接不注册
-        if (targets.any { it.supportsFileWrite } && !planMode) {
+        // 计划模式和「只读」档位只放只读工具：写文件、跑测试这类有副作用的工具直接不注册
+        if (targets.any { it.supportsFileWrite } && !readOnly) {
             add(createWriteFileTool(targets, workspaceRepository, snapshots, conversationId))
             add(createEditFileTool(targets, workspaceRepository, snapshots, conversationId))
             add(createApplyPatchTool(targets, workspaceRepository, snapshots, conversationId))
         }
-        add(createGitTool(targets, workspaceRepository, planMode))
-        if (!planMode) add(createTestTool(targets, workspaceRepository))
-        add(createShellTool(targets, workspaceRepository, cwds, planMode))
+        add(createGitTool(targets, workspaceRepository, readOnly))
+        if (!readOnly) add(createTestTool(targets, workspaceRepository))
+        add(createShellTool(targets, workspaceRepository, cwds, readOnly))
     }
 }
 
@@ -204,8 +210,69 @@ private fun String.normalizeWorkspaceSelector(): String =
 private val WORKSPACE_QUOTES = setOf('"', '\'', '“', '”', '‘', '’', '＂')
 private val WHITESPACE = Regex("\\s+")
 
-internal fun WorkspaceTarget.needsApproval(name: String): Boolean =
-    resolveWorkspaceToolApproval(name, approvalOverrides)
+/**
+ * 单条工具在当前执行权限下是否需要用户确认。
+ *
+ * [ExecutionPermission.READ_ONLY] 下写类工具根本不会注册, 这里保守地要求确认;
+ * [ExecutionPermission.READ_WRITE] 只放行写文件, 命令类工具仍然确认;
+ * [ExecutionPermission.FULL] 一律放行。
+ */
+// TODO(l3hub): 工作区详情页里的单工具审批开关只在 APPROVAL 档位生效，其它档位以档位为准，界面还没提示这一点
+internal fun WorkspaceTarget.needsApproval(name: String): Boolean = when (executionPermission) {
+    ExecutionPermission.FULL -> false
+    ExecutionPermission.READ_WRITE ->
+        if (name in WorkspaceFileWriteToolNames) false else WorkspaceToolDefaultApprovals[name] ?: true
+    ExecutionPermission.READ_ONLY -> true
+    ExecutionPermission.APPROVAL -> resolveWorkspaceToolApproval(name, approvalOverrides)
+}
+
+/**
+ * 写文件类工具的审批: [ExecutionPermission.FULL] 全部放行; 其余档位下写到可写区之外一律确认,
+ * 免得「免审批写入」被用来改系统目录。
+ */
+internal fun WorkspaceTarget.requiresWriteApproval(name: String, outsideWritableRoots: Boolean): Boolean =
+    when (executionPermission) {
+        ExecutionPermission.FULL -> false
+        ExecutionPermission.READ_WRITE -> outsideWritableRoots
+        ExecutionPermission.READ_ONLY -> true
+        ExecutionPermission.APPROVAL -> needsApproval(name) || outsideWritableRoots
+    }
+
+/**
+ * `workspace_shell` 的审批。
+ *
+ * 审批档位沿用旧规则 (破坏性命令必确认、只读命令免确认);
+ * 只读档位不打扰用户, 非只读命令在执行时直接拒绝并告诉模型原因;
+ * [ExecutionPermission.FULL] 连破坏性命令也不再拦, 这是用户在设置页显式选择的取舍。
+ */
+internal fun WorkspaceTarget.requiresShellApproval(command: String): Boolean {
+    val risk = WorkspaceCommandPolicy.classify(command)
+    return when (executionPermission) {
+        ExecutionPermission.FULL -> false
+        ExecutionPermission.READ_ONLY -> false
+        ExecutionPermission.READ_WRITE -> true
+        ExecutionPermission.APPROVAL -> when {
+            // 破坏性命令始终要确认，用户关掉审批也不放行
+            risk == WorkspaceCommandPolicy.Risk.DANGEROUS -> true
+            !needsApproval("workspace_shell") -> false
+            // 只读命令免审批：编码时大量 ls / grep / git diff，逐条确认没法用
+            risk == WorkspaceCommandPolicy.Risk.READ_ONLY -> false
+            else -> true
+        }
+    }
+}
+
+/** 「已修改文件」清单: 只带路径和是否新建, 没有内容快照 */
+internal fun JsonObjectBuilder.putEditedFiles(files: List<JsonObject>) {
+    if (files.isEmpty()) return
+    put("editedFiles", buildJsonArray { files.forEach { add(it) } })
+}
+
+/** 单条「已修改文件」记录, [created] 为 null 表示拿不到创建时间, 不确定是不是本轮新建的 */
+internal fun editedFileJson(path: String, created: Boolean? = null): JsonObject = buildJsonObject {
+    put("path", path)
+    if (created != null) put("created", created)
+}
 
 private val IMAGE_EXTENSIONS = setOf(
     "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "heic", "heif", "avif", "ico",
@@ -308,8 +375,10 @@ private fun createWriteFileTool(
     },
     needsApproval = { params ->
         val target = params.jsonObject.resolveWorkspaceOrNull(targets)
-        target == null || target.needsApproval("workspace_write_file") ||
-            params.jsonObject.pathOutsideWritableRoots(target.layout, "path")
+        target == null || target.requiresWriteApproval(
+            name = "workspace_write_file",
+            outsideWritableRoots = params.jsonObject.pathOutsideWritableRoots(target.layout, "path"),
+        )
     },
     execute = {
         val params = it.jsonObject
@@ -320,16 +389,17 @@ private fun createWriteFileTool(
         val path = params.absolutePath("path")
         val text = params.string("text") ?: error("text is required")
         val overwrite = params["overwrite"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: true
+        // 写之前先看文件在不在: 既是快照的判据, 也是「已修改文件」里的新建标记
+        val existingSize = runCatching { workspaceRepository.absoluteFileSize(target.id, path) }.getOrNull()
         // 覆盖前留一份原内容，供聊天页撤销这一轮的修改
         var snapshotTurn: String? = null
         if (snapshots != null && conversationId != null) {
-            val size = runCatching { workspaceRepository.absoluteFileSize(target.id, path) }.getOrNull()
-            val original = if (size != null && size <= MAX_SNAPSHOT_FILE_BYTES) {
+            val original = if (existingSize != null && existingSize <= MAX_SNAPSHOT_FILE_BYTES) {
                 runCatching { workspaceRepository.readTextInRootfs(target.id, path) }.getOrNull()
             } else {
                 null
             }
-            if (size == null || original != null) {
+            if (existingSize == null || original != null) {
                 val (area, relative) = resolveStorageArea(target.layout, path)
                 snapshotTurn = runCatching {
                     snapshots.capture(conversationId, target.id, path, area, relative, original)
@@ -338,15 +408,15 @@ private fun createWriteFileTool(
             }
         }
         val entry = workspaceRepository.writeAbsoluteText(target.id, path, text, overwrite)
-        val payload = if (snapshotTurn == null) {
-            entry.toJson().toString()
-        } else {
-            buildJsonObject {
-                entry.toJson().forEach { (key, value) -> put(key, value) }
+        // 快照可能写不出来（SSH 工作区根本不做快照），所以另带一份仅路径的清单给聊天页
+        val payload = buildJsonObject {
+            entry.toJson().forEach { (key, value) -> put(key, value) }
+            putEditedFiles(listOf(editedFileJson(entry.path, created = existingSize == null)))
+            if (snapshotTurn != null) {
                 put("snapshotTurn", snapshotTurn)
                 put("conversationId", conversationId.toString())
-            }.toString()
-        }
+            }
+        }.toString()
         listOf(UIMessagePart.Text(payload))
     },
 )
@@ -388,8 +458,10 @@ private fun createEditFileTool(
     },
     needsApproval = { params ->
         val target = params.jsonObject.resolveWorkspaceOrNull(targets)
-        target == null || target.needsApproval("workspace_edit_file") ||
-            params.jsonObject.pathOutsideWritableRoots(target.layout, "path")
+        target == null || target.requiresWriteApproval(
+            name = "workspace_edit_file",
+            outsideWritableRoots = params.jsonObject.pathOutsideWritableRoots(target.layout, "path"),
+        )
     },
     execute = {
         val params = it.jsonObject
@@ -430,6 +502,7 @@ private fun createEditFileTool(
                     put("sizeBytes", entry.sizeBytes)
                     put("updatedAt", entry.updatedAt)
                     put("workspace", target.name)
+                    putEditedFiles(listOf(editedFileJson(entry.path)))
                     snapshotTurn?.let {
                         put("snapshotTurn", it)
                         put("conversationId", conversationId.toString())
@@ -475,7 +548,10 @@ private fun createApplyPatchTool(
     needsApproval = { params ->
         val obj = params.jsonObject
         val target = obj.resolveWorkspaceOrNull(targets)
-        target == null || target.needsApproval("workspace_apply_patch") || obj.patchOutsideWritableRoots(target.layout)
+        target == null || target.requiresWriteApproval(
+            name = "workspace_apply_patch",
+            outsideWritableRoots = obj.patchOutsideWritableRoots(target.layout),
+        )
     },
     execute = {
         val params = it.jsonObject
@@ -655,6 +731,9 @@ private suspend fun applyUnifiedPatch(
         if (skipped.isNotEmpty()) {
             put("skipped", buildJsonArray { skipped.forEach { add(it) } })
         }
+        if (!dryRun) {
+            putEditedFiles(writes.map { write -> editedFileJson(write.displayPath, created = write.original == null) })
+        }
         if (snapshotTurn != null && conversationId != null) {
             put("snapshotTurn", snapshotTurn)
             put("conversationId", conversationId.toString())
@@ -689,7 +768,7 @@ private fun createShellTool(
     targets: List<WorkspaceTarget>,
     workspaceRepository: WorkspaceRepository,
     workspaceCwds: Map<String, String> = emptyMap(),
-    planMode: Boolean = false,
+    readOnly: Boolean = false,
 ) = Tool(
     name = "workspace_shell",
     description = buildString {
@@ -702,6 +781,12 @@ private fun createShellTool(
         }
         append("Set background=true for long-running commands (dev servers, watchers): it returns a pid and a log file immediately.")
         append("Requires Rootfs to be installed and ready.")
+        if (readOnly) {
+            append(
+                " Only read-only commands are allowed in this mode: anything that writes files, installs packages" +
+                    " or changes state is rejected."
+            )
+        }
         append(targets.workspaceNote())
     },
     parameters = {
@@ -743,15 +828,7 @@ private fun createShellTool(
     needsApproval = { params ->
         val target = params.jsonObject.resolveWorkspaceOrNull(targets)
         val command = params.jsonObject.string("command").orEmpty()
-        when {
-            target == null -> true
-            // 破坏性命令始终要确认，用户关掉审批也不放行
-            WorkspaceCommandPolicy.classify(command) == WorkspaceCommandPolicy.Risk.DANGEROUS -> true
-            !target.needsApproval("workspace_shell") -> false
-            // 只读命令免审批：编码时大量 ls / grep / git diff，逐条确认没法用
-            WorkspaceCommandPolicy.classify(command) == WorkspaceCommandPolicy.Risk.READ_ONLY -> false
-            else -> true
-        }
+        target == null || target.requiresShellApproval(command)
     },
     execute = {
         val params = it.jsonObject
@@ -764,11 +841,15 @@ private fun createShellTool(
             ?.times(1_000L)
             ?: WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS
         val background = params["background"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
-        if (planMode && !WorkspaceCommandPolicy.isReadOnly(command)) {
+        if (readOnly && !WorkspaceCommandPolicy.isReadOnly(command)) {
             return@Tool listOf(
                 UIMessagePart.Text(
                     buildJsonObject {
-                        put("error", "Plan mode is on: only read-only commands are allowed. Turn plan mode off in the assistant settings to run this.")
+                        put(
+                            "error",
+                            "Only read-only commands are allowed right now. Turn plan mode off or raise the " +
+                                "execution permission in the assistant settings to run this."
+                        )
                         put("command", command)
                     }.toString()
                 )
@@ -794,7 +875,21 @@ private fun createShellTool(
                 )
             )
         } else {
-            val result = workspaceRepository.executeCommand(target.id, command, cwd, timeoutMillis)
+            // 只能用 shell 改文件的工作区（SSH）没有文件快照，跑完扫一份本轮改过的路径给聊天页
+            // TODO(l3hub): 只对 supportsFileWrite=false 的工作区扫；本地工作区用 shell 改文件（git commit、格式化）
+            //  目前不会出「已修改文件」卡片，等快照能覆盖这类改动再打开
+            val scan = if (target.supportsFileWrite) null else ShellChangeScan.create(target.layout.workspaceDir)
+            val result = workspaceRepository.executeCommand(
+                target.id,
+                scan?.wrap(command) ?: command,
+                cwd,
+                timeoutMillis,
+            )
+            val changed = scan?.collect { collectCommand ->
+                runCatching {
+                    workspaceRepository.executeCommand(target.id, collectCommand, "", SHELL_SCAN_TIMEOUT_MILLIS)
+                }.getOrNull()?.stdout
+            }.orEmpty()
             listOf(
                 UIMessagePart.Text(
                     buildJsonObject {
@@ -804,6 +899,7 @@ private fun createShellTool(
                         put("timedOut", result.timedOut)
                         if (result.truncated) put("truncated", true)
                         put("workspace", target.name)
+                        putEditedFiles(changed.map { editedFileJson(it.path, it.created) })
                     }.toString()
                 )
             )

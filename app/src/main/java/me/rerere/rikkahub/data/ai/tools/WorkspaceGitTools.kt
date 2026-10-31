@@ -22,7 +22,7 @@ private val GIT_READ_ONLY_ACTIONS = setOf("status", "diff", "numstat", "branches
 internal fun createGitTool(
     targets: List<WorkspaceTarget>,
     workspaceRepository: WorkspaceRepository,
-    planMode: Boolean = false,
+    readOnly: Boolean = false,
 ): Tool {
     val git = WorkspaceGit(workspaceRepository)
     return Tool(
@@ -104,11 +104,16 @@ internal fun createGitTool(
                 ?.mapNotNull { element -> element.jsonPrimitive.contentOrNull }
                 .orEmpty()
 
-            if (planMode && action !in GIT_READ_ONLY_ACTIONS) {
+            if (readOnly && action !in GIT_READ_ONLY_ACTIONS) {
                 return@Tool listOf(
                     UIMessagePart.Text(
                         buildJsonObject {
-                            put("error", "Plan mode is on: only read-only git actions are allowed (${GIT_READ_ONLY_ACTIONS.joinToString()}).")
+                            put(
+                                "error",
+                                "Only read-only git actions are allowed right now " +
+                                    "(${GIT_READ_ONLY_ACTIONS.joinToString()}). Turn plan mode off or raise the " +
+                                    "execution permission in the assistant settings to change the repository."
+                            )
                             put("action", action)
                         }.toString()
                     )

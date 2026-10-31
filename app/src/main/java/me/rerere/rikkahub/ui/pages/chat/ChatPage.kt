@@ -108,6 +108,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.TodoItem
 import me.rerere.rikkahub.data.model.effectiveContextWindow
 import me.rerere.rikkahub.data.model.isContextLimitReached
 import me.rerere.rikkahub.data.model.lastContextTokens
@@ -122,7 +123,6 @@ import me.rerere.rikkahub.ui.components.ai.chatInputHaze
 import me.rerere.rikkahub.ui.components.ai.completion.WorkspaceCompletionProvider
 import me.rerere.rikkahub.ui.components.ai.rememberChatAttachmentPickerActions
 import me.rerere.rikkahub.ui.components.ai.rememberModelListState
-import me.rerere.rikkahub.ui.components.message.ConversationTodoCard
 import me.rerere.rikkahub.ui.components.message.ConversationUsageDetails
 import me.rerere.rikkahub.ui.components.message.usageTokenSpeed
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
@@ -755,6 +755,7 @@ private fun ChatPageContent(
 
     @Composable
     fun ChatInputContent(
+        todos: List<TodoItem> = emptyList(),
         modifier: Modifier = Modifier,
         liftedBy: Dp = 0.dp,
         applyWindowInsets: Boolean = true,
@@ -775,6 +776,7 @@ private fun ChatPageContent(
             settings = setting,
             assistant = assistant,
             chatModel = currentChatModel,
+            todos = todos,
             contextTokens = contextTokens,
             usageTokenSpeed = usageTokenSpeed,
             onUpdateContextMeterStyle = { style ->
@@ -889,20 +891,12 @@ private fun ChatPageContent(
             },
             bottomBar = {
                 if (currentMessages.isNotEmpty()) {
-                    // 任务清单放在输入框正上方：跟着输入区一起常驻，不再占对话列表顶部的位置
-                    if (conversation.todos.isNotEmpty()) {
-                        ConversationTodoCard(
-                            todos = conversation.todos,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 4.dp),
-                        )
-                    }
                     if (setting.displaySetting.terminalStyle) {
                         TerminalChatInput(
                             state = inputState,
                             settings = setting,
                             chatModel = currentChatModel,
+                            todos = conversation.todos,
                             contextTokens = contextTokens,
                             tokenSpeed = usageTokenSpeed,
                             loading = loadingJob != null,
@@ -919,7 +913,7 @@ private fun ChatPageContent(
                             onInterject = sendInterject,
                         )
                     } else {
-                        ChatInputContent()
+                        ChatInputContent(todos = conversation.todos)
                     }
                 }
             },
@@ -938,6 +932,7 @@ private fun ChatPageContent(
                                 state = inputState,
                                 settings = setting,
                                 chatModel = currentChatModel,
+                                todos = conversation.todos,
                                 contextTokens = contextTokens,
                                 tokenSpeed = usageTokenSpeed,
                                 loading = loadingJob != null,
@@ -955,6 +950,7 @@ private fun ChatPageContent(
                             )
                         } else {
                             ChatInputContent(
+                                todos = conversation.todos,
                                 modifier = Modifier.fillMaxWidth(),
                                 applyWindowInsets = false,
                             )

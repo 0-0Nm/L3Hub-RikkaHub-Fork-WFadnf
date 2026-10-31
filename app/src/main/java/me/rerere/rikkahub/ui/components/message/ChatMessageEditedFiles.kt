@@ -39,11 +39,12 @@ import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.File02
@@ -61,10 +62,13 @@ import java.io.File
 import kotlin.uuid.Uuid
 
 private const val DEFAULT_VISIBLE_COUNT = 3
+// workspace_shell 也列进来：SSH 之类只能用命令改文件的工作区没有写文件工具，
+// 本轮改了什么只能从命令结果里的 editedFiles 读出来
 private val WORKSPACE_FILE_TOOL_NAMES = setOf(
     "workspace_write_file",
     "workspace_edit_file",
     "workspace_apply_patch",
+    "workspace_shell",
 )
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -205,6 +209,7 @@ internal fun EditedFilesList(
         }
     }
 
+    // TODO(l3hub): SSH 工作区也会走这里（用命令改文件），diff/提交按钮暂时照旧；撤销按钮只依赖快照，没有快照就不会出现
     TurnDiffActions(
         workspaceId = workspaceId,
         files = editedFiles,
@@ -341,15 +346,25 @@ internal fun EditedFilesList(
     }
 }
 
-/** write/edit 看输入里的 path，apply_patch 看输出里的 files 列表 */
+/**
+ * 优先看工具结果里的 `editedFiles`：工作区工具都会带一份仅路径的清单，
+ * SSH 工作区没有快照，本轮改了什么只能靠它列出来。
+ * 老消息里没有这份清单，再退回原来的取法。
+ */
 private fun UIMessagePart.Tool.editedPaths(): List<String> {
+    val text = (output.firstOrNull() as? UIMessagePart.Text)?.text
+    val obj = text?.let { runCatching { Json.parseToJsonElement(it).jsonObject }.getOrNull() }
+    val listed = (obj?.get("editedFiles") as? JsonArray).orEmpty().mapNotNull { element ->
+        (element as? JsonObject)?.get("path")?.jsonPrimitive?.contentOrNull
+    }
+    if (listed.isNotEmpty()) return listed
+    // 命令本身不改文件的写法没有输入 path，也没有 files 列表
+    if (toolName == "workspace_shell") return emptyList()
     if (toolName != "workspace_apply_patch") {
         val path = (inputAsJson() as? JsonObject)?.get("path")?.jsonPrimitive?.contentOrNull
         return listOfNotNull(path)
     }
-    val text = (output.firstOrNull() as? UIMessagePart.Text)?.text ?: return emptyList()
-    val obj = runCatching { Json.parseToJsonElement(text).jsonObject }.getOrNull() ?: return emptyList()
-    val files = obj["files"] as? kotlinx.serialization.json.JsonArray ?: return emptyList()
+    val files = obj?.get("files") as? JsonArray ?: return emptyList()
     return files.mapNotNull { element ->
         (element as? JsonObject)?.get("path")?.jsonPrimitive?.contentOrNull
     }
