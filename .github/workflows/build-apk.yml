@@ -36,6 +36,20 @@ jobs:
             chmod 600 "$HOME/.android/debug.keystore"
           fi
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-ui/pnpm-lock.yaml
+
+      - name: Install web-ui deps
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
@@ -44,6 +58,8 @@ jobs:
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+          # 本地默认跳过 Web UI；CI 装上 pnpm 后把它一起打进包，避免 APK 里缺 static/assets
+          WITH_WEB_UI: '1'
         run: |
           chmod +x gradlew tools/build-apk.sh
           ./tools/build-apk.sh

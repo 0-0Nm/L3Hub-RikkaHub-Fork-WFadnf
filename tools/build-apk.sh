@@ -4,8 +4,15 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export ANDROID_HOME="${ANDROID_HOME:-/opt/android-sdk}"
-exec ./gradlew :app:assembleGithubDebug \
-  -x :web:buildWebUi \
+
+# 内置 Web UI（web-ui → web/src/main/resources/static）需要 pnpm。
+# 默认跳过（本地只要 pnpm 没装也能出包）；CI 用 WITH_WEB_UI=1 把它一起打进去。
+EXTRA=()
+if [ "${WITH_WEB_UI:-0}" != "1" ]; then
+  EXTRA+=(-x :web:buildWebUi)
+fi
+
+exec ./gradlew :app:assembleGithubDebug "${EXTRA[@]}" \
   -x :app:lintVitalGithubDebug \
   -x :app:lintVitalAnalyzeGithubDebug \
   -x :app:lintVitalReportGithubDebug \
