@@ -411,7 +411,7 @@ class ConversationRepository(
             parentConversationId = conversation.parentConversationId?.toString() ?: "",
             subAgentTask = conversation.subAgentTask ?: "",
             subAgentState = conversation.subAgentState ?: "",
-            todos = JsonInstant.encodeToString(conversation.todos),
+            todos = encodeTodos(conversation.todos, conversation.todosOwnerNodeId),
         )
     }
 
@@ -419,6 +419,7 @@ class ConversationRepository(
         conversationEntity: ConversationEntity,
         messageNodes: List<MessageNode>
     ): Conversation {
+        val decodedTodos = decodeTodos(conversationEntity.todos)
         return Conversation(
             id = Uuid.parse(conversationEntity.id),
             title = conversationEntity.title,
@@ -440,11 +441,10 @@ class ConversationRepository(
             parentConversationId = conversationEntity.parentConversationId.ifEmpty { null }?.let { Uuid.parse(it) },
             subAgentTask = conversationEntity.subAgentTask.ifEmpty { null },
             subAgentState = conversationEntity.subAgentState.ifEmpty { null },
-            todos = runCatching {
-                JsonInstant.decodeFromString<List<TodoItem>>(conversationEntity.todos.ifEmpty { "[]" })
-            }.getOrDefault(emptyList()),
-            // 清单是最后一次 todo_write 所在的节点写下的：这个节点没单独落库，读回来时按节点内容还原
-            todosOwnerNodeId = messageNodes.lastOrNull { node ->
+            todos = decodedTodos.first,
+            // 归属优先用落库时记下的节点；老数据没有这个字段（压缩后 todo_write 所在节点也可能被裁掉），
+            // 这才退回「最后一个含 todo_write 的节点」的推断
+            todosOwnerNodeId = decodedTodos.second ?: messageNodes.lastOrNull { node ->
                 node.messages.any { message ->
                     message.getTools().any { tool -> tool.toolName == TODO_WRITE_TOOL_NAME }
                 }
@@ -500,10 +500,10 @@ class ConversationRepository(
         conversationDAO.updateCustomSystemPrompt(conversationId.toString(), customSystemPrompt ?: "")
     }
 
-    suspend fun updateTodos(conversationId: Uuid, todos: List<TodoItem>) {
+    suspend fun updateTodos(conversationId: Uuid, todos: List<TodoItem>, ownerNodeId: Uuid? = null) {
         conversationDAO.updateTodos(
             id = conversationId.toString(),
-            todos = JsonInstant.encodeToString(todos),
+            todos = encodeTodos(todos, ownerNodeId),
         )
     }
 
@@ -612,3 +612,40 @@ data class ConversationPageResult(
     val items: List<Conversation>,
     val nextOffset: Int?,
 )
+
+/**
+ * 清单列的落库格式。
+ *
+ * 只有清单时仍然直接写 JSON 数组（旧格式，向前兼容）；带上归属节点时写
+ * `{"owner":"<uuid>","items":[...]}`。归属必须落库：压缩会把写下 todo_write 的那条
+ * 消息裁进摘要，靠「反查哪个节点调过 todo_write」还原会失效，清单就再也清不掉了。
+ */
+private fun encodeTodos(todos: List<TodoItem>, ownerNodeId: Uuid?): String =
+    if (ownerNodeId == null) {
+        JsonInstant.encodeToString(todos)
+    } else {
+        "{\"owner\":\"$ownerNodeId\",\"items\":${JsonInstant.encodeToString(todos)}}"
+    }
+
+/** 解析 [encodeTodos] 的两种格式，返回（清单, 归属节点）；归属缺失时为 null，由调用方退回推断 */
+private fun decodeTodos(raw: String): Pair<List<TodoItem>, Uuid?> {
+    val text = raw.ifBlank { "[]" }
+    val isObject = text.trimStart().startsWith("{")
+    val owner = if (isObject) {
+        Regex("\"owner\"\\s*:\\s*\"([0-9a-fA-F-]{36})\"").find(text)
+            ?.groupValues?.getOrNull(1)
+            ?.let { runCatching { Uuid.parse(it) }.getOrNull() }
+    } else {
+        null
+    }
+    val arrayText = if (isObject) {
+        val start = text.indexOf('[')
+        val end = text.lastIndexOf(']')
+        if (start >= 0 && end > start) text.substring(start, end + 1) else "[]"
+    } else {
+        text
+    }
+    val items = runCatching { JsonInstant.decodeFromString<List<TodoItem>>(arrayText) }
+        .getOrDefault(emptyList())
+    return items to owner
+}
