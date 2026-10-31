@@ -105,8 +105,10 @@ class WorkspaceSnapshotStore(
     suspend fun hasTurn(conversationId: Uuid, turnKey: String): Boolean = withContext(Dispatchers.IO) {
         val dir = File(File(root, conversationId.toString()), turnKey)
         dir.listFiles().orEmpty().any { workspaceDir ->
-            workspaceDir.isDirectory &&
-                readEntries(File(workspaceDir, "manifest.json")).isNotEmpty()
+            workspaceDir.isDirectory && readEntries(File(workspaceDir, "manifest.json")).any { entry ->
+                // 至少有一条真能还原：新建文件（删掉即可），或原文件快照还在
+                !entry.existed || entry.payloadFile(workspaceDir)?.isFile == true
+            }
         }
     }
 
@@ -118,36 +120,45 @@ class WorkspaceSnapshotStore(
                 if (!dir.isDirectory) return@withContext 0
                 var count = 0
                 var failed = 0
+                var skipped = 0
                 dir.listFiles().orEmpty().filter { it.isDirectory }.forEach { workspaceDir ->
                     val workspaceId = workspaceDir.name
                     readEntries(File(workspaceDir, "manifest.json")).forEach { entry ->
-                        val ok = runCatching {
-                            if (entry.existed) {
-                                val content = entry.file
-                                    ?.let { File(workspaceDir, it) }
-                                    ?.takeIf { it.isFile }
-                                    ?.readText()
-                                    ?: return@forEach
+                        if (entry.existed) {
+                            val content = runCatching {
+                                entry.payloadFile(workspaceDir)?.takeIf { it.isFile }?.readText()
+                            }.getOrNull()
+                            if (content == null) {
+                                // 快照载荷丢了：不能算还原成功，也不能算删除失败，单独计数
+                                skipped++
+                                return@forEach
+                            }
+                            val ok = runCatching {
                                 workspaceRepository.writeAbsoluteText(
                                     workspaceId,
                                     entry.path,
                                     content,
                                     overwrite = true,
                                 )
-                            } else {
+                            }.isSuccess
+                            if (ok) count++ else failed++
+                        } else {
+                            val ok = runCatching {
                                 workspaceRepository.deleteFile(
                                     workspaceId,
                                     WorkspaceStorageArea.valueOf(entry.area),
                                     entry.relativePath,
                                     recursive = false,
                                 )
-                            }
-                        }.isSuccess
-                        if (ok) count++ else failed++
+                            }.isSuccess
+                            if (ok) count++ else failed++
+                        }
                     }
                 }
-                // 有失败就保留快照，用户还能再点一次，不会出现「提示失败但文件已删了一半、按钮也没了」
-                if (failed > 0) error("$failed / ${failed + count} files")
+                // 有失败/有缺件就保留快照，用户还能再点一次，不会出现「提示失败但文件已删了一半、按钮也没了」
+                if (failed > 0 || skipped > 0) {
+                    error("$count / ${count + failed + skipped}")
+                }
                 dir.deleteRecursively()
                 count
             }
@@ -156,6 +167,8 @@ class WorkspaceSnapshotStore(
 
     private fun turnDir(conversationId: Uuid, turn: String, workspaceId: String): File =
         File(File(File(root, conversationId.toString()), turn), workspaceId)
+
+    private fun Entry.payloadFile(workspaceDir: File): File? = file?.let { File(workspaceDir, it) }
 
     private fun readEntries(manifest: File): List<Entry> =
         if (!manifest.isFile) emptyList()

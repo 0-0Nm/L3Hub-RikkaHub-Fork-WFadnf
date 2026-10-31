@@ -2052,6 +2052,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_revert_turn">撤销本轮修改</string>
   <string name="workspace_revert_confirm">把本轮改过的文件还原到修改前？本轮新建的文件会被删除。</string>
   <string name="workspace_revert_confirm_action">撤销</string>
+  <string name="workspace_revert_nothing">没有可还原的内容</string>
   <string name="workspace_revert_done">已还原 %1$d 个文件</string>
   <string name="workspace_revert_failed">撤销失败：%1$s</string>
   <string name="assistant_page_plan_mode">计划模式</string>

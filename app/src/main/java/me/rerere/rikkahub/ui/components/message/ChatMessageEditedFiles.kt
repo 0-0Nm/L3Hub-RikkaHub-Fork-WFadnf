@@ -222,11 +222,13 @@ internal fun EditedFilesList(
                 scope.launch {
                     snapshots.revert(target.first, target.second)
                         .onSuccess { count ->
-                            Toast.makeText(
-                                context,
-                                context.getString(R.string.workspace_revert_done, count),
-                                Toast.LENGTH_SHORT,
-                            ).show()
+                            // 目录已被别处撤掉时 count=0，此时不该报「已还原 0 个文件」
+                            val text = if (count > 0) {
+                                context.getString(R.string.workspace_revert_done, count)
+                            } else {
+                                context.getString(R.string.workspace_revert_nothing)
+                            }
+                            Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
                         }
                         .onFailure { error ->
                             Toast.makeText(
