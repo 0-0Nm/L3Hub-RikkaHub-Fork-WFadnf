@@ -47,6 +47,8 @@ jobs:
         run: |
           chmod +x gradlew tools/build-apk.sh
           ./tools/build-apk.sh
+          ls -l app/build/outputs/apk/github/debug/*.apk
+          sha256sum app/build/outputs/apk/github/debug/*.apk
 
       - uses: actions/upload-artifact@v4
         with:
@@ -60,5 +62,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          gh release create "$TAG" app/build/outputs/apk/github/debug/*.apk \
-            --prerelease --title "$TAG" --notes "" --target "$GITHUB_SHA"
+          # 幂等：release 已存在（例如手动发过、或重跑）就覆盖 APK，不要整个 job 失败
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG 已存在，覆盖 APK"
+            gh release upload "$TAG" app/build/outputs/apk/github/debug/*.apk --clobber
+          else
+            gh release create "$TAG" app/build/outputs/apk/github/debug/*.apk \
+              --prerelease --title "$TAG" --notes "" --target "$GITHUB_SHA"
+          fi
