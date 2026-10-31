@@ -618,7 +618,7 @@ class ChatService(
             try {
                 ensureInitialized(session)
                 finishInterruptedPendingTools(session)
-                autoCompressIfNeeded(session)
+                val compressedBeforeAppend = autoCompressIfNeeded(session)
 
                 val assistant = settingsStore.awaitLoaded().getStoredAssistantOf(session.state.value)
                 val processedContent = queued.parts.replaceUserRegexes(assistant)
@@ -637,8 +637,9 @@ class ChatService(
                 session.flush()
                 session.submittingMessage = null
 
-                // 用户消息可能刚好把上下文推过门限，加入后再检查一次
-                autoCompressIfNeeded(session)
+                // 用户消息可能刚好把上下文推过门限，加入后再检查一次；
+                // 但这一轮已经压过就不再压，否则同一段历史会被总结两遍（两次压缩/两份相同摘要的来源）
+                if (!compressedBeforeAppend) autoCompressIfNeeded(session)
 
                 // 开始补全
                 val result = if (queued.answer) runTurn(session) else null
@@ -1093,6 +1094,28 @@ class ChatService(
         force: Boolean = false,
         keepTailNodes: Int? = null,
     ): Boolean {
+        // 同一份上下文只压一次：并发/连续触发时后面的直接放弃，避免把同一段历史总结两遍
+        if (!session.compressMutex.tryLock()) {
+            Log.d(TAG, "autoCompress: another compression is running, skip")
+            return false
+        }
+        return try {
+            if (!force && session.state.value.messageNodes.size == session.compressedNodeCount) {
+                Log.d(TAG, "autoCompress: context unchanged since last compression, skip")
+                false
+            } else {
+                autoCompressLocked(session, force, keepTailNodes)
+            }
+        } finally {
+            session.compressMutex.unlock()
+        }
+    }
+
+    private suspend fun autoCompressLocked(
+        session: ConversationSession,
+        force: Boolean,
+        keepTailNodes: Int?,
+    ): Boolean {
         val settings = settingsStore.awaitLoaded()
         val conversation = session.state.value
         val assistant = settings.getAssistantOf(conversation)
@@ -1144,6 +1167,7 @@ class ChatService(
         session.processingStatus.value = context.getString(R.string.chat_page_compressing)
         return try {
             compressSession(session, additionalPrompt = "", trim = trim, requireIdle = false)
+            session.compressedNodeCount = session.state.value.messageNodes.size
             Log.i(TAG, "autoCompress: compressed conversation=${session.id}")
             true
         } catch (e: Exception) {

@@ -240,6 +240,13 @@ class ConversationSession(
     // 空闲检查任务
     private var idleCheckJob: Job? = null
 
+    /** 自动压缩串行化：并发或连续触发时只让第一次真正跑 */
+    internal val compressMutex = Mutex()
+
+    /** 上一次成功压缩后的节点数；节点数没变说明上下文没长，不必再总结一遍 */
+    @Volatile
+    internal var compressedNodeCount: Int = -1
+
     internal fun acquire(): Int = refCount.incrementAndGet().also {
         cancelIdleCheck()
     }
