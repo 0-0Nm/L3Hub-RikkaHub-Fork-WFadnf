@@ -192,6 +192,8 @@ class BackupManager(
     }
 
     companion object {
+        // 备份只收白名单里的这些目录。workspaces/（工作区文件）和 drafts/（流式草稿）都是运行时状态，
+        // 换个进程/设备恢复出来没有意义，所以不列在这里，也就不会被打包
         private val ATTACHMENT_FOLDERS = listOf(
             FileFolders.UPLOAD,
             FileFolders.IMAGES,

@@ -48,6 +48,10 @@ import me.rerere.rikkahub.data.ai.prompts.buildCompressPrompt
 import me.rerere.rikkahub.data.ai.subagent.formatSubAgentResults
 import me.rerere.rikkahub.data.ai.tools.InvalidMcpServerNamesException
 import me.rerere.rikkahub.data.ai.tools.shouldUseExternalWebSearch
+import me.rerere.rikkahub.data.chat.DraftRestore
+import me.rerere.rikkahub.data.chat.DraftStore
+import me.rerere.rikkahub.data.chat.applyDraftRestore
+import me.rerere.rikkahub.data.chat.decideDraftRestore
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.event.AppEvent
@@ -98,6 +102,7 @@ import java.net.NoRouteToHostException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatService"
@@ -168,6 +173,7 @@ class ChatService(
     val mcpManager: McpManager,
     private val filesManager: FilesManager,
     private val folderRepository: FolderRepository,
+    private val draftStore: DraftStore,
 ) {
     /** 一轮生成的结果 */
     private sealed interface TurnResult {
@@ -322,6 +328,8 @@ class ChatService(
         withLoadedSession(conversationId) { session ->
             // 子代理会话按普通会话列在历史里，打开时侧边栏跟着切到它自己的助手
             settingsStore.selectAssistant(session.state.value.assistantId)
+            // 上一轮被进程杀掉时留下的草稿，进页面时补一次
+            restoreDraft(session)
         }
         // 上一轮还在忙的时候攒下的子代理结果，等用户打开这个会话再投递
         flushSubAgentResults(conversationId)
@@ -332,6 +340,30 @@ class ChatService(
             load = { loadConversation(session.id) },
             create = { newConversation(session.id) },
         )
+        restoreDraft(session)
+    }
+
+    // 每个会话在进程里只恢复一次草稿：之后进页面、重连都不再拿旧草稿盖库里的内容
+    private val draftRestored = ConcurrentHashMap.newKeySet<Uuid>()
+
+    /**
+     * 上一轮生成写到一半进程就被杀掉的话，那份内容从来没落过库，这里用草稿补回来：
+     * 节点还在就补这一条消息的 parts，节点不在了就把它作为助手消息接在会话末尾。
+     * 补完把草稿删掉，下次打开不再恢复一遍。这件事发生在整轮生成之外，和流式循环无关。
+     */
+    private suspend fun restoreDraft(session: ConversationSession) {
+        if (!session.isInitialized) return
+        // 正在生成的那一轮自己在写草稿，不能把它当成上次崩掉留下的内容恢复出来
+        if (session.isGenerating) return
+        if (!draftRestored.add(session.id)) return
+        val draft = draftStore.load(session.id) ?: return
+        val restore = decideDraftRestore(draft, session.state.value)
+        if (restore !is DraftRestore.Discard) {
+            session.update { it.applyDraftRestore(restore) }
+            // 先把恢复出来的内容落库，再删草稿：这中间被杀也不会丢
+            runCatching { session.flush() }
+        }
+        draftStore.clear(session.id)
     }
 
     /** 持有会话引用并确保已加载后执行 [block]；[createIfMissing] 为 false 时数据库里没有就抛 NotFoundException */
@@ -513,6 +545,24 @@ class ChatService(
             throw e
         }
         return getConversation(conversationId) ?: session.state.value
+    }
+
+    /** 等一轮生成结束的结果：job.join() 对被取消的 job 是正常返回的，必须单独告诉调用方「是不是被掐了」 */
+    data class AwaitResult(val conversation: Conversation, val cancelled: Boolean)
+
+    suspend fun awaitGenerationResult(conversationId: Uuid): AwaitResult {
+        val session = sessionManager.getOrCreate(conversationId)
+        val job = session.getJob()
+        try {
+            job?.join()
+        } catch (e: CancellationException) {
+            job?.cancel()
+            throw e
+        }
+        return AwaitResult(
+            conversation = getConversation(conversationId) ?: session.state.value,
+            cancelled = job?.isCancelled == true,
+        )
     }
 
     /** 子代理结束时更新任务树状态；会话可能已经被回收，因此从数据库重新加载。 */
@@ -863,6 +913,8 @@ class ChatService(
                             session.processingStatus.value = null
                             session.update { it.upsertMessage(replyNodeId, event.message) }
                             session.replyMessageId.value = event.message.id
+                            // 内存更新完就把这一帧投给草稿文件：进程被杀时这一轮还能从这里恢复
+                            draftStore.record(conversationId, replyNodeId, event.message)
                             // 通知等边缘副作用由 ChatNotificationManager 消费；
                             // tryEmit 不挂起，事件丢失只影响单次通知更新，不能反压生成链
                             appEventBus.tryEmit(
@@ -887,6 +939,8 @@ class ChatService(
                     session.processingStatus.value = null
                     // 可能被取消了，或者意外结束，兜底保存
                     val finished = session.finishGeneration()
+                    // 成功、失败、取消都走这里：内容已经落库，草稿留着只会被下次打开当成更新的一份恢复出来
+                    draftStore.clear(conversationId)
                     // 生成结束：取消 Live Update 通知，后台时发送完成通知
                     appEventBus.emit(
                         AppEvent.ChatGenerationEnded(
@@ -1563,6 +1617,9 @@ class ChatService(
             // 数据库那份不知道只在内存里出现过的附件
             previous?.let { filesManager.deleteChatFiles(it.files) }
         }
+        // 会话没了草稿也没用了，否则同一个 id 再打开会恢复出已经删掉的内容
+        draftStore.clear(conversationId)
+        draftRestored.remove(conversationId)
         sessionManager.removeIfIdle(session)
     }
 
@@ -1731,5 +1788,6 @@ class ChatService(
         if (jobs.isEmpty()) return
         jobs.forEach { it.join() }
         if (session.isInitialized) finishInterruptedPendingTools(session)
+        draftStore.clear(conversationId)
     }
 }

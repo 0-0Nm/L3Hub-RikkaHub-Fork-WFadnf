@@ -147,7 +147,8 @@ val appModule = module {
             metaGenerator = get(),
             mcpManager = get(),
             filesManager = get(),
-            folderRepository = get()
+            folderRepository = get(),
+            draftStore = get(),
         )
     }
 

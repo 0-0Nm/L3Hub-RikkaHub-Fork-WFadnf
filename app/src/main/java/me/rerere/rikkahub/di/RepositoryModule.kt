@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.di
 
 import android.content.Context
+import me.rerere.rikkahub.AppScope
+import me.rerere.rikkahub.data.chat.DraftStore
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -102,6 +104,15 @@ val repositoryModule = module {
     single {
         val context: Context = get()
         WorkspaceSnapshotStore(context, get(), get())
+    }
+
+    // 流式生成的草稿：独立文件，不进数据库；进程被杀后打开会话时从这里补回写到一半的内容
+    single {
+        val context: Context = get()
+        DraftStore(
+            root = File(context.filesDir, "drafts"),
+            scope = get<AppScope>(),
+        )
     }
 
     single {

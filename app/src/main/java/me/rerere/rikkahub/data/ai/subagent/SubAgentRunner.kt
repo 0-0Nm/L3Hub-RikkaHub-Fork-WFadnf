@@ -104,8 +104,8 @@ class SubAgentRunner(
         candidate: Assistant,
         child: Conversation,
     ): String? {
-        val conversation = try {
-            chatService.awaitGeneration(child.id)
+        val awaited = try {
+            chatService.awaitGenerationResult(child.id)
         } catch (e: CancellationException) {
             withContext(NonCancellable) {
                 markStopped(chatService, child.id)
@@ -116,6 +116,13 @@ class SubAgentRunner(
             markStopped(chatService, child.id)
             return null
         }
+        // 用户手动停止时上面的 join() 是正常返回的，只会留下半截回复；
+        // 不看 isCancelled 就会把半截内容当成「子代理完成」投回主代理
+        if (awaited.cancelled) {
+            withContext(NonCancellable) { markStopped(chatService, child.id) }
+            return null
+        }
+        val conversation = awaited.conversation
 
         val awaitingApproval = conversation.isAwaitingToolApproval
         val answer = conversation.currentMessages
