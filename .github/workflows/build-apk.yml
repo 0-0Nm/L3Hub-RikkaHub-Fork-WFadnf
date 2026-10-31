@@ -38,7 +38,9 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          # web-ui/pnpm-workspace.yaml 只有 allowBuilds（pnpm 10.26+ 的字段），没有 packages:，
+          # pnpm 9 会报 "packages field missing or empty"，所以这里必须用 pnpm 11。
+          version: 11
 
       - uses: actions/setup-node@v4
         with:
