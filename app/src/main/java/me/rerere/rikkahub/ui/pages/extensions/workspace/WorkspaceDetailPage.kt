@@ -107,6 +107,8 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.ai.tools.WorkspaceFileWriteToolNames
 import me.rerere.rikkahub.data.ai.tools.resolveWorkspaceToolApproval
+import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+import me.rerere.rikkahub.data.model.ExecutionPermission
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -124,6 +126,8 @@ import me.rerere.rikkahub.ui.components.ui.shadow.Button
 import me.rerere.rikkahub.ui.components.ui.shadow.FilledTonalIconButton
 import me.rerere.rikkahub.ui.components.ui.switchItem
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.context.LocalSettings
+import me.rerere.rikkahub.ui.pages.assistant.detail.labelRes
 import me.rerere.rikkahub.ui.terminal.Checkbox
 import me.rerere.rikkahub.ui.terminal.IconButton
 import me.rerere.rikkahub.ui.terminal.TextButton
@@ -160,6 +164,8 @@ fun WorkspaceDetailPage(id: String) {
     val installProgress by vm.installProgress.collectAsStateWithLifecycle()
     val installError by vm.installError.collectAsStateWithLifecycle()
     val settingsError by vm.settingsError.collectAsStateWithLifecycle()
+    // 单工具审批开关只在「审批」档位生效，其它档位以助手档位为准
+    val executionPermission = LocalSettings.current.getCurrentAssistant().executionPermission
     val pagerState = rememberPagerState { WorkspaceDetailTab.entries.size }
     var deleteTarget by remember { mutableStateOf<WorkspaceFileEntry?>(null) }
     var showInstallDialog by remember { mutableStateOf(false) }
@@ -255,6 +261,7 @@ fun WorkspaceDetailPage(id: String) {
                     WorkspaceDetailTab.BASIC -> WorkspaceBasicPage(
                         workspace = state.workspace,
                         installProgress = installProgress,
+                        executionPermission = executionPermission,
                         onInstallRootfs = { showInstallDialog = true },
                         onToolApprovalChange = vm::setToolApproval,
                         onShellCompatibilityModeChange = vm::setShellCompatibilityMode,
@@ -414,6 +421,7 @@ fun WorkspaceDetailPage(id: String) {
 private fun WorkspaceBasicPage(
     workspace: WorkspaceEntity?,
     installProgress: RootfsInstallProgress?,
+    executionPermission: ExecutionPermission,
     onInstallRootfs: () -> Unit,
     onToolApprovalChange: (String, Boolean) -> Unit,
     onShellCompatibilityModeChange: (Boolean) -> Unit,
@@ -503,6 +511,7 @@ private fun WorkspaceBasicPage(
         item {
             WorkspaceToolApprovalCard(
                 workspace = workspace,
+                executionPermission = executionPermission,
                 onToolApprovalChange = onToolApprovalChange,
             )
         }
@@ -574,8 +583,13 @@ private fun ShellStatusBadge(status: String?) {
 @Composable
 private fun WorkspaceToolApprovalCard(
     workspace: WorkspaceEntity?,
+    executionPermission: ExecutionPermission,
     onToolApprovalChange: (String, Boolean) -> Unit,
 ) {
+    // 这些开关只有审批档位会读；自动档一律放行，整块不展示，其余档位灰显并说明以档位为准
+    if (executionPermission == ExecutionPermission.FULL) return
+    val switchesEnabled = workspace != null && executionPermission == ExecutionPermission.APPROVAL
+    val showsHint = executionPermission != ExecutionPermission.APPROVAL
     val overrides = workspace?.toolApprovalOverrides().orEmpty()
     val fileWriteTools = workspace?.capabilities()?.fileWriteTools ?: true
     val tools = workspaceToolApprovalItems().filter { (toolName) ->
@@ -591,6 +605,16 @@ private fun WorkspaceToolApprovalCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (showsHint) {
+                    Text(
+                        text = stringResource(
+                            R.string.workspace_detail_tool_approval_permission_hint,
+                            stringResource(executionPermission.labelRes()),
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
         },
     ) {
@@ -598,7 +622,7 @@ private fun WorkspaceToolApprovalCard(
             switchItem(
                 checked = resolveWorkspaceToolApproval(toolName, overrides),
                 onCheckedChange = { onToolApprovalChange(toolName, it) },
-                enabled = workspace != null,
+                enabled = switchesEnabled,
                 supportingContent = {
                     Text(
                         text = toolName,

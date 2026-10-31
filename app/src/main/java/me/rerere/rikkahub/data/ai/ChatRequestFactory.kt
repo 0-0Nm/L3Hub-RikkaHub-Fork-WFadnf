@@ -41,9 +41,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.data.ai.tools.buildTodoPrompt
 import me.rerere.rikkahub.data.model.MemoryFile
-import me.rerere.rikkahub.data.model.TodoItem
 import me.rerere.rikkahub.data.model.getAssistantOf
 import me.rerere.rikkahub.data.model.getChatModelOf
 import me.rerere.rikkahub.data.repository.MemoryRepository
@@ -72,7 +70,6 @@ class ChatTurnContext(
     val workspaceCwds: Map<String, String>,
     val memories: List<MemoryFile>,
     val tools: List<Tool>,
-    val todos: List<TodoItem> = emptyList(),
 )
 
 /** 把会话变成发给模型的请求：系统提示词、上下文裁剪、输入输出转换都在这里 */
@@ -118,7 +115,6 @@ class ChatRequestFactory(
             conversationSystemPrompt = conversation.customSystemPrompt,
             workspaceCwds = workspaceCwds,
             memories = if (assistant.enableMemory) memoryRepository.getFiles(assistant.memoryId) else emptyList(),
-            todos = conversation.todos,
             tools = chatToolFactory.createTools(
                 settings = settings,
                 assistant = assistant,

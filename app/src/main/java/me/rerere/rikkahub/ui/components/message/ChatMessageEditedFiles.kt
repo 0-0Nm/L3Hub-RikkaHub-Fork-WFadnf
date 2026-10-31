@@ -209,7 +209,8 @@ internal fun EditedFilesList(
         }
     }
 
-    // TODO(l3hub): SSH 工作区也会走这里（用命令改文件），diff/提交按钮暂时照旧；撤销按钮只依赖快照，没有快照就不会出现
+    // SSH 工作区也走这里：文件列表来自工具结果里的 editedFiles（含 workspace_shell 的扫描结果），
+    // 和内置工作区一致；撤销按钮只依赖快照，SSH 没有快照就不会出现
     TurnDiffActions(
         workspaceId = workspaceId,
         files = editedFiles,

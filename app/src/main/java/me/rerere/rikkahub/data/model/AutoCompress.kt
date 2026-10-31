@@ -154,6 +154,11 @@ fun Model.autoCompressLimit(threshold: AutoCompressThreshold): Int? {
 /**
  * 计算自动压缩的截断点。返回值已经过范围校验：null 表示没有可压缩的消息。
  *
+ * [reservedTokens] 是压缩后依然占着上下文的那部分固定开销（摘要、systemPrompt、工具定义等）。
+ * 门限判断把它们算进了用量，截断目标就必须先把它们扣掉，否则两把尺子不一致：
+ * 保留区一大，压完立刻又超限。[limitTokens] 是门限本身，只在按条数压缩时用于复核 ——
+ * 条数达标但估算仍然超限时退化为按 token 再压一轮，同一次调用里最多回退一次。
+ *
  * 循环压缩（[force] && [keepTailNodes]）优先保留末尾那条正在生成的回复；如果检查点之后
  * 只有这一条，继续保留会让压缩范围为空，此时退化为压缩全部历史，避免整轮直接失败。
  */
@@ -162,6 +167,8 @@ internal fun Conversation.resolveAutoCompressTrim(
     targetValue: Int,
     keepTailNodes: Int?,
     force: Boolean,
+    reservedTokens: Int = 0,
+    limitTokens: Int? = null,
 ): ContextTrim? {
     val checkpointIndex = messageNodes.indexOfLast { it.currentMessage.isContextCheckpoint }
     if (messageNodes.size - checkpointIndex - 1 < 1) return null
@@ -170,8 +177,24 @@ internal fun Conversation.resolveAutoCompressTrim(
         ContextTrim((messageNodes.size - keepTailNodes).coerceAtLeast(checkpointIndex + 1))
     } else {
         when (target) {
-            AutoCompressTarget.MESSAGES -> ContextTrim(messageNodes.size - targetValue)
-            AutoCompressTarget.TOKENS -> keepRecentContextForTokens(targetValue)
+            AutoCompressTarget.MESSAGES -> {
+                val byCount = ContextTrim(messageNodes.size - targetValue)
+                // 条数模式没有 token 目标，压完用门限复核一次：固定开销加上保留区估算
+                // 仍然超限，说明按条数留得太多，改用 token 预算再算；没超限就保持按条数
+                val budget = limitTokens?.takeIf { it > 0 }
+                val retained = if (budget == null) {
+                    0
+                } else {
+                    reservedTokens + estimateRetainedTokens(byCount.nodeIndex.coerceAtLeast(checkpointIndex + 1))
+                }
+                if (budget != null && retained > budget) {
+                    trimToTokenBudget(budget, reservedTokens)
+                } else {
+                    byCount
+                }
+            }
+
+            AutoCompressTarget.TOKENS -> trimToTokenBudget(targetValue, reservedTokens)
         }
     }
     val trim = if (force && keepTailNodes != null && preferred.nodeIndex <= checkpointIndex + 1) {
@@ -188,4 +211,25 @@ internal fun Conversation.resolveAutoCompressTrim(
         return null
     }
     return trim
+}
+
+/**
+ * token 模式的截断目标：先扣掉固定开销，再留门限 25% 的下限，
+ * 防止摘要和 systemPrompt 本身就把预算吃光时把保留区压成空。
+ */
+private fun Conversation.trimToTokenBudget(budget: Int, reservedTokens: Int): ContextTrim {
+    val floor = (budget * 0.25f).toInt()
+    val effectiveTarget = (budget - reservedTokens).coerceAtLeast(floor)
+    return keepRecentContextForTokens(effectiveTarget)
+}
+
+/** [start] 之后（含 [start]）仍会发给模型的 token 估算；固定开销不算在内 */
+private fun Conversation.estimateRetainedTokens(start: Int): Int {
+    if (messageNodes.isEmpty()) return 0
+    val from = start.coerceIn(0, messageNodes.size)
+    var total = 0
+    for (index in from..messageNodes.lastIndex) {
+        total += estimateMessageTokens(messageNodes[index].currentMessage)
+    }
+    return total
 }

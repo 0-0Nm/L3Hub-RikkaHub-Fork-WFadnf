@@ -68,7 +68,7 @@ import kotlin.math.roundToInt
 import kotlin.uuid.Uuid
 import me.rerere.rikkahub.data.model.Tag as DataTag
 
-private fun ExecutionPermission.labelRes(): Int = when (this) {
+internal fun ExecutionPermission.labelRes(): Int = when (this) {
     ExecutionPermission.READ_ONLY -> R.string.assistant_page_execution_permission_read_only
     ExecutionPermission.READ_WRITE -> R.string.assistant_page_execution_permission_read_write
     ExecutionPermission.APPROVAL -> R.string.assistant_page_execution_permission_approval

@@ -66,6 +66,7 @@ import me.rerere.rikkahub.data.model.cancelInterruptedTools
 import me.rerere.rikkahub.data.model.deleteMessage
 import me.rerere.rikkahub.data.model.editMessage
 import me.rerere.rikkahub.data.model.estimateContextTokens
+import me.rerere.rikkahub.data.model.estimateMessageTokens
 import me.rerere.rikkahub.data.model.estimateTokens
 import me.rerere.rikkahub.data.model.fillModelSnapshots
 import me.rerere.rikkahub.data.model.fork
@@ -1166,6 +1167,13 @@ class ChatService(
         } else {
             null
         }
+        // 摘要和 systemPrompt 压缩之后仍然占着上下文：截断目标先扣掉这块固定开销，
+        // 才能和上面的门限判断用同一把尺子。real 命中时也要算，它只影响预算。
+        val checkpointMessage = conversation.messageNodes
+            .lastOrNull { it.currentMessage.isContextCheckpoint }
+            ?.currentMessage
+        val reservedTokens = estimateTokens(systemPrompt) +
+            (checkpointMessage?.let { estimateMessageTokens(it) } ?: 0)
         // 有上游 usage 时只信 usage，估算值不再参与门限判断
         val used = real ?: estimated ?: 0
         if (!force && (limit == null || used < limit)) {
@@ -1178,6 +1186,8 @@ class ChatService(
             targetValue = assistant.autoCompressTargetValue,
             keepTailNodes = keepTailNodes,
             force = force,
+            reservedTokens = reservedTokens,
+            limitTokens = limit,
         ) ?: run {
             Log.d(TAG, "autoCompress: no compressible range")
             return false
@@ -1185,7 +1195,8 @@ class ChatService(
 
         Log.i(
             TAG,
-            "autoCompress: conversation=${session.id} used=$used real=$real estimated=$estimated limit=$limit trim=$trim",
+            "autoCompress: conversation=${session.id} used=$used real=$real estimated=$estimated " +
+                "limit=$limit reserved=$reservedTokens trim=$trim",
         )
         val statusSender = assistant.name.ifEmpty { context.getString(R.string.assistant_page_default_assistant) }
         appEventBus.tryEmit(AppEvent.ChatGenerationStatus(session.id, statusSender, ChatStatus.COMPRESSING))

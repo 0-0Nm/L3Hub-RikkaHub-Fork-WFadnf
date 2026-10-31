@@ -1227,6 +1227,7 @@
   <string name="workspace_detail_enable_shell_desc">Allow this workspace to run a terminal environment using local Rootfs</string>
   <string name="workspace_detail_tool_approval">Tool Approval</string>
   <string name="workspace_detail_tool_approval_desc">When enabled, user confirmation is required before AI calls this tool</string>
+  <string name="workspace_detail_tool_approval_permission_hint">These switches only apply to the Approval level. The current assistant uses %1$s, which decides on its own.</string>
   <string name="workspace_detail_tool_list_files">List Files</string>
   <string name="workspace_detail_tool_read_file">Read File</string>
   <string name="workspace_detail_tool_write_file">Write File</string>

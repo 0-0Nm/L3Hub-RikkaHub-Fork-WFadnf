@@ -217,7 +217,6 @@ private val WHITESPACE = Regex("\\s+")
  * [ExecutionPermission.READ_WRITE] 只放行写文件, 命令类工具仍然确认;
  * [ExecutionPermission.FULL] 一律放行。
  */
-// TODO(l3hub): 工作区详情页里的单工具审批开关只在 APPROVAL 档位生效，其它档位以档位为准，界面还没提示这一点
 internal fun WorkspaceTarget.needsApproval(name: String): Boolean = when (executionPermission) {
     ExecutionPermission.FULL -> false
     ExecutionPermission.READ_WRITE ->
