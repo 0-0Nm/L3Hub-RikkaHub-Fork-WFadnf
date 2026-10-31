@@ -7,8 +7,9 @@ import dev.chrisbanes.haze.HazeState
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideInHorizontally
@@ -53,6 +54,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -247,38 +249,22 @@ fun ChatMessage(
             }
             previousTranslation = translation
         }
-        // 只负责查看已有译文，不靠横滑触发翻译
-        val swipeModifier = if (translation == null) Modifier else Modifier.pointerInput(message.id, translation) {
-            var totalX = 0f
-            var totalY = 0f
-            val triggerDistance = 96.dp.toPx()
-            detectDragGestures(
-                onDragStart = {
-                    totalX = 0f
-                    totalY = 0f
-                },
-                onDrag = { change, amount ->
-                    totalX += amount.x
-                    totalY += amount.y
-                    // 只吞掉明确横向的拖动，纵向滚动仍然交给列表
-                    if (abs(totalX) > abs(totalY) * 1.8f) {
-                        change.consume()
+        // 只负责查看已有译文，不靠横滑触发翻译。
+        // 必须用 draggable(Horizontal)：detectDragGestures 会先吃掉触摸阈值事件，
+        // 纵向滑动被它抢走后列表就滚不动了（译文消息划不动的根因）。
+        var swipeX by remember(message.id) { mutableFloatStateOf(0f) }
+        val triggerDistance = with(LocalDensity.current) { 96.dp.toPx() }
+        val swipeModifier = if (translation == null) {
+            Modifier
+        } else {
+            Modifier.draggable(
+                orientation = Orientation.Horizontal,
+                state = rememberDraggableState { delta -> swipeX += delta },
+                onDragStarted = { swipeX = 0f },
+                onDragStopped = {
+                    if (abs(swipeX) >= triggerDistance) {
+                        showTranslationPage = swipeX < 0
                     }
-                },
-                onDragEnd = {
-                    val isHorizontalSwipe = abs(totalX) >= triggerDistance &&
-                        abs(totalX) > abs(totalY) * 1.8f
-                    if (isHorizontalSwipe) {
-                        if (totalX < 0) {
-                            showTranslationPage = true
-                        } else {
-                            showTranslationPage = false
-                        }
-                    }
-                },
-                onDragCancel = {
-                    totalX = 0f
-                    totalY = 0f
                 },
             )
         }
