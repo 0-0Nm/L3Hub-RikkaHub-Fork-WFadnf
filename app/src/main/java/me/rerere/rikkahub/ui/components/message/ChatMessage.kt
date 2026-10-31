@@ -738,6 +738,18 @@ private fun MessagePartsBlock(
                     is UIMessagePart.Text -> {
                         // 只有正在生成的最后一段文字可能停在没写完的语法上
                         val streamingText = loading && block.index == parts.lastIndex
+                        // 正则替换只取决于正文和助手配置：本帧没有变化的旧消息不必再扫一遍全文
+                        val renderedText = if (role == MessageRole.USER) {
+                            part.text
+                        } else {
+                            remember(part.text, assistant?.regexes) {
+                                part.text.replaceRegexes(
+                                    assistant = assistant,
+                                    scope = AssistantAffectScope.ASSISTANT,
+                                    visual = true,
+                                )
+                            }
+                        }
                         val textContent = @Composable {
                             if (role == MessageRole.USER) {
                                 if (settings.displaySetting.terminalStyle) {
@@ -773,11 +785,7 @@ private fun MessagePartsBlock(
                             } else {
                                 if (settings.displaySetting.terminalStyle) {
                                     TerminalTypewriterMarkdown(
-                                        content = part.text.replaceRegexes(
-                                            assistant = assistant,
-                                            scope = AssistantAffectScope.ASSISTANT,
-                                            visual = true,
-                                        ),
+                                        content = renderedText,
                                         streaming = streamingText,
                                         onClickCitation = handleClickCitation,
                                     )
@@ -786,29 +794,24 @@ private fun MessagePartsBlock(
                                         role = role,
                                         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = settings.displaySetting.bubbleOpacity),
                                         hazeState = hazeState,
-                                        modifier = Modifier.animateContentSize(),
+                                        modifier = if (streamingText) Modifier else Modifier.animateContentSize(),
                                     ) {
                                         MarkdownBlock(
-                                            content = part.text.replaceRegexes(
-                                                assistant = assistant,
-                                                scope = AssistantAffectScope.ASSISTANT,
-                                                visual = true,
-                                            ),
+                                            content = renderedText,
                                             streaming = streamingText,
                                             onClickCitation = handleClickCitation,
                                         )
                                     }
                                 } else {
                                     MarkdownBlock(
-                                        content = part.text.replaceRegexes(
-                                            assistant = assistant,
-                                            scope = AssistantAffectScope.ASSISTANT,
-                                            visual = true,
-                                        ),
+                                        content = renderedText,
                                         streaming = streamingText,
                                         onClickCitation = handleClickCitation,
-                                        modifier = Modifier
-                                            .animateContentSize()
+                                        modifier = if (streamingText) {
+                                            Modifier
+                                        } else {
+                                            Modifier.animateContentSize()
+                                        }
                                     )
                                 }
                             }
@@ -984,7 +987,7 @@ private fun TerminalTypewriterMarkdown(
             // 流结束后把尾巴快速补完，仍然保留逐字观感
             visible = visible.coerceIn(0, latest.value.length)
             while (visible < latest.value.length) {
-                delay(16)
+                delay(50)
                 val remaining = latest.value.length - visible
                 visible = minOf(latest.value.length, visible + maxOf(8, remaining / 3))
             }
@@ -993,7 +996,7 @@ private fun TerminalTypewriterMarkdown(
         if (visible == 0 && content.isNotEmpty()) visible = minOf(12, content.length)
         var lastNanos = System.nanoTime()
         while (true) {
-            delay(16)
+            delay(50)
             val target = latest.value.length
             if (visible > target) visible = target
             val backlog = target - visible
@@ -1002,7 +1005,7 @@ private fun TerminalTypewriterMarkdown(
                 continue
             }
             val now = System.nanoTime()
-            val seconds = ((now - lastNanos) / 1_000_000_000.0).coerceIn(0.001, 0.1)
+            val seconds = ((now - lastNanos) / 1_000_000_000.0).coerceIn(0.001, 0.25)
             lastNanos = now
             // 上游来得快时按积压加速，保证不会越拖越远；慢下来后再回到正常打字速度
             val charsPerSecond = when {
@@ -1020,7 +1023,7 @@ private fun TerminalTypewriterMarkdown(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize(),
+            .then(if (printing) Modifier else Modifier.animateContentSize()),
     ) {
         MarkdownBlock(
             content = if (printing) "$shown▋" else shown,

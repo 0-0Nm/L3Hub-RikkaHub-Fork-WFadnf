@@ -1,26 +1,50 @@
 package me.rerere.rikkahub.ui.pages.chat
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import kotlinx.coroutines.delay
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
+
+private const val MESH_FRAME_MILLIS = 50L
+private const val TWO_PI = 2f * PI.toFloat()
+
+/**
+ * 四个光斑的相位。回绕点必须落在「自身一圈的整数倍」上，否则 cos(k·p) 在回绕处会跳一下：
+ * p1 的 y 用 cos(p1·1.15)，所以 p1 要按 20 圈回绕；p3/p4 同理按 10 圈，p2 按 1 圈。
+ */
+private data class MeshPhases(
+    val p1: Float = 0f,
+    val p2: Float = 0f,
+    val p3: Float = 0f,
+    val p4: Float = 0f,
+) {
+    fun advance(elapsedMillis: Float): MeshPhases = MeshPhases(
+        p1 = advancePhase(p1, elapsedMillis, 5_500f, TWO_PI * 20f),
+        p2 = advancePhase(p2, elapsedMillis, 7_000f, TWO_PI),
+        p3 = advancePhase(p3, elapsedMillis, 8_500f, TWO_PI * 10f),
+        p4 = advancePhase(p4, elapsedMillis, 6_200f, TWO_PI * 10f),
+    )
+}
+
+private fun advancePhase(current: Float, elapsedMillis: Float, periodMillis: Float, wrap: Float): Float =
+    (current + (elapsedMillis / periodMillis) * TWO_PI) % wrap
 
 /**
  * Gemini 风格动态渐变背景。
@@ -28,31 +52,31 @@ import kotlin.math.sin
  * 原理:
  *  1. 底层一个线性渐变(顶部偏蓝、底部偏白)。
  *  2. 上面叠几个 radialGradient 光斑(中心有色 → 边缘透明),天生就是柔的。
- *  3. 每个光斑用一个独立周期的无限动画,沿正弦/余弦轨迹缓慢漂移。
+ *  3. 每个光斑用一个独立周期的漂移,沿正弦/余弦轨迹缓慢移动。
  *
  * 不依赖 Modifier.blur,全 API 级别可用,性能也更好。
  */
 @Composable
 fun MeshGradientBackground(
     modifier: Modifier = Modifier,
+    animate: Boolean = true,
     content: @Composable BoxScope.() -> Unit = {},
 ) {
-    val transition = rememberInfiniteTransition(label = "aurora")
+    var phases by remember { mutableStateOf(MeshPhases()) }
 
-    // 每个光斑一个相位(0..2π),不同时长 → 错落漂移,避免整齐划一
-    // 增加 loops 参数，按需放大目标值和总动画时长
-    @Composable
-    fun phase(durationMillis: Int, loops: Int, label: String) = transition.animateFloat(
-        initialValue = 0f,
-        targetValue = (2 * PI * loops).toFloat(),
-        animationSpec = infiniteRepeatable(tween(durationMillis * loops, easing = LinearEasing)),
-        label = label,
-    )
-    // 针对各自身上的乘数，传入消除小数所需的最小公倍数圈数
-    val p1 by phase(5_500, loops = 20, "p1") // 1.15 对应 20 圈 (总长 110秒)
-    val p2 by phase(7_000, loops = 1,  "p2") // 1.0  对应 1 圈
-    val p3 by phase(8_500, loops = 10, "p3") // 0.9  对应 10 圈 (总长 85秒)
-    val p4 by phase(6_200, loops = 10, "p4") // 1.1  对应 10 圈 (总长 62秒)
+    // 背景是几十秒周期的缓慢漂移，不需要跟屏幕刷新率同步：20fps 看不出差别，
+    // 而生成中和滚动中整段停下来，省掉的正是最缺主线程的那段时间。
+    LaunchedEffect(animate) {
+        if (!animate) return@LaunchedEffect
+        var lastNanos = System.nanoTime()
+        while (true) {
+            delay(MESH_FRAME_MILLIS)
+            val now = System.nanoTime()
+            val elapsedMillis = ((now - lastNanos) / 1_000_000L).coerceIn(1L, 500L)
+            lastNanos = now
+            phases = phases.advance(elapsedMillis.toFloat())
+        }
+    }
 
     val dark = LocalDarkMode.current
     val baseGradient = if (dark) {
@@ -91,6 +115,12 @@ fun MeshGradientBackground(
             .background(Brush.verticalGradient(colorStops = baseGradient)),
     ) {
         Canvas(Modifier.fillMaxSize()) {
+            // 在绘制阶段读取，相位变化只让 Canvas 重绘，不会重组整棵子树
+            val phase = phases
+            val p1 = phase.p1
+            val p2 = phase.p2
+            val p3 = phase.p3
+            val p4 = phase.p4
             val w = size.width
             val h = size.height
             // 光斑半径取屏幕较长边的比例,够大才柔

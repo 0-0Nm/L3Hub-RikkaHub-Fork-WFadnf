@@ -171,7 +171,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val scope = rememberCoroutineScope()
 
     val setting by vm.settings.collectAsStateWithLifecycle()
-    val conversation by vm.conversation.collectAsStateWithLifecycle()
+    val conversation by vm.conversationUi.collectAsStateWithLifecycle()
     val loadingJob by vm.conversationJob.collectAsStateWithLifecycle()
     val processingStatus by vm.processingStatus.collectAsStateWithLifecycle()
     val currentChatModel by vm.currentChatModel.collectAsStateWithLifecycle()
@@ -380,6 +380,9 @@ private fun ChatPageContent(
     val toaster = LocalToaster.current
     val context = LocalContext.current
     val workspaceRepository: WorkspaceRepository = koinInject()
+    // currentMessages 是 getter，每次访问都新建一份列表；同一帧里有多处要用，算一次就够。
+    // 它只依赖 messageNodes，按节点列表做键不会漏掉分支切换。
+    val currentMessages = remember(conversation.messageNodes) { conversation.currentMessages }
 
     // 上下文占用取最近一次回复的真实用量, 到达模型的 MAX 门限后禁止再发送
     val contextTokens = remember(conversation.messageNodes) { conversation.lastContextTokens() }
@@ -389,12 +392,12 @@ private fun ChatPageContent(
     val contextLimitMessage = stringResource(R.string.chat_page_context_limit_reached)
 
     // Usage 看板里的最近一次请求速度
-    val lastUsageMessage = remember(conversation.currentMessages) {
-        conversation.currentMessages.lastOrNull { it.usage != null }
+    val lastUsageMessage = remember(conversation.messageNodes) {
+        currentMessages.lastOrNull { it.usage != null }
     }
     val usageTokenSpeed = remember(lastUsageMessage) { lastUsageMessage?.usageTokenSpeed() }
-    val lorebookInjectionCount = remember(conversation.currentMessages, assistant.lorebookIds, setting.lorebooks) {
-        collectLorebookInjections(conversation.currentMessages, assistant, setting.lorebooks).size
+    val lorebookInjectionCount = remember(conversation.messageNodes, assistant.lorebookIds, setting.lorebooks) {
+        collectLorebookInjections(currentMessages, assistant, setting.lorebooks).size
     }
 
     // 上下文已经爆了且开了自动压缩：点发送先确认，确认后由 ChatService 先压缩再发送
@@ -409,7 +412,7 @@ private fun ChatPageContent(
             vm.handleMessageSend(inputState.getContents())
             scope.launch {
                 delay(100.milliseconds)
-                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                chatListState.requestScrollToItem(currentMessages.size + 5)
             }
         }
         inputState.clearInput()
@@ -460,11 +463,11 @@ private fun ChatPageContent(
         inputState.clearInput()
         scope.launch {
             delay(100.milliseconds)
-            chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+            chatListState.requestScrollToItem(currentMessages.size + 5)
         }
     }
 
-    fun terminalMessages(): List<me.rerere.ai.ui.UIMessage> = conversation.currentMessages
+    fun terminalMessages(): List<me.rerere.ai.ui.UIMessage> = currentMessages
 
     fun terminalMessageAt(arg: String, defaultAssistant: Boolean = false): me.rerere.ai.ui.UIMessage? {
         val index = arg.trim().toIntOrNull()
@@ -502,7 +505,7 @@ private fun ChatPageContent(
                 appendLine("assistant : ${assistant.name.ifBlank { "assistant" }}")
                 appendLine("model     : ${currentChatModel?.displayName ?: "no-model"}")
                 appendLine("context   : ${contextTokens ?: 0} / ${currentChatModel?.maxContextTokens ?: "-"}")
-                appendLine("messages  : ${conversation.currentMessages.size}")
+                appendLine("messages  : ${currentMessages.size}")
                 appendLine("speed     : ${usageTokenSpeed?.let { "%.1f tok/s".format(it) } ?: "-"}")
                 append("queue     : ${messageQueue.messages.size}")
             }
@@ -548,7 +551,7 @@ private fun ChatPageContent(
                     vm.handleMessageSend(listOf(UIMessagePart.Text(command.args)))
                     scope.launch {
                         delay(100.milliseconds)
-                        chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                        chatListState.requestScrollToItem(currentMessages.size + 5)
                     }
                 }
             }
@@ -747,7 +750,7 @@ private fun ChatPageContent(
         }
     }
 
-    TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
+    TTSAutoPlay(vm = vm, setting = setting)
 
     @Composable
     fun ChatInputContent(
@@ -795,7 +798,7 @@ private fun ChatPageContent(
                 inputState.clearInput()
                 scope.launch {
                     delay(100.milliseconds)
-                    chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                    chatListState.requestScrollToItem(currentMessages.size + 5)
                 }
             },
             onLongSendClick = {
@@ -811,7 +814,7 @@ private fun ChatPageContent(
                 } else {
                     vm.handleMessageSend(content = inputState.getContents(), answer = false)
                     scope.launch {
-                        chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                        chatListState.requestScrollToItem(currentMessages.size + 5)
                     }
                 }
                 inputState.clearInput()
@@ -839,6 +842,8 @@ private fun ChatPageContent(
         if (!setting.displaySetting.terminalStyle) {
             AssistantBackground(
                 setting = setting,
+                // 生成中和滚动中背景完全不用动：这两段时间最缺主线程，62~110 秒周期的漂移停一会儿看不出来
+                animate = loadingJob == null && !chatListState.isScrollInProgress,
                 modifier = Modifier
                     .hazeSource(hazeState)
                     .hazeSource(backgroundHazeState),
@@ -882,7 +887,7 @@ private fun ChatPageContent(
                 }
             },
             bottomBar = {
-                if (conversation.currentMessages.isNotEmpty()) {
+                if (currentMessages.isNotEmpty()) {
                     if (setting.displaySetting.terminalStyle) {
                         TerminalChatInput(
                             state = inputState,
@@ -910,7 +915,7 @@ private fun ChatPageContent(
             },
             containerColor = Color.Transparent,
         ) { innerPadding ->
-            if (conversation.currentMessages.isEmpty()) {
+            if (currentMessages.isEmpty()) {
                 EmptyChatContent(
                     innerPadding = innerPadding,
                     assistant = assistant,
@@ -1053,7 +1058,7 @@ private fun ChatPageContent(
                         style = MaterialTheme.typography.titleMedium,
                     )
                     ConversationUsageDetails(
-                        messages = conversation.currentMessages,
+                        messages = currentMessages,
                         contextLength = currentChatModel?.effectiveContextWindow,
                     )
                 }

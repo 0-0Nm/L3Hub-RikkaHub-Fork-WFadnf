@@ -17,10 +17,10 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 
 @Composable
-fun AssistantBackground(setting: Settings, modifier: Modifier) {
+fun AssistantBackground(setting: Settings, modifier: Modifier, animate: Boolean = true) {
     val assistant = setting.getCurrentAssistant()
     if (assistant.useGradientBackground) {
-        MeshGradientBackground(modifier = modifier)
+        MeshGradientBackground(modifier = modifier, animate = animate)
         return
     }
     if (assistant.background != null) {
