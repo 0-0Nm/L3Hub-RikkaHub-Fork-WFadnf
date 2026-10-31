@@ -2,6 +2,10 @@ package me.rerere.rikkahub.data.workspace
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -29,6 +33,11 @@ class WorkspaceSnapshotStore(
     private val root = File(context.filesDir, "workspace_turns")
     private val mutex = Mutex()
 
+    private val _revertEpoch = MutableStateFlow(0)
+
+    /** 每次撤销成功后自增；界面拿它当 key 重新判定撤销按钮是否还在 */
+    val revertEpoch: StateFlow<Int> = _revertEpoch.asStateFlow()
+
     @Serializable
     private data class Entry(
         val path: String,
@@ -39,15 +48,17 @@ class WorkspaceSnapshotStore(
     )
 
     /** 当前对话轮次：最后一条真正的用户消息；压缩检查点不算 */
-    suspend fun turnKey(conversationId: Uuid): String = runCatching {
-        val conversation = conversationRepository.getConversationById(conversationId)
-        conversation?.messageNodes
-            ?.asReversed()
-            ?.firstOrNull {
-                it.currentMessage.role == MessageRole.USER && !it.currentMessage.isContextCheckpoint
-            }
-            ?.id?.toString()
-    }.getOrNull() ?: "initial"
+    suspend fun turnKey(conversationId: Uuid): String = withContext(Dispatchers.IO) {
+        runCatching {
+            val conversation = conversationRepository.getConversationById(conversationId)
+            conversation?.messageNodes
+                ?.asReversed()
+                ?.firstOrNull {
+                    it.currentMessage.role == MessageRole.USER && !it.currentMessage.isContextCheckpoint
+                }
+                ?.id?.toString()
+        }.getOrNull() ?: "initial"
+    }
 
     /**
      * 记录 [absolutePath] 在本轮开始前的内容；[original] 为 null 表示文件当时不存在。
@@ -87,8 +98,16 @@ class WorkspaceSnapshotStore(
         }
     }
 
+    /**
+     * 这一轮是否还有可撤销的内容。半成品目录（capture 写到一半失败）不算，
+     * 否则会出现「按钮在、点了却提示还原 0 个文件」。
+     */
     suspend fun hasTurn(conversationId: Uuid, turnKey: String): Boolean = withContext(Dispatchers.IO) {
-        File(File(root, conversationId.toString()), turnKey).isDirectory
+        val dir = File(File(root, conversationId.toString()), turnKey)
+        dir.listFiles().orEmpty().any { workspaceDir ->
+            workspaceDir.isDirectory &&
+                readEntries(File(workspaceDir, "manifest.json")).isNotEmpty()
+        }
     }
 
     /** 把这一轮改过的文件还原；返回实际还原的文件数 */
@@ -98,23 +117,24 @@ class WorkspaceSnapshotStore(
                 val dir = File(File(root, conversationId.toString()), turnKey)
                 if (!dir.isDirectory) return@withContext 0
                 var count = 0
+                var failed = 0
                 dir.listFiles().orEmpty().filter { it.isDirectory }.forEach { workspaceDir ->
                     val workspaceId = workspaceDir.name
                     readEntries(File(workspaceDir, "manifest.json")).forEach { entry ->
-                        if (entry.existed) {
-                            val content = entry.file
-                                ?.let { File(workspaceDir, it) }
-                                ?.takeIf { it.isFile }
-                                ?.readText()
-                                ?: return@forEach
-                            workspaceRepository.writeAbsoluteText(
-                                workspaceId,
-                                entry.path,
-                                content,
-                                overwrite = true,
-                            )
-                        } else {
-                            runCatching {
+                        val ok = runCatching {
+                            if (entry.existed) {
+                                val content = entry.file
+                                    ?.let { File(workspaceDir, it) }
+                                    ?.takeIf { it.isFile }
+                                    ?.readText()
+                                    ?: return@forEach
+                                workspaceRepository.writeAbsoluteText(
+                                    workspaceId,
+                                    entry.path,
+                                    content,
+                                    overwrite = true,
+                                )
+                            } else {
                                 workspaceRepository.deleteFile(
                                     workspaceId,
                                     WorkspaceStorageArea.valueOf(entry.area),
@@ -122,15 +142,17 @@ class WorkspaceSnapshotStore(
                                     recursive = false,
                                 )
                             }
-                        }
-                        count++
+                        }.isSuccess
+                        if (ok) count++ else failed++
                     }
                 }
+                // 有失败就保留快照，用户还能再点一次，不会出现「提示失败但文件已删了一半、按钮也没了」
+                if (failed > 0) error("$failed / ${failed + count} files")
                 dir.deleteRecursively()
                 count
             }
         }
-    }
+    }.onSuccess { _revertEpoch.update { it + 1 } }
 
     private fun turnDir(conversationId: Uuid, turn: String, workspaceId: String): File =
         File(File(File(root, conversationId.toString()), turn), workspaceId)

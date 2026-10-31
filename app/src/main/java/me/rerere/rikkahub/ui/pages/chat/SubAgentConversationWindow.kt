@@ -204,6 +204,7 @@ private fun MessagePreview(
                 loading = conversation.subAgentState == SUB_AGENT_STATE_RUNNING &&
                     index == conversation.messageNodes.lastIndex,
                 assistant = assistant,
+                conversationId = conversation.id,
                 lastMessage = index == conversation.messageNodes.lastIndex,
                 messageIndex = index,
                 onFork = {},

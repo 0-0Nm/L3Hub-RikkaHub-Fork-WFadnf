@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -104,36 +105,36 @@ internal fun EditedFilesList(
             }
             .lastOrNull()
     }
-    var reverted by remember { mutableStateOf(false) }
     var showRevertDialog by remember { mutableStateOf(false) }
+    // 撤销成功时 store 会自增版本号：同轮的其他卡片也会一起失效，不再挂着「还原 0 个文件」的按钮
+    val revertEpoch by snapshots.revertEpoch.collectAsState()
     // 快照可能写失败（工具结果里没有 snapshotTurn），所以以磁盘上的快照为准：
     // 先信工具结果里的 key；没有时只在最后一条消息上按当前轮次反查，避免挂到旧轮次。
     val revertTarget by produceState<Pair<Uuid, String>?>(
         null,
         snapshotTurn,
-        reverted,
+        revertEpoch,
         conversationId,
         isLastMessage,
     ) {
-        value = if (reverted) {
-            null
-        } else {
-            val fromPayload = snapshotTurn?.let { (conversation, turn) ->
+        // fork 出来的会话会原样带走工具输出里的 key，跨会话的快照不认
+        val fromPayload = snapshotTurn
+            ?.takeIf { conversationId == null || it.first == conversationId.toString() }
+            ?.let { (conversation, turn) ->
                 runCatching { Uuid.parse(conversation) }.getOrNull()?.let { it to turn }
             }
-            val candidate = fromPayload ?: if (isLastMessage && conversationId != null) {
-                conversationId to snapshots.turnKey(conversationId)
-            } else {
-                null
-            }
-            if (candidate != null && runCatching {
-                    snapshots.hasTurn(candidate.first, candidate.second)
-                }.getOrDefault(false)
-            ) {
-                candidate
-            } else {
-                null
-            }
+        val candidate = fromPayload ?: if (isLastMessage && conversationId != null) {
+            conversationId to snapshots.turnKey(conversationId)
+        } else {
+            null
+        }
+        value = if (candidate != null && runCatching {
+                snapshots.hasTurn(candidate.first, candidate.second)
+            }.getOrDefault(false)
+        ) {
+            candidate
+        } else {
+            null
         }
     }
 
@@ -221,7 +222,6 @@ internal fun EditedFilesList(
                 scope.launch {
                     snapshots.revert(target.first, target.second)
                         .onSuccess { count ->
-                            reverted = true
                             Toast.makeText(
                                 context,
                                 context.getString(R.string.workspace_revert_done, count),
