@@ -27,8 +27,10 @@ internal class ShellChangeScan private constructor(
     fun wrap(command: String): String {
         if (command.isBlank()) return command
         return buildString {
-            appendLine("__l3hub_mark=${markPath.shellQuoted()}")
-            appendLine("__l3hub_list=${listPath.shellQuoted()}")
+            // 路径里带 ${'$'}TMPDIR/${'$'}HOME，必须在远端展开，不能在这里加引号
+            appendLine("__l3hub_mark=\"$markPath\"")
+            appendLine("__l3hub_list=\"$listPath\"")
+            appendLine("mkdir -p \"\$(dirname \"\$__l3hub_mark\")\" 2>/dev/null || true")
             appendLine("__l3hub_ws=${workspaceDir.shellQuoted()}")
             appendLine(": > \"\$__l3hub_mark\" 2>/dev/null || exit 1")
             // 标记往前挪 1 秒：粗粒度文件系统上同一秒内的修改否则会被 -newer 漏掉
@@ -46,7 +48,8 @@ internal class ShellChangeScan private constructor(
 
     /** 读回清单并清理临时文件；[run] 负责真正执行一条远程命令，返回它的 stdout */
     suspend fun collect(run: suspend (String) -> String?): List<ShellChangedPath> {
-        val listed = listPath.shellQuoted()
+        // 与 wrap() 里同一套展开规则，这里同样不能加引号
+        val listed = "\"$listPath\"" 
         val output = run("cat $listed 2>/dev/null; rm -f $listed") ?: return emptyList()
         return parseShellChangeScan(output)
     }
@@ -55,8 +58,11 @@ internal class ShellChangeScan private constructor(
         fun create(workspaceDir: String, token: String = Uuid.random().toString()): ShellChangeScan =
             ShellChangeScan(
                 workspaceDir = workspaceDir,
-                markPath = "/tmp/l3hub-turn-$token.mark",
-                listPath = "/tmp/l3hub-turn-$token.list",
+                // 不能写死 /tmp：Termux 上 /tmp 属于 shell 用户且被 SELinux 挡住，
+                // 应用（u0_a407，untrusted_app）连创建文件都不允许，硬写会让整条命令在第 4 行失败。
+                // 优先 $TMPDIR，其次 $HOME/tmp，远端 shell 展开
+                markPath = "\${TMPDIR:-\$HOME/tmp}/l3hub-turn-$token.mark",
+                listPath = "\${TMPDIR:-\$HOME/tmp}/l3hub-turn-$token.list",
             )
     }
 }
