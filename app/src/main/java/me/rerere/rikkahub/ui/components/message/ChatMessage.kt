@@ -137,6 +137,7 @@ import me.rerere.ui.webview.WebViewContentCache
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.uuid.Uuid
 
 @Composable
 fun ChatMessage(
@@ -160,6 +161,7 @@ fun ChatMessage(
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     hazeState: HazeState? = null,
+    conversationId: Uuid? = null,
 ) {
     val message = node.messages[node.selectIndex]
     if (message.isContextCheckpoint) {
@@ -458,6 +460,8 @@ fun ChatMessage(
         EditedFilesList(
             parts = message.parts,
             assistant = assistant,
+            conversationId = conversationId,
+            isLastMessage = lastMessage,
         )
 
         ProvideTextStyle(textStyle) {

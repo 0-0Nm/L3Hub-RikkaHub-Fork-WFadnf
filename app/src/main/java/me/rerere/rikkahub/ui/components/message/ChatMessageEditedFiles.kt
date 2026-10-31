@@ -71,6 +71,8 @@ private val WORKSPACE_FILE_TOOL_NAMES = setOf(
 internal fun EditedFilesList(
     parts: List<UIMessagePart>,
     assistant: Assistant?,
+    conversationId: Uuid? = null,
+    isLastMessage: Boolean = false,
 ) {
     val workspaceId = assistant?.primaryWorkspaceId?.toString() ?: return
     val editedFiles = remember(parts) {
@@ -104,10 +106,35 @@ internal fun EditedFilesList(
     }
     var reverted by remember { mutableStateOf(false) }
     var showRevertDialog by remember { mutableStateOf(false) }
-    val revertable by produceState(false, snapshotTurn, reverted) {
-        value = snapshotTurn != null && !reverted && runCatching {
-            snapshots.hasTurn(Uuid.parse(snapshotTurn.first), snapshotTurn.second)
-        }.getOrDefault(false)
+    // 快照可能写失败（工具结果里没有 snapshotTurn），所以以磁盘上的快照为准：
+    // 先信工具结果里的 key；没有时只在最后一条消息上按当前轮次反查，避免挂到旧轮次。
+    val revertTarget by produceState<Pair<Uuid, String>?>(
+        null,
+        snapshotTurn,
+        reverted,
+        conversationId,
+        isLastMessage,
+    ) {
+        value = if (reverted) {
+            null
+        } else {
+            val fromPayload = snapshotTurn?.let { (conversation, turn) ->
+                runCatching { Uuid.parse(conversation) }.getOrNull()?.let { it to turn }
+            }
+            val candidate = fromPayload ?: if (isLastMessage && conversationId != null) {
+                conversationId to snapshots.turnKey(conversationId)
+            } else {
+                null
+            }
+            if (candidate != null && runCatching {
+                    snapshots.hasTurn(candidate.first, candidate.second)
+                }.getOrDefault(false)
+            ) {
+                candidate
+            } else {
+                null
+            }
+        }
     }
 
     var selectedPath by remember { mutableStateOf<String?>(null) }
@@ -158,7 +185,8 @@ internal fun EditedFilesList(
         }
     }
 
-    if (revertable && snapshotTurn != null) {
+    val revertKey = revertTarget
+    if (revertKey != null) {
         TextButton(
             onClick = { showRevertDialog = true },
             contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
@@ -181,7 +209,7 @@ internal fun EditedFilesList(
         files = editedFiles,
     )
 
-    if (showRevertDialog && snapshotTurn != null) {
+    if (showRevertDialog && revertKey != null) {
         RikkaConfirmDialog(
             show = true,
             title = stringResource(R.string.workspace_revert_turn),
@@ -189,9 +217,9 @@ internal fun EditedFilesList(
             dismissText = stringResource(R.string.cancel),
             onConfirm = {
                 showRevertDialog = false
-                val (conversation, turn) = snapshotTurn
+                val target = revertKey
                 scope.launch {
-                    snapshots.revert(Uuid.parse(conversation), turn)
+                    snapshots.revert(target.first, target.second)
                         .onSuccess { count ->
                             reverted = true
                             Toast.makeText(

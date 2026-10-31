@@ -423,6 +423,7 @@ private fun ChatListNormal(
                             onToolApproval = onToolApproval,
                             onToolAnswer = onToolAnswer,
                             hazeState = bubbleHazeState,
+                            conversationId = conversation.id,
                             lastMessage = index == lastMessageIndex,
                             messageIndex = index,
                         )

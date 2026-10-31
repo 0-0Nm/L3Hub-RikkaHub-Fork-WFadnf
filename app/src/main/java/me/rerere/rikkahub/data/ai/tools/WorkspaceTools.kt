@@ -333,7 +333,8 @@ private fun createWriteFileTool(
                 val (area, relative) = resolveStorageArea(target.layout, path)
                 snapshotTurn = runCatching {
                     snapshots.capture(conversationId, target.id, path, area, relative, original)
-                }.getOrNull()
+                }.onFailure { Log.w(TAG, "snapshot capture failed: $path", it) }
+                    .getOrNull()
             }
         }
         val entry = workspaceRepository.writeAbsoluteText(target.id, path, text, overwrite)
@@ -409,7 +410,8 @@ private fun createEditFileTool(
             val (area, relative) = resolveStorageArea(target.layout, path)
             snapshotTurn = runCatching {
                 snapshots.capture(conversationId, target.id, path, area, relative, original)
-            }.getOrNull()
+            }.onFailure { Log.w(TAG, "snapshot capture failed: $path", it) }
+                .getOrNull()
         }
         // 逐级尝试 exact -> line_trimmed -> block_anchor 替换器, 见 TextReplacers.kt
         val result = try {
@@ -622,7 +624,8 @@ private suspend fun applyUnifiedPatch(
                         relativePath = relative,
                         original = write.original,
                     )
-                }.getOrNull() ?: snapshotTurn
+                }.onFailure { Log.w(TAG, "snapshot capture failed: ${write.absolutePath}", it) }
+                    .getOrNull() ?: snapshotTurn
             }
             val content = write.content
             if (content == null) {
