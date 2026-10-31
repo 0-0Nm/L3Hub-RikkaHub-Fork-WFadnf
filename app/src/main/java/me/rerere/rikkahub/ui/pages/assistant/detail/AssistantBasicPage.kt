@@ -199,13 +199,15 @@ internal fun AssistantBasicContent(
                 supportingContent = { Text(stringResource(R.string.assistant_page_sub_agent_desc)) },
                 headlineContent = { Text(stringResource(R.string.assistant_page_sub_agent)) },
             )
-            switchItem(
-                checked = assistant.planMode,
-                onCheckedChange = { onUpdate(assistant.copy(planMode = it)) },
-                supportingContent = { Text(stringResource(R.string.assistant_page_plan_mode_desc)) },
-                headlineContent = { Text(stringResource(R.string.assistant_page_plan_mode)) },
-            )
-            formItem(
+            // 计划模式和执行权限都只对工作区工具有意义，没绑工作区就不显示，免得纯聊天助手看到一堆无用开关
+            if (assistant.allWorkspaceIds.isNotEmpty()) {
+                switchItem(
+                    checked = assistant.planMode,
+                    onCheckedChange = { onUpdate(assistant.copy(planMode = it)) },
+                    supportingContent = { Text(stringResource(R.string.assistant_page_plan_mode_desc)) },
+                    headlineContent = { Text(stringResource(R.string.assistant_page_plan_mode)) },
+                )
+                formItem(
                 headlineContent = { Text(stringResource(R.string.assistant_page_execution_permission)) },
                 supportingContent = { Text(stringResource(R.string.assistant_page_execution_permission_desc)) },
             ) {
@@ -220,6 +222,7 @@ internal fun AssistantBasicContent(
                                 text = stringResource(permission.labelRes()),
                                 maxLines = 1,
                             )
+                        }
                         }
                     }
                 }

@@ -106,7 +106,9 @@ class ChatToolFactory(
                 addAll(createConversationTools(conversationRepository, assistant.id))
             }
             addAll(workspaceTools)
-            if (conversationId != null) {
+            // 任务清单是 Coding Agent 的东西：只有绑了工作区才注册，
+            // 纯聊天不该凭空多出一个 todo 工具让模型给自己派活
+            if (conversationId != null && assistant.allWorkspaceIds.isNotEmpty()) {
                 addAll(createTodoTools(conversationRepository, conversationId))
             }
             if (assistant.enabledSkills.isNotEmpty()) {
