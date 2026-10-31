@@ -591,7 +591,13 @@ class ChatService(
         val session = sessionManager.get(conversationId) ?: return null
         synchronized(session) {
             // A pending tool approval is still part of the current turn.
-            if (session.getJob() != null || session.state.value.isAwaitingToolApproval) return null
+            // 压缩不是会话 job，单靠自己不会被 getJob() 挡住，这里显式让路
+            if (session.getJob() != null ||
+                session.state.value.isAwaitingToolApproval ||
+                session.compressMutex.isLocked
+            ) {
+                return null
+            }
             // 队列里还有消息但已经到达 MAX: 暂停队列, 压缩上下文后可以手动恢复
             if (session.messageQueue.state.value.messages.isNotEmpty() &&
                 session.maxContextReached() &&
@@ -1264,6 +1270,14 @@ class ChatService(
         session.update { latest ->
             if (requireIdle) {
                 check(!session.isGenerating) { context.getString(R.string.chat_page_compress_blocked_generating) }
+            }
+            // 幂等兜底：并发/连续两次压缩算出同样的摘要时，别把同一份文本插两遍
+            val afterIndex = latest.messageNodes.indexOfFirst { it.id == nodes[endIndex - 1].id }
+            if (afterIndex >= 0) {
+                val next = latest.messageNodes.getOrNull(afterIndex + 1)?.currentMessage
+                if (next?.isContextCheckpoint == true && next.toText().trim() == summary.trim()) {
+                    return@update latest
+                }
             }
             val updated = latest.insertContextCheckpoint(
                 afterNodeId = nodes[endIndex - 1].id,
