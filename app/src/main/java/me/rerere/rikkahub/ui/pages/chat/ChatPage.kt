@@ -122,6 +122,7 @@ import me.rerere.rikkahub.ui.components.ai.chatInputHaze
 import me.rerere.rikkahub.ui.components.ai.completion.WorkspaceCompletionProvider
 import me.rerere.rikkahub.ui.components.ai.rememberChatAttachmentPickerActions
 import me.rerere.rikkahub.ui.components.ai.rememberModelListState
+import me.rerere.rikkahub.ui.components.message.ConversationTodoCard
 import me.rerere.rikkahub.ui.components.message.ConversationUsageDetails
 import me.rerere.rikkahub.ui.components.message.usageTokenSpeed
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
@@ -888,6 +889,15 @@ private fun ChatPageContent(
             },
             bottomBar = {
                 if (currentMessages.isNotEmpty()) {
+                    // 任务清单放在输入框正上方：跟着输入区一起常驻，不再占对话列表顶部的位置
+                    if (conversation.todos.isNotEmpty()) {
+                        ConversationTodoCard(
+                            todos = conversation.todos,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                        )
+                    }
                     if (setting.displaySetting.terminalStyle) {
                         TerminalChatInput(
                             state = inputState,

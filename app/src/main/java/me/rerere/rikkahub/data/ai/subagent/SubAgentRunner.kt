@@ -90,7 +90,9 @@ class SubAgentRunner(
         }
 
         scope.launch {
-            val result = finishChild(chatService, candidate, child)
+            // 被用户停止或中途出错时返回 null：不打搅主代理，状态留在任务树里，
+            // 用户想继续就在子会话里直接发消息，不会被一条「异常终止」把话头堵死
+            val result = finishChild(chatService, candidate, child) ?: return@launch
             runCatching { chatService.deliverSubAgentResult(parent.id, result) }
                 .onFailure { Log.w(TAG, "deliver sub agent result failed", it) }
         }
@@ -101,18 +103,18 @@ class SubAgentRunner(
         chatService: ChatService,
         candidate: Assistant,
         child: Conversation,
-    ): String {
+    ): String? {
         val conversation = try {
             chatService.awaitGeneration(child.id)
         } catch (e: CancellationException) {
             withContext(NonCancellable) {
-                markFailed(chatService, child.id)
+                markStopped(chatService, child.id)
             }
-            throw e
+            return null
         } catch (e: Exception) {
             Log.w(TAG, "sub agent run failed", e)
-            markFailed(chatService, child.id)
-            return "Sub-agent \"${candidate.name}\" failed: ${e.message ?: e::class.simpleName}"
+            markStopped(chatService, child.id)
+            return null
         }
 
         val awaitingApproval = conversation.isAwaitingToolApproval
@@ -124,10 +126,11 @@ class SubAgentRunner(
 
         return if (awaitingApproval) {
             updateState(chatService, child.id, SUB_AGENT_STATE_FAILED)
-            "Sub-agent \"${candidate.name}\" stopped on a tool call that needs user approval. Open conversation ${child.id}, approve it, and let it continue."
+            // 等审批也是「没结束」：同样不打搅主代理
+            null
         } else if (answer.isBlank()) {
             updateState(chatService, child.id, SUB_AGENT_STATE_FAILED)
-            "Sub-agent \"${candidate.name}\" produced no reply. Conversation ${child.id} is available in the task tree."
+            null
         } else {
             updateState(chatService, child.id, SUB_AGENT_STATE_COMPLETED)
             buildString {
@@ -139,6 +142,11 @@ class SubAgentRunner(
         }
     }
     private suspend fun markFailed(chatService: ChatService, conversationId: Uuid) {
+        updateState(chatService, conversationId, SUB_AGENT_STATE_FAILED)
+    }
+
+    /** 被用户停止 / 中途出错：只改任务树状态，不往主会话投递消息 */
+    private suspend fun markStopped(chatService: ChatService, conversationId: Uuid) {
         updateState(chatService, conversationId, SUB_AGENT_STATE_FAILED)
     }
 

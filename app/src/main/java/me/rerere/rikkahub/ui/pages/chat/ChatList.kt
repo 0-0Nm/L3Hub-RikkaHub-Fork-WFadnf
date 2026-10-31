@@ -101,7 +101,6 @@ import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.withConversation
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.message.ChatMessage
-import me.rerere.rikkahub.ui.components.message.ConversationTodoCard
 import me.rerere.rikkahub.ui.components.ui.ErrorCardsDisplay
 import me.rerere.rikkahub.ui.components.ui.shadow.FilledIconButton
 import me.rerere.rikkahub.ui.hooks.ImeLazyListAutoScroller
@@ -360,14 +359,6 @@ private fun ChatListNormal(
             if (terminalStyle) {
                 item(key = "TerminalSessionHeader") {
                     TerminalSessionHeader(conversation = conversation)
-                }
-            }
-            if (conversation.todos.isNotEmpty()) {
-                stickyHeader(key = "ConversationTodos") {
-                    ConversationTodoCard(
-                        todos = conversation.todos,
-                        modifier = Modifier.padding(bottom = 4.dp),
-                    )
                 }
             }
             itemsIndexed(
