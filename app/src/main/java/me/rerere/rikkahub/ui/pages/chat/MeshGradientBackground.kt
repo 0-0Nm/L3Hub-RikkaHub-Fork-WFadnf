@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -16,6 +17,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.delay
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import kotlin.math.PI
@@ -64,10 +68,24 @@ fun MeshGradientBackground(
 ) {
     var phases by remember { mutableStateOf(MeshPhases()) }
 
+    // 窗口不在前台时连定时器一起停掉：delay() 不受帧时钟约束，
+    // 不这么写的话应用切后台仍会每 50ms 醒一次并触发一次 draw。
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var resumed by remember(lifecycleOwner) {
+        mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+    }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, _ ->
+            resumed = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     // 背景是几十秒周期的缓慢漂移，不需要跟屏幕刷新率同步：20fps 看不出差别，
-    // 而生成中和滚动中整段停下来，省掉的正是最缺主线程的那段时间。
-    LaunchedEffect(animate) {
-        if (!animate) return@LaunchedEffect
+    // 而生成中、滚动中、切后台时整段停下来，省掉的正是最缺主线程的那段时间。
+    LaunchedEffect(animate, resumed) {
+        if (!animate || !resumed) return@LaunchedEffect
         var lastNanos = System.nanoTime()
         while (true) {
             delay(MESH_FRAME_MILLIS)
