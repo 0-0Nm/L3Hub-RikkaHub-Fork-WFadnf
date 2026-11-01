@@ -24,8 +24,8 @@ android {
         applicationId = "com.rikkahub.l3hub.wfadnf"
         minSdk = 26
         targetSdk = 37
-        versionCode = 250
-        versionName = "L.3.1.1.72"
+        versionCode = 251
+        versionName = "L.3.1.1.73"
         buildConfigField("boolean", "UPDATE_CHECK_ENABLED", "false")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -138,6 +138,11 @@ android {
         resources {
             // BouncyCastle 的 Picnic 后量子签名查找表（约 1.2MB），JSch 用不到
             excludes += "org/bouncycastle/pqc/crypto/picnic/**"
+            // sshd 的 jar 自带 META-INF/DEPENDENCIES，和已有依赖重复，会让
+            // :app:mergeGithubDebugJavaResource 直接失败；这些元数据运行时用不到
+            excludes += "META-INF/DEPENDENCIES"
+            excludes += "META-INF/LICENSE*"
+            excludes += "META-INF/NOTICE*"
         }
     }
     tasks.withType<KotlinCompile>().configureEach {
