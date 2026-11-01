@@ -79,7 +79,7 @@ class MarkdownUtilsTest {
     @Test
     fun `thinking summary keeps decimals and file names in one sentence`() {
         assertEquals(
-            "等 0.5 秒再看 A.kt",
+            "等 0.5 秒再看 A.kt 就够了",
             "等 0.5 秒再看 A.kt 就够了".extractThinkingSummary()
         )
     }
