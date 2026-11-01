@@ -10,3 +10,8 @@
 -keep interface org.apache.sshd.** { *; }
 -keepattributes Signature,InnerClasses,EnclosingMethod,*Annotation*
 -dontwarn org.apache.sshd.**
+
+# 兜底：R8 在 AGP 9 的 optimization 模式下仍可能把「只作为其它类的父类型出现」的接口裁掉，
+# 显式保留全部类型（含内部类），并禁止改名，避免反射里按名字找不到
+-keepnames class org.apache.sshd.** { *; }
+-keep class org.apache.sshd.server.** { *; }

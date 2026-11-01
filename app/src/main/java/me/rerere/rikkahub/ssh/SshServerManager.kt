@@ -109,7 +109,8 @@ class SshServerManager(
             } catch (t: Throwable) {
                 Log.e(TAG, "Failed to start SSH server", t)
                 _isRunning.value = false
-                _error.value = t.message ?: t.toString()
+                // 只给 message 的话 NoClassDefFoundError 只剩一个类名，排查时看不出异常类型，这里带上类型
+                _error.value = t.toString()
             }
         }
     }
@@ -124,7 +125,8 @@ class SshServerManager(
                 Log.i(TAG, "SSH server stopped")
             } catch (t: Throwable) {
                 Log.w(TAG, "Failed to stop SSH server", t)
-                _error.value = t.message ?: t.toString()
+                // 只给 message 的话 NoClassDefFoundError 只剩一个类名，排查时看不出异常类型，这里带上类型
+                _error.value = t.toString()
             }
         }
     }
