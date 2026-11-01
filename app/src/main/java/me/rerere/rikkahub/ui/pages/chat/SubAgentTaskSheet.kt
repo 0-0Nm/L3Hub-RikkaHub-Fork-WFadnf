@@ -113,18 +113,12 @@ fun SubAgentTaskSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         // 只改底板，sheet 自己的 scrim / 手势不变
-        modifier = Modifier.glassSurface(
-            shape = GlassSheetShape,
-            baseColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            hazeState = hazeState,
-            minAlpha = 0.92f,
-        ),
         shape = GlassSheetShape,
-        containerColor = if (canGlassPane(hazeState)) {
-            Color.Transparent
-        } else {
-            MaterialTheme.colorScheme.surfaceContainerLow
-        },
+        // 不要把 glassSurface 挂在 ModalBottomSheet 的 modifier 上：它带来的 clip/haze 图层
+        // 会让 sheet 的锚定失效（面板跑到屏幕中间、不盖住底栏）。这里只把底色做成接近不透明的半透明。
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(
+            alpha = if (canGlassPane(hazeState)) 0.96f else 1f,
+        ),
         // 同抽屉：底色可能变透明，内容色显式钉住
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
