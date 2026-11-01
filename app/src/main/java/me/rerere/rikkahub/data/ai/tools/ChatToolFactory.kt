@@ -73,6 +73,7 @@ class ChatToolFactory(
         model: Model,
         workspaceCwds: Map<String, String> = emptyMap(),
         conversationId: Uuid? = null,
+        isSubAgentConversation: Boolean = false,
         autoApproveTools: Boolean = false,
     ): List<Tool> {
         val workspaceTools = createWorkspaceTools(
@@ -92,8 +93,10 @@ class ChatToolFactory(
             }
             addAll(
                 localTools.getTools(
-                    // 子代理默认也能继续派发下一层，不用手动打开这个工具
-                    options = if (assistant.isSubAgent) {
+                    // 派发能力只由两个独立的东西决定：助手本地工具里勾了「派发子代理」，或者这个会话自己就是子代理会话
+                    // （子代理可以继续派发下一层，不用它自己再开一次）。助手上的 isSubAgent 只表示「能被别人派发」，
+                    // 这种助手也常被直接当主助手聊天，不能因此白送 dispatch_sub_agent
+                    options = if (isSubAgentConversation) {
                         (assistant.localTools + LocalToolOption.SubAgent).distinct()
                     } else {
                         assistant.localTools

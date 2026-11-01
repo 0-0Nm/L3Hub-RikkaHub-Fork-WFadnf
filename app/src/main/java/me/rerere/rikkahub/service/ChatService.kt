@@ -45,6 +45,10 @@ import me.rerere.rikkahub.data.ai.MemoryConsolidationScheduler
 import me.rerere.rikkahub.data.ai.TranslationHandler
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.prompts.buildCompressPrompt
+import me.rerere.rikkahub.data.ai.subagent.SUB_AGENT_STATE_COMPLETED
+import me.rerere.rikkahub.data.ai.subagent.SUB_AGENT_STATE_FAILED
+import me.rerere.rikkahub.data.ai.subagent.SUB_AGENT_STATE_RUNNING
+import me.rerere.rikkahub.data.ai.subagent.formatSubAgentRoundResult
 import me.rerere.rikkahub.data.ai.subagent.formatSubAgentResults
 import me.rerere.rikkahub.data.ai.tools.InvalidMcpServerNamesException
 import me.rerere.rikkahub.data.ai.tools.shouldUseExternalWebSearch
@@ -262,6 +266,16 @@ class ChatService(
             session.messageQueue.failReplyWaiters(context.getString(R.string.chat_page_voice_tool_approval))
         }
         appScope.launch {
+            // 先回报这一轮（读到的还是刚跑完的状态），再放行下一条排队消息：
+            // 否则新的一轮已经把用户消息追加进来，轮次和内容都会算错
+            try {
+                reportSubAgentRound(session, cause)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // 回报失败不能拖住这个会话后面的排队消息和缓冲结果
+                Log.w(TAG, "report sub agent round failed: ${session.id}", e)
+            }
             dispatchNextQueuedMessage(session.id)
             flushSubAgentResults(session.id)
         }
@@ -534,42 +548,62 @@ class ChatService(
         }
     }
 
-    /** 等待会话当前这一轮生成结束；没有活动任务时直接返回最新会话。 */
-    suspend fun awaitGeneration(conversationId: Uuid): Conversation {
-        val session = sessionManager.getOrCreate(conversationId)
-        val job = session.getJob()
-        try {
-            job?.join()
-        } catch (e: CancellationException) {
-            job?.cancel()
-            throw e
-        }
-        return getConversation(conversationId) ?: session.state.value
-    }
-
-    /** 等一轮生成结束的结果：job.join() 对被取消的 job 是正常返回的，必须单独告诉调用方「是不是被掐了」 */
-    data class AwaitResult(val conversation: Conversation, val cancelled: Boolean)
-
-    suspend fun awaitGenerationResult(conversationId: Uuid): AwaitResult {
-        val session = sessionManager.getOrCreate(conversationId)
-        val job = session.getJob()
-        try {
-            job?.join()
-        } catch (e: CancellationException) {
-            job?.cancel()
-            throw e
-        }
-        return AwaitResult(
-            conversation = getConversation(conversationId) ?: session.state.value,
-            cancelled = job?.isCancelled == true,
-        )
-    }
-
     /** 子代理结束时更新任务树状态；会话可能已经被回收，因此从数据库重新加载。 */
     suspend fun updateSubAgentState(conversationId: Uuid, state: String) {
         withLoadedSession(conversationId, createIfMissing = false) { session ->
             session.update { it.copy(subAgentState = state) }
             session.flush()
+        }
+    }
+
+    /**
+     * 子代理会话每跑完一轮就把这一轮的结果投回父会话。
+     *
+     * 一轮就是一次生成任务；被子代理回传的结果触发的新一轮同样会走到这里，所以中间层不会只回传第一次。
+     * 只在生成任务的完成回调里触发，一个任务只完成一次，因此天然不会重复投递。
+     */
+    private suspend fun reportSubAgentRound(session: ConversationSession, cause: Throwable?) {
+        val conversation = session.state.value
+        val parentConversationId = conversation.parentConversationId ?: return
+        // 停止和中途出错都只留下半截回复，不把半截内容当成「子代理完成」
+        if (cause != null) {
+            setSubAgentState(session, SUB_AGENT_STATE_FAILED)
+            return
+        }
+        val answer = conversation.currentMessages
+            .lastOrNull { it.role == MessageRole.ASSISTANT }
+            ?.toText()
+            ?.trim()
+            .orEmpty()
+        if (conversation.isAwaitingToolApproval || answer.isBlank()) {
+            setSubAgentState(session, SUB_AGENT_STATE_FAILED)
+            return
+        }
+        setSubAgentState(session, SUB_AGENT_STATE_COMPLETED)
+        // 每轮开头都会追加一条用户消息，用它数这是第几轮：父会话靠这个数区分同一个子代理的多条结果
+        val round = conversation.currentMessages.count { it.role == MessageRole.USER }
+        // 只有自动跑起来的轮次才回传：第一轮是派发出来的，之后的轮次由子代理回传的结果触发。
+        // 用户在子会话里手动追问的那一轮只更新状态，不打扰父会话
+        val triggeredAutomatically = round <= 1 ||
+            conversation.currentMessages.lastOrNull { it.role == MessageRole.USER }?.isSubAgentNotice == true
+        if (!triggeredAutomatically) return
+        val assistantName = settingsStore.awaitLoaded().getStoredAssistantOf(conversation).name
+        deliverSubAgentResult(
+            parentConversationId = parentConversationId,
+            result = formatSubAgentRoundResult(assistantName, session.id, round, answer),
+        )
+    }
+
+    /** 改任务树上的状态；会话被回收或还没加载时只记一条日志，不影响对话本身 */
+    private suspend fun setSubAgentState(session: ConversationSession, state: String) {
+        if (session.state.value.subAgentState == state) return
+        try {
+            session.update { it.copy(subAgentState = state) }
+            session.flush()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "set sub agent state failed: ${session.id}", e)
         }
     }
 
@@ -593,16 +627,24 @@ class ChatService(
     }
 
     private suspend fun flushSubAgentResults(conversationId: Uuid) {
+        val hasPending = synchronized(pendingSubAgentResults) {
+            pendingSubAgentResults.containsKey(conversationId) && conversationId !in deliveringSubAgentResults
+        }
+        if (!hasPending) return
+        val session = sessionManager.get(conversationId)
+        // 会话没打开时：子代理会话只能自己接着跑，普通会话等用户下次打开再送
+        val unopenedSubAgent = session == null && canDeliverToUnopened(conversationId)
         val batch = synchronized(pendingSubAgentResults) {
             if (!pendingSubAgentResults.containsKey(conversationId)) return
             if (!deliveringSubAgentResults.add(conversationId)) return
-            val session = sessionManager.get(conversationId)
-            // 会话没打开时不主动起一轮生成，等用户下次打开再送；
             // 上下文已满又没开自动压缩时也先留着，等用户压缩或删消息后再投递
-            val canDeliver = session != null &&
+            val canDeliver = if (session == null) {
+                unopenedSubAgent
+            } else {
                 !session.isGenerating &&
-                !session.state.value.isAwaitingToolApproval &&
-                !(session.maxContextReached() && !autoCompressEnabled(session))
+                    !session.state.value.isAwaitingToolApproval &&
+                    !(session.maxContextReached() && !autoCompressEnabled(session))
+            }
             if (!canDeliver) {
                 deliveringSubAgentResults.remove(conversationId)
                 return
@@ -620,6 +662,22 @@ class ChatService(
         } finally {
             synchronized(pendingSubAgentResults) { deliveringSubAgentResults.remove(conversationId) }
         }
+    }
+
+    /**
+     * 会话没打开时能不能直接投递。
+     *
+     * 普通会话等用户下次打开再送，免得后台突然开始生成；子代理会话没人会打开它，
+     * 等下去整条子代理链就断在中间这一层，所以它自己接着跑。
+     */
+    private suspend fun canDeliverToUnopened(conversationId: Uuid): Boolean {
+        val conversation = conversationRepo.getConversationById(conversationId) ?: return false
+        if (conversation.parentConversationId == null) return false
+        val settings = settingsStore.settingsFlow.value
+        val model = settings.getChatModelOf(conversation)
+        if (model?.enforceMaxContext == false) return true
+        return !isContextLimitReached(conversation.lastContextTokens(), model?.maxContextTokens) ||
+            settings.getAssistantOf(conversation).autoCompress
     }
 
     /** Enqueue immediately; the result belongs to this item even after edits or later turns. */
@@ -695,6 +753,8 @@ class ChatService(
                             parts = processedContent,
                             isSubAgentNotice = queued.notice,
                         ).toMessageNode(),
+                        // 子代理会话每开一轮就回到 running：上一轮之后还会被回传的结果再触发一轮，任务树不该停在「已完成」
+                        subAgentState = if (it.parentConversationId != null) SUB_AGENT_STATE_RUNNING else it.subAgentState,
                     )
                 }
                 session.flush()

@@ -121,6 +121,8 @@ class ChatRequestFactory(
                 model = model,
                 workspaceCwds = workspaceCwds,
                 conversationId = conversation.id,
+                // 只有会话本身是子代理会话时才继承派发能力；助手上的「设为子代理」只管「能被派发」
+                isSubAgentConversation = conversation.parentConversationId != null,
                 // 子代理会话是自己跑完的，没有人给它点审批
                 autoApproveTools = conversation.parentConversationId != null,
             ),
