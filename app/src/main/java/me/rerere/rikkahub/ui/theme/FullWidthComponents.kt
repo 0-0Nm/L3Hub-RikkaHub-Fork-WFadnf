@@ -39,7 +39,11 @@ val SquareShapes = Shapes(
 /** 全宽模式下圆角一律为 0，否则用传入的半径。 */
 @Composable
 @ReadOnlyComposable
-fun adaptiveCornerRadius(radius: Dp): Dp = if (LocalFullWidthComponents.current) 0.dp else radius
+fun adaptiveCornerRadius(radius: Dp): Dp {
+    // 动画（弹簧）会过冲，Dp 可能瞬时为负；RoundedCornerShape 见到负值直接抛异常
+    if (LocalFullWidthComponents.current) return 0.dp
+    return radius.coerceAtLeast(0.dp)
+}
 
 /** 全宽模式下是直角，否则用传入的半径。 */
 @Composable

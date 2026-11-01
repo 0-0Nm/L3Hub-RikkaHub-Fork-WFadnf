@@ -58,6 +58,7 @@ fun ChatMessageCopySheet(
             shape = GlassSheetShape,
             baseColor = MaterialTheme.colorScheme.surfaceContainerLow,
             hazeState = hazeState,
+            minAlpha = 0.92f,
         ),
         shape = GlassSheetShape,
         containerColor = if (canGlassPane(hazeState)) {

@@ -305,11 +305,14 @@ private fun CardGroupListItem(
         animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
     )
 
+    // 弹簧动画会过冲，圆角可能瞬时为负（尤其全宽模式下目标值是 0），必须夹一下
+    val safeTopCorner = topCorner.coerceAtLeast(0.dp)
+    val safeBottomCorner = bottomCorner.coerceAtLeast(0.dp)
     val shape = RoundedCornerShape(
-        topStart = topCorner,
-        topEnd = topCorner,
-        bottomStart = bottomCorner,
-        bottomEnd = bottomCorner,
+        topStart = safeTopCorner,
+        topEnd = safeTopCorner,
+        bottomStart = safeBottomCorner,
+        bottomEnd = safeBottomCorner,
     )
     // 毛玻璃底只加在这类「开关行 / 按钮行」上；列表项本身不挂 hazeSource，避免滚动时每项重糊一次
     val glass = LocalSettings.current.displaySetting.enableBlurEffect

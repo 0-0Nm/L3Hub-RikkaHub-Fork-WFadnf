@@ -73,11 +73,16 @@ fun Modifier.glassSurface(
     baseColor: Color,
     hazeState: HazeState? = LocalGlassHazeState.current,
     radius: Dp = 18.dp,
+    // 大块浮层（抽屉、BottomSheet）必须给个不透明下限：haze 只糊注册过的源，
+    // 正文本身不在源里，35% 透明时文字会原样透上来，看着像没底板
+    minAlpha: Float = 0f,
 ): Modifier {
     val displaySetting = LocalSettings.current.displaySetting
     // 终端风格是一套纯字符的界面，不加玻璃；关闭模糊特效时同样一条 haze 都不挂
     if (!displaySetting.enableBlurEffect || LocalTerminalMode.current) return this
-    val tint = baseColor.copy(alpha = baseColor.alpha * displaySetting.glassSurfaceAlpha)
+    val tint = baseColor.copy(
+        alpha = maxOf(baseColor.alpha * displaySetting.glassSurfaceAlpha, minAlpha),
+    )
     val pane = if (hazeState == null) {
         Modifier.background(tint)
     } else {

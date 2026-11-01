@@ -280,6 +280,7 @@ fun ChatDrawerContent(
                 shape = drawerShape,
                 baseColor = MaterialTheme.colorScheme.surfaceContainerLow,
                 hazeState = hazeState,
+                minAlpha = 0.92f,
             ),
         drawerShape = drawerShape,
         drawerContainerColor = if (canGlassPane(hazeState)) {
