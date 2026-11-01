@@ -110,7 +110,7 @@ class SshServerManager(
                 Log.e(TAG, "Failed to start SSH server", t)
                 _isRunning.value = false
                 // 只给 message 的话 NoClassDefFoundError 只剩一个类名，排查时看不出异常类型，这里带上类型
-                _error.value = t.toString()
+                _error.value = t.stackTraceToString().take(1200)
             }
         }
     }
@@ -126,7 +126,7 @@ class SshServerManager(
             } catch (t: Throwable) {
                 Log.w(TAG, "Failed to stop SSH server", t)
                 // 只给 message 的话 NoClassDefFoundError 只剩一个类名，排查时看不出异常类型，这里带上类型
-                _error.value = t.toString()
+                _error.value = t.stackTraceToString().take(1200)
             }
         }
     }
