@@ -388,6 +388,53 @@ CompositionLocal，页面只读它，不各自去判断 `Settings`。
 默认关闭，打开后仍然保留的内边距（有意为之）：气泡内部文字 10dp、输入框内部的 `inputPadding`、
 `CardGroup` 每项内部的 16dp、对话框按钮区。这些是内容离组件边缘的距离，不是组件边缘离屏幕的距离。
 
+## 内置 SSH 服务端（fork 新增）
+
+设置 → Web 服务器 → 「在终端中使用」：打开后可以在系统终端里 `ssh -p 2222 l3hub@127.0.0.1` 直接操作 App。
+和 Web 服务器是两个独立开关，但共用同一个前台服务 `WebServerService` 和同一条通知。
+
+- **依赖**：`org.apache.sshd:sshd-core`（版本走 `gradle/libs.versions.toml` 的 `apache-sshd`，该版本此前已被 `:workspace` 的测试用到）。
+  `sshd-common` 由它传递引入；SLF4J 输出走已有的 `slf4j-android`，不需要再加 `slf4j-nop`。
+- **认证**：只开密码认证，密码就是 Web 服务器的访问密码（`webServerAccessPassword`），**不维护第二份令牌**；
+  用户名随便填（示例里写 `l3hub`）。
+- **绑定**：默认 `127.0.0.1`，打开「允许局域网访问」才绑 `0.0.0.0`。端口默认 `2222`，和 `8080` 分开。
+- **主机密钥**：`filesDir/ssh/hostkey.ser`，第一次启动由 sshd 生成，之后一直复用（RSA，避免 Android 上没有 EdDSA）。
+- **通道**：不申请 PTY，按行读命令；shell 请求（`ssh host`）进交互循环，exec 请求（`ssh host conversations`）跑一条就退出。
+- **令牌为空时拒绝启动**，通知会被收掉，界面上显示错误。
+
+命令（都直接调 `ChatService` / `ConversationRepository` / `SettingsStore`，不绕 HTTP）：
+
+| 命令 | 作用 |
+|---|---|
+| `help` | 命令列表 |
+| `conversations` | 当前助手的会话列表（id / 更新时间 / 标题） |
+| `models` | 已启用提供商的对话模型，`*` 是当前模型 |
+| `send <id> <text>` | 发消息，生成在后台继续，用 `tail` 跟 |
+| `tail <id>` | 跟会话输出，生成时增量打印，Ctrl+C / 断开结束 |
+| `whoami` | 当前账号与助手 |
+| `exit` | 关闭会话 |
+
+改动文件：
+
+```
+gradle/libs.versions.toml                       无需改动，apache-sshd 已有
+app/build.gradle.kts                            implementation(libs.apache.sshd.core)
+app/.../ssh/SshCommandParser.kt                 纯函数解析（命令 / 参数缺失 / 未知命令）
+app/.../ssh/SshCommandSession.kt                命令实现
+app/.../ssh/SshShellCommand.kt                  sshd 的 Command / ShellFactory 实现，按行读写
+app/.../ssh/SshServerManager.kt                 Koin 单例：start / stop / isRunning / port / error
+app/.../service/WebServerService.kt             两个服务共用前台服务与通知，新增 SSH 相关 action
+app/.../di/AppModule.kt                         注册 SshServerManager
+app/.../data/datastore/Settings*.kt             三个新字段（默认 false / 2222 / false）
+app/.../ui/pages/setting/SettingWebPage.kt      「在终端中使用」卡片
+app/.../RikkaHubApp.kt                          只恢复用户自己开过的服务，不会无条件启动
+app/src/test/.../ssh/SshCommandParserTest.kt    解析器单测（不依赖 Android）
+```
+
+体积：预计 release APK **+1.5–2.5 MB**，debug **+3 MB 左右**。依据是 sshd-core 2.20 与
+sshd-common 的 jar 合计约 2.7 MB，R8 会裁掉一部分用不到的算法/解析器但不会全裁；
+下次出包时用 `assembleGithubRelease` 前后对比确认。
+
 ## 还要做的
 
 1. **签名**：在 `local.properties`（已 gitignore）加四项，之后所有版本都用同一个 keystore，否则无法覆盖升级

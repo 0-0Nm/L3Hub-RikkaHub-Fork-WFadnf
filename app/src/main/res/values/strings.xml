@@ -990,6 +990,21 @@
   <string name="setting_page_web_server_port_desc">Web server listen port (1024-65535)</string>
   <string name="setting_page_web_server_start">Start</string>
   <string name="setting_page_web_server_stop">Stop</string>
+
+  <string name="setting_page_ssh_title">Use in a terminal</string>
+  <string name="setting_page_ssh_title_desc">Connect with the system ssh client and drive this app from the command line</string>
+  <string name="setting_page_ssh_enable">SSH server</string>
+  <string name="setting_page_ssh_enable_desc">Built-in SSH server that exposes a line based command interface</string>
+  <string name="setting_page_ssh_port">SSH port</string>
+  <string name="setting_page_ssh_port_desc">SSH listen port (1024-65535), configured separately from the web server port</string>
+  <string name="setting_page_ssh_allow_lan">Allow LAN access</string>
+  <string name="setting_page_ssh_allow_lan_desc">Bind 0.0.0.0 instead of 127.0.0.1, so other devices on the same network can connect</string>
+  <string name="setting_page_ssh_token">Token</string>
+  <string name="setting_page_ssh_token_empty">No token yet, set the web server access password first</string>
+  <string name="setting_page_ssh_example">Example</string>
+  <string name="setting_page_ssh_note">Notes</string>
+  <string name="setting_page_ssh_note_desc">The SSH password is the web server access password, there is no second token to maintain. Any username works, l3hub is just the example. Commands: help, conversations, models, send, tail, whoami, exit.</string>
+  <string name="notification_ssh_server_running">SSH server running</string>
   <string name="setting_provider_page_abilities">Abilities</string>
   <string name="setting_provider_page_add">Add</string>
   <string name="setting_provider_page_add_model">Add Model</string>

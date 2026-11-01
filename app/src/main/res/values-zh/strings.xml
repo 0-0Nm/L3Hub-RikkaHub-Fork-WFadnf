@@ -948,6 +948,21 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_page_web_server_port_desc">Web服务器监听端口（1024-65535）</string>
   <string name="setting_page_web_server_start">启动</string>
   <string name="setting_page_web_server_stop">停止</string>
+
+  <string name="setting_page_ssh_title">在终端中使用</string>
+  <string name="setting_page_ssh_title_desc">用系统 ssh 客户端连接本应用，在命令行里下命令</string>
+  <string name="setting_page_ssh_enable">SSH 服务</string>
+  <string name="setting_page_ssh_enable_desc">内置 SSH 服务端，提供按行执行的命令行界面</string>
+  <string name="setting_page_ssh_port">SSH 端口</string>
+  <string name="setting_page_ssh_port_desc">SSH 监听端口（1024-65535），与 Web 服务器端口分开配置</string>
+  <string name="setting_page_ssh_allow_lan">允许局域网访问</string>
+  <string name="setting_page_ssh_allow_lan_desc">绑定 0.0.0.0 而不是 127.0.0.1，同一网络的其他设备也能连接</string>
+  <string name="setting_page_ssh_token">令牌</string>
+  <string name="setting_page_ssh_token_empty">还没有令牌，请先设置 Web 服务器的访问密码</string>
+  <string name="setting_page_ssh_example">示例命令</string>
+  <string name="setting_page_ssh_note">说明</string>
+  <string name="setting_page_ssh_note_desc">SSH 密码就是 Web 服务器的访问密码，不另外维护第二份令牌。用户名随便填，l3hub 只是示例。命令：help、conversations、models、send、tail、whoami、exit。</string>
+  <string name="notification_ssh_server_running">SSH 服务器运行中</string>
   <string name="setting_provider_page_abilities">能力</string>
   <string name="setting_provider_page_add">添加</string>
   <string name="setting_provider_page_add_model">添加模型</string>

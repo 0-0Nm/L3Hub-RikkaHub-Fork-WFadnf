@@ -245,7 +245,8 @@ class RikkaHubApp : Application() {
             runCatching {
                 delay(500)
                 val settings = get<SettingsStore>().awaitLoaded()
-                if (settings.webServerEnabled) {
+                // 只有用户自己打开过开关才会恢复，不会无条件起前台服务
+                if (settings.webServerEnabled || settings.sshServerEnabled) {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                         ContextCompat.checkSelfPermission(
                             this@RikkaHubApp,
@@ -255,8 +256,10 @@ class RikkaHubApp : Application() {
                         Log.w(TAG, "startWebServerIfEnabled: notification permission not granted, skipping")
                         return@launch
                     }
+                    val needsLocalNetwork = (settings.webServerEnabled && !settings.webServerLocalhostOnly) ||
+                        (settings.sshServerEnabled && settings.sshServerAllowLan)
                     if (Build.VERSION.SDK_INT >= 37 &&
-                        !settings.webServerLocalhostOnly &&
+                        needsLocalNetwork &&
                         ContextCompat.checkSelfPermission(
                             this@RikkaHubApp,
                             android.Manifest.permission.ACCESS_LOCAL_NETWORK
@@ -269,6 +272,7 @@ class RikkaHubApp : Application() {
                         action = WebServerService.ACTION_START
                         putExtra(WebServerService.EXTRA_PORT, settings.webServerPort)
                         putExtra(WebServerService.EXTRA_LOCALHOST_ONLY, settings.webServerLocalhostOnly)
+                        putExtra(WebServerService.EXTRA_WEB_ENABLED, settings.webServerEnabled)
                     }
                     startForegroundService(intent)
                 }

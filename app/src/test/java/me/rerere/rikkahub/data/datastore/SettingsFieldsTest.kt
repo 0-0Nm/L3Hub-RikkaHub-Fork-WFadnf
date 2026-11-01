@@ -78,6 +78,9 @@ class SettingsFieldsTest {
         assertEquals(null, settings.memoryModelId)
         assertEquals(true, settings.dynamicColor)
         assertEquals(8080, settings.webServerPort)
+        assertEquals(false, settings.sshServerEnabled)
+        assertEquals(2222, settings.sshServerPort)
+        assertEquals(false, settings.sshServerAllowLan)
     }
 
     @Test
@@ -192,6 +195,9 @@ private val SAMPLE = Settings(
     webServerJwtEnabled = true,
     webServerAccessPassword = "secret",
     webServerLocalhostOnly = true,
+    sshServerEnabled = true,
+    sshServerPort = 2223,
+    sshServerAllowLan = true,
     backupReminderConfig = BackupReminderConfig(enabled = true),
     sponsorAlertDismissedAt = 7,
 )
@@ -255,6 +261,9 @@ private val STORED_KEYS = setOf(
     "web_server_jwt_enabled",
     "web_server_access_password",
     "web_server_localhost_only",
+    "ssh_server_enabled",
+    "ssh_server_port",
+    "ssh_server_allow_lan",
     "mode_injections",
     "lorebooks",
     "quick_messages",

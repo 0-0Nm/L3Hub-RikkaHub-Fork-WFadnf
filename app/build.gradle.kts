@@ -24,8 +24,8 @@ android {
         applicationId = "com.rikkahub.l3hub.wfadnf"
         minSdk = 26
         targetSdk = 37
-        versionCode = 249
-        versionName = "L.3.1.1.71"
+        versionCode = 250
+        versionName = "L.3.1.1.72"
         buildConfigField("boolean", "UPDATE_CHECK_ENABLED", "false")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -333,6 +333,9 @@ dependencies {
 
     // jmDNS (mDNS/Bonjour for .local hostname)
     implementation(libs.jmdns)
+
+    // Apache MINA SSHD — built-in SSH server (slf4j logs go to logcat via slf4j-android below)
+    implementation(libs.apache.sshd.core)
 
     // SLF4J Android binding — routes Ktor/SLF4J logs to logcat
     implementation(libs.slf4j.api)

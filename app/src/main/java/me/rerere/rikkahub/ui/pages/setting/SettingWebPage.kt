@@ -51,12 +51,14 @@ import me.rerere.hugeicons.stroke.ViewOff
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.WebServerService
+import me.rerere.rikkahub.ssh.SshServerManager
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionLocalNetwork
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionNotification
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
+import me.rerere.rikkahub.ui.components.ui.switchItem
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.terminal.IconButton
@@ -69,15 +71,20 @@ import org.koin.compose.koinInject
 @Composable
 fun SettingWebPage() {
     val webServerManager: WebServerManager = koinInject()
+    val sshServerManager: SshServerManager = koinInject()
     val settingsStore: SettingsStore = koinInject()
     val settings = LocalSettings.current
     val serverState by webServerManager.state.collectAsStateWithLifecycle()
+    val sshRunning by sshServerManager.isRunning.collectAsStateWithLifecycle()
+    val sshError by sshServerManager.error.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val toaster = LocalToaster.current
     val copiedText = stringResource(R.string.copied)
+    val tokenEmptyMessage = stringResource(R.string.setting_page_ssh_token_empty)
+    val sshExampleCommand = "ssh -p ${settings.sshServerPort} l3hub@127.0.0.1"
     var portText by remember(settings.webServerPort) {
         mutableStateOf(settings.webServerPort.toString())
     }
@@ -87,13 +94,19 @@ fun SettingWebPage() {
     var passwordVisible by remember {
         mutableStateOf(false)
     }
+    var sshPortText by remember(settings.sshServerPort) {
+        mutableStateOf(settings.sshServerPort.toString())
+    }
+    var tokenVisible by remember {
+        mutableStateOf(false)
+    }
 
     val permissionState = rememberPermissionState(
         permissions = buildSet {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(PermissionNotification)
             }
-            if (Build.VERSION.SDK_INT >= 37 && !settings.webServerLocalhostOnly) {
+            if (Build.VERSION.SDK_INT >= 37 && (!settings.webServerLocalhostOnly || settings.sshServerAllowLan)) {
                 add(PermissionLocalNetwork)
             }
         },
@@ -101,6 +114,7 @@ fun SettingWebPage() {
     PermissionManager(permissionState = permissionState)
 
     var pendingStart by remember { mutableStateOf(false) }
+    var pendingSshStart by remember { mutableStateOf(false) }
 
     fun startWebServer() {
         val intent = Intent(context, WebServerService::class.java).apply {
@@ -114,10 +128,31 @@ fun SettingWebPage() {
         }
     }
 
+    fun startSshServer() {
+        val intent = Intent(context, WebServerService::class.java).apply {
+            action = WebServerService.ACTION_START_SSH
+        }
+        context.startForegroundService(intent)
+    }
+
+    fun stopSshServer() {
+        val intent = Intent(context, WebServerService::class.java).apply {
+            action = WebServerService.ACTION_STOP_SSH
+        }
+        context.startService(intent)
+    }
+
     LaunchedEffect(permissionState.allPermissionsGranted) {
         if (pendingStart && permissionState.allPermissionsGranted) {
             pendingStart = false
             startWebServer()
+        }
+        if (pendingSshStart && permissionState.allPermissionsGranted) {
+            pendingSshStart = false
+            startSshServer()
+            scope.launch {
+                settingsStore.update { it.copy(sshServerEnabled = true) }
+            }
         }
     }
 
@@ -148,7 +183,7 @@ fun SettingWebPage() {
                         }
                     } else {
                         val intent = Intent(context, WebServerService::class.java).apply {
-                            action = WebServerService.ACTION_STOP
+                            action = WebServerService.ACTION_STOP_WEB
                         }
                         context.startService(intent)
                         scope.launch {
@@ -362,6 +397,163 @@ fun SettingWebPage() {
                             supportingContent = {
                                 Text(
                                     text = serverState.error ?: "",
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+
+            item {
+                CardGroup(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp),
+                ) {
+                    item(
+                        headlineContent = {
+                            Text(
+                                text = stringResource(R.string.setting_page_ssh_title),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        },
+                        supportingContent = {
+                            Text(
+                                text = stringResource(R.string.setting_page_ssh_title_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
+                    )
+                    switchItem(
+                        checked = settings.sshServerEnabled,
+                        onCheckedChange = { checked ->
+                            when {
+                                !checked -> {
+                                    scope.launch {
+                                        settingsStore.update { it.copy(sshServerEnabled = false) }
+                                    }
+                                    stopSshServer()
+                                }
+
+                                settings.webServerAccessPassword.isBlank() -> {
+                                    toaster.show(tokenEmptyMessage)
+                                }
+
+                                permissionState.allPermissionsGranted -> {
+                                    scope.launch {
+                                        settingsStore.update { it.copy(sshServerEnabled = true) }
+                                    }
+                                    startSshServer()
+                                }
+
+                                else -> {
+                                    pendingSshStart = true
+                                    permissionState.requestPermissions()
+                                }
+                            }
+                        },
+                        headlineContent = { Text(stringResource(R.string.setting_page_ssh_enable)) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_ssh_enable_desc)) },
+                    )
+                    item(
+                        headlineContent = { Text(stringResource(R.string.setting_page_ssh_port)) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_ssh_port_desc)) },
+                        trailingContent = {
+                            TextField(
+                                value = sshPortText,
+                                onValueChange = { value ->
+                                    sshPortText = value.filter { it.isDigit() }
+                                    val port = sshPortText.toIntOrNull()
+                                    if (port != null && port in 1024..65535) {
+                                        scope.launch {
+                                            settingsStore.update { it.copy(sshServerPort = port) }
+                                        }
+                                    }
+                                },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                isError = sshPortText.toIntOrNull()?.let { it !in 1024..65535 } ?: true,
+                                modifier = Modifier.width(100.dp),
+                                enabled = !sshRunning,
+                                shape = CircleShape,
+                                colors = TextFieldDefaults.colors(
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    errorIndicatorColor = Color.Transparent,
+                                    disabledIndicatorColor = Color.Transparent
+                                )
+                            )
+                        },
+                    )
+                    switchItem(
+                        checked = settings.sshServerAllowLan,
+                        onCheckedChange = { checked ->
+                            scope.launch {
+                                settingsStore.update { it.copy(sshServerAllowLan = checked) }
+                            }
+                        },
+                        enabled = !sshRunning,
+                        headlineContent = { Text(stringResource(R.string.setting_page_ssh_allow_lan)) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_ssh_allow_lan_desc)) },
+                    )
+                    item(
+                        onClick = { copyUrl(settings.webServerAccessPassword) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_ssh_token)) },
+                        supportingContent = {
+                            Text(
+                                if (settings.webServerAccessPassword.isBlank()) {
+                                    stringResource(R.string.setting_page_ssh_token_empty)
+                                } else if (tokenVisible) {
+                                    settings.webServerAccessPassword
+                                } else {
+                                    "•".repeat(settings.webServerAccessPassword.length.coerceAtMost(16))
+                                }
+                            )
+                        },
+                        trailingContent = {
+                            IconButton(onClick = { tokenVisible = !tokenVisible }) {
+                                Icon(
+                                    imageVector = if (tokenVisible) HugeIcons.ViewOff else HugeIcons.View,
+                                    contentDescription = null
+                                )
+                            }
+                        },
+                    )
+                    item(
+                        onClick = { copyUrl(sshExampleCommand) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_ssh_example)) },
+                        supportingContent = { Text(sshExampleCommand) },
+                    )
+                    item(
+                        headlineContent = {
+                            Text(
+                                text = stringResource(R.string.setting_page_ssh_note),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        },
+                        supportingContent = {
+                            Text(
+                                text = stringResource(R.string.setting_page_ssh_note_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
+                    )
+                    if (sshError != null) {
+                        item(
+                            headlineContent = {
+                                Text(
+                                    text = stringResource(R.string.setting_page_web_server_error),
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            },
+                            supportingContent = {
+                                Text(
+                                    text = sshError ?: "",
                                     color = MaterialTheme.colorScheme.error
                                 )
                             },

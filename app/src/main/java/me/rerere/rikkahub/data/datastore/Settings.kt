@@ -104,6 +104,10 @@ data class Settings(
     val webServerJwtEnabled: Boolean = false,
     val webServerAccessPassword: String = "",
     val webServerLocalhostOnly: Boolean = false,
+    // 内置 SSH 服务端：密码沿用 Web 服务器的访问密码，不单独维护第二份令牌
+    val sshServerEnabled: Boolean = false,
+    val sshServerPort: Int = 2222,
+    val sshServerAllowLan: Boolean = false,
     val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
     val sponsorAlertDismissedAt: Int = 0,
 ) {
