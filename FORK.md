@@ -196,15 +196,16 @@ L3Hub 自己的设置都在 `Settings` 里，随 `settings.json` 整份序列化
 |---|---|
 | 触发阈值 | `WARN` 或 `MAX`，取模型上配置的两个上下文门限 |
 | 压缩后保留 | 按消息条数或 token 数；token 按字符估算（CJK 约 1 字 1 token，其它约 4 字符 1 token），只数最后一个检查点之后的内容，工具输入输出也算 |
-| 触发时机 | 每次发送消息后、生成本轮回复之前，用 `Conversation.lastContextTokens()` 与门限比较；用量缺失时退回按可见内容估算 |
-| 上下文已满 | 到达 MAX 后确认发送会先弹窗，确认后压缩再发送；保留条数超过检查点之后剩余的消息时自动收缩 |
+| 触发时机 | 写入用户消息前后各判断一次，工具循环里每步结束后再判断一次（`autoCompressLoop`）；判据取「真实 usage」与「可见内容估算」的较大者——usage 看不到刚追加、还没发出去的消息，估算看不到工具定义 |
+| 压缩目标 | 按当前占用的 50%（`AUTO_COMPRESS_TARGET_RATIO`）折算，不按门限压满：压满就贴着线，下一轮加一条消息立刻再次触发；TOKENS 模式的保留量也夹到这个预算以内 |
+| 上下文已满 | 到达 MAX 后确认发送会先弹窗，确认后压缩再发送 |
 | 效果 | 与手动压缩完全一致：调用同一个压缩请求，在原位置插入 `isContextCheckpoint` 摘要消息 |
 | 原文 | 压缩只改变发给模型的上下文。切在一条消息中间时，检查点记下 `contextStartMessageId` / `contextStartPartIndex`，会话里存的原文保持完整，聊天页可以往回翻；被切走的前半段只存在于摘要里 |
 | 界面 | 不弹浮窗，复用生成中的加载球与 `processingStatus`，显示「正在压缩……」 |
 
 实现位置：
 
-- `data/model/AutoCompress.kt`：阈值/目标枚举、`keepRecentContextForTokens`
+- `data/model/AutoCompress.kt`：阈值/目标枚举、`resolveContextUsage`（门限判据）、`keepRecentContextForTokens`
 - `ai/ui/Message.kt` 的 `limitContext`：真正的请求裁剪点，跳过检查点之前的消息、按条数滞回截断、再按检查点里的 part 切分点丢掉已进摘要的前缀
 - `Assistant` 新增 `autoCompress`、`autoCompressThreshold`、`autoCompressTarget`、`autoCompressTargetValue`
 - `ChatService.autoCompressIfNeeded`：在 `sendQueuedMessage` 的 job 里、写入用户消息之前执行；`compressConversation` 与它共用 `compressSession`
