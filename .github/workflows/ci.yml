@@ -1,0 +1,64 @@
+name: CI
+
+# 本机不能编译，所有验证都走这里。
+# 只跑单测，不出包；出包/发版仍由 build-apk.yml（打 tag 触发）负责。
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Run unit tests
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+        # 1) :web:preBuild 依赖 buildWebUi（要 pnpm），单测用不到前端产物，跳过
+        # 2) 只跑 githubDebug 一个变体：gradle.properties 里的 JVM 上限是照本机 8G 定的
+        #    （heap 3g / kotlin daemon 1.5g），跑 ./gradlew test 会把 app 的四个变体都编一遍，
+        #    在 runner 上直接 OOM。这里显式列出任务，并把 kotlin daemon 抬到 3g。
+        run: |
+          ./gradlew \
+            :app:testGithubDebugUnitTest \
+            :ai:testDebugUnitTest \
+            :search:testDebugUnitTest \
+            :workspace:testDebugUnitTest \
+            :document:testDebugUnitTest \
+            :speech:testDebugUnitTest \
+            :ui:testDebugUnitTest \
+            :common:testDebugUnitTest \
+            :oauth:testDebugUnitTest \
+            :mediagen:testDebugUnitTest \
+            -Pkotlin.daemon.jvmargs=-Xmx3g \
+            -x :web:buildWebUi \
+            --console=plain --stacktrace
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ github.run_id }}
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
+          if-no-files-found: warn
