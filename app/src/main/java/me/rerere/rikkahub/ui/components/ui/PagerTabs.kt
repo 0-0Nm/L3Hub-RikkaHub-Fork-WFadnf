@@ -61,6 +61,9 @@ internal fun PagerTabs(
         requesters[selectedIndex].bringIntoView()
     }
 
+    // 未选中的选项卡是玻璃底；选中态保持 ToggleButton 默认的 secondaryContainer
+    val tabContainerColor = glassColor(MaterialTheme.colorScheme.surfaceContainerHighest)
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -80,7 +83,7 @@ internal fun PagerTabs(
                     .bringIntoViewRequester(requesters[index])
                     .semantics { role = Role.Tab },
                 colors = ToggleButtonDefaults.colors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    containerColor = tabContainerColor,
                 ),
             ) {
                 AnimatedVisibility(

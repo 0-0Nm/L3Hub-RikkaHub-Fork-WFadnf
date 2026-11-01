@@ -126,7 +126,11 @@ import me.rerere.rikkahub.ui.modifier.shimmer
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalWorkspaceId
 import me.rerere.rikkahub.ui.theme.LocalChatFontFamily
+import me.rerere.rikkahub.ui.theme.LocalFullWidthComponents
 import me.rerere.rikkahub.ui.theme.TerminalPalette
+import me.rerere.rikkahub.ui.theme.adaptiveCornerRadius
+import me.rerere.rikkahub.ui.theme.adaptiveHorizontalPaddingValue
+import me.rerere.rikkahub.ui.theme.adaptiveShape
 import me.rerere.rikkahub.ui.theme.rememberChatFontFamily
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.copyMessageToClipboard
@@ -504,6 +508,7 @@ fun ChatMessage(
     if (showSelectCopySheet) {
         ChatMessageCopySheet(
             message = message,
+            hazeState = hazeState,
             onDismissRequest = {
                 showSelectCopySheet = false
             }
@@ -667,7 +672,7 @@ private fun MessagePartsBlock(
                         maxOf(COLLAPSED_VISIBLE_STEPS, block.steps.size - firstPendingIndex)
                     }
                     val chainEffect = settings.displaySetting.effectiveBackgroundEffect
-                    val chainShape = RoundedCornerShape(20.dp)
+                    val chainShape = adaptiveShape(20.dp)
                     val chainBaseColor = MaterialTheme.colorScheme.surfaceContainerHigh
                     ChainOfThought(
                         modifier = Modifier
@@ -778,9 +783,9 @@ private fun MessagePartsBlock(
                                         joinedToPrevious = joinedToPrevious,
                                         joinedToNext = joinedToNext,
                                         onClick = { onUserMessageClick?.invoke() },
-                                        // 用户气泡不占满整行，和助手的回复错开
+                                        // 用户气泡不占满整行，和助手的回复错开；全宽模式下贴到边
                                         modifier = Modifier
-                                            .padding(start = 24.dp)
+                                            .padding(start = adaptiveHorizontalPaddingValue(24.dp))
                                             .animateContentSize(),
                                     ) {
                                         CollapsibleUserMessageText(
@@ -1129,7 +1134,8 @@ private fun ChatMessageBubble(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressProgress by animatePressProgress(interactionSource)
-    val radius = LocalSettings.current.displaySetting.uiCornerRadius.dp
+    val fullWidth = LocalFullWidthComponents.current
+    val radius = adaptiveCornerRadius(LocalSettings.current.displaySetting.uiCornerRadius.dp)
     val corner = lerp(radius, minOf(radius, BubblePressedCorner), pressProgress)
     val tail = minOf(BubbleTailCorner, radius * 0.25f)
     // 接缝那一侧不能再留小尾巴，否则两条气泡之间会露一个豁口
@@ -1170,6 +1176,8 @@ private fun ChatMessageBubble(
     val contentColor = contentColorFor(color)
     Box(
         modifier = modifier
+            // 全宽模式下气泡不再按内容收缩，左右边缘对齐父容器
+            .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
             .then(if (useEffect) Modifier.graphicsLayer(shape = shape, clip = true) else Modifier)
             .clipDrawing(shape)
             .then(hazeModifier)
@@ -1308,7 +1316,7 @@ private fun UserMessageContent(
         joinedToNext = joinedToNext,
         onClick = { onClick?.invoke() },
         modifier = Modifier
-            .padding(start = 24.dp)
+            .padding(start = adaptiveHorizontalPaddingValue(24.dp))
             .animateContentSize(),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

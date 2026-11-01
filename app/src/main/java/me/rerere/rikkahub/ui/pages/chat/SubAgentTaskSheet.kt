@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -60,6 +61,9 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.ui.components.ui.GlassSheetShape
+import me.rerere.rikkahub.ui.components.ui.canGlassPane
+import me.rerere.rikkahub.ui.components.ui.glassSurface
 import me.rerere.rikkahub.utils.JsonInstantPretty
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
@@ -82,6 +86,8 @@ fun SubAgentTaskSheet(
     conversationId: Uuid,
     onDismiss: () -> Unit,
     onOpenConversation: (Uuid) -> Unit,
+    // 底板玻璃的取样源；没有源时退回实色底，见 canGlassPane
+    hazeState: HazeState? = null,
 ) {
     val repository: ConversationRepository = koinInject()
     var previewId by remember { mutableStateOf<Uuid?>(null) }
@@ -104,7 +110,23 @@ fun SubAgentTaskSheet(
     var selectedId by remember(conversationId) { mutableStateOf(conversationId) }
     val selected = flat.firstOrNull { it.node.conversation.id == selectedId } ?: flat.firstOrNull()
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        // 只改底板，sheet 自己的 scrim / 手势不变
+        modifier = Modifier.glassSurface(
+            shape = GlassSheetShape,
+            baseColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            hazeState = hazeState,
+        ),
+        shape = GlassSheetShape,
+        containerColor = if (canGlassPane(hazeState)) {
+            Color.Transparent
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
+        // 同抽屉：底色可能变透明，内容色显式钉住
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Text(
                 text = stringResource(R.string.task_tree_title),

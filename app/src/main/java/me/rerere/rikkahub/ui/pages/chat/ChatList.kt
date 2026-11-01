@@ -109,6 +109,9 @@ import me.rerere.rikkahub.ui.hooks.ImeLazyListAutoScroller
 import me.rerere.rikkahub.ui.terminal.IconButton
 import me.rerere.rikkahub.ui.theme.ChatFontProvider
 import me.rerere.rikkahub.ui.theme.TerminalPalette
+import me.rerere.rikkahub.ui.theme.adaptiveHorizontalPadding
+import me.rerere.rikkahub.ui.theme.adaptiveHorizontalPaddingValue
+import me.rerere.rikkahub.ui.theme.fullWidthHorizontalInset
 import me.rerere.rikkahub.utils.plus
 import me.rerere.ui.components.ListSelectableItem
 import me.rerere.ui.components.Tooltip
@@ -368,7 +371,12 @@ private fun ChatListNormal(
                         bottom = 32.dp + innerPadding.calculateBottomPadding(),
                     )
                 } else {
-                    PaddingValues(16.dp) + PaddingValues(
+                    // 全宽组件：左右不再留白，气泡/卡片的边缘直接对齐屏幕；
+                    // 刘海和侧边系统栏的安全区照样让出来
+                    PaddingValues(
+                        horizontal = adaptiveHorizontalPaddingValue(16.dp) + fullWidthHorizontalInset(),
+                        vertical = 16.dp,
+                    ) + PaddingValues(
                         top = innerPadding.calculateTopPadding(),
                         bottom = 32.dp + innerPadding.calculateBottomPadding(),
                     )
@@ -752,7 +760,8 @@ private fun ChatListPreview(
             onValueChange = { searchQuery = it },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .adaptiveHorizontalPadding(16.dp)
+                .padding(vertical = 8.dp),
             placeholder = { Text(stringResource(R.string.history_page_search)) },
             leadingIcon = {
                 Icon(
@@ -848,7 +857,8 @@ private fun ChatSuggestionsRow(
     LazyRow(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .adaptiveHorizontalPadding(16.dp)
+            .padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

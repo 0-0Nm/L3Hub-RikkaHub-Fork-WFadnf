@@ -49,6 +49,7 @@ import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.terminal.Switch
 import me.rerere.rikkahub.ui.terminal.TopAppBar
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.ui.theme.adaptiveCornerRadius
 
 private val CardGroupCorner = 20.dp
 private val CardGroupItemSpacing = 2.dp
@@ -167,10 +168,14 @@ fun CardGroupScope.switchItem(
     headlineContent = headlineContent,
 )
 
-// 分组里第 index 项的形状，给不方便走 CardGroup 的列表（比如可拖拽排序的）用
+// 分组里第 index 项的形状，给不方便走 CardGroup 的列表（比如可拖拽排序的）用。
+// 全宽组件模式下圆角为 0，整组是方边。
+@Composable
 fun cardGroupItemShape(index: Int, count: Int): Shape {
-    val top = if (index == 0) CardGroupCorner else CardGroupInnerCorner
-    val bottom = if (index == count - 1) CardGroupCorner else CardGroupInnerCorner
+    val corner = adaptiveCornerRadius(CardGroupCorner)
+    val inner = adaptiveCornerRadius(CardGroupInnerCorner)
+    val top = if (index == 0) corner else inner
+    val bottom = if (index == count - 1) corner else inner
     return RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom)
 }
 
@@ -289,12 +294,14 @@ private fun CardGroupListItem(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
+    val corner = adaptiveCornerRadius(CardGroupCorner)
+    val innerCorner = adaptiveCornerRadius(CardGroupInnerCorner)
     val topCorner by animateDpAsState(
-        targetValue = if (isPressed || count == 1 || isFirst) CardGroupCorner else CardGroupInnerCorner,
+        targetValue = if (isPressed || count == 1 || isFirst) corner else innerCorner,
         animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
     )
     val bottomCorner by animateDpAsState(
-        targetValue = if (isPressed || count == 1 || isLast) CardGroupCorner else CardGroupInnerCorner,
+        targetValue = if (isPressed || count == 1 || isLast) corner else innerCorner,
         animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
     )
 

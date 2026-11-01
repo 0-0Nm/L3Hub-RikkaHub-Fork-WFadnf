@@ -21,7 +21,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.DropdownMenu
@@ -58,6 +57,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.collectAsLazyPagingItems
+import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -97,6 +97,9 @@ import me.rerere.rikkahub.ui.components.ui.BackupReminderCard
 import me.rerere.rikkahub.ui.components.ui.Greeting
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.components.ui.UpdateCard
+import me.rerere.rikkahub.ui.components.ui.canGlassPane
+import me.rerere.rikkahub.ui.components.ui.glassColor
+import me.rerere.rikkahub.ui.components.ui.glassSurface
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
@@ -106,6 +109,7 @@ import me.rerere.rikkahub.ui.hooks.rememberSharedPreferenceBoolean
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.ui.terminal.TextButton
+import me.rerere.rikkahub.ui.theme.adaptiveShape
 import me.rerere.rikkahub.utils.navigateToChatPage
 import me.rerere.rikkahub.utils.toDp
 import me.rerere.ui.components.Tooltip
@@ -132,6 +136,8 @@ fun ChatDrawerContent(
     current: Conversation,
     onNewChat: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    // 抽屉底板的玻璃取样源（聊天页的背景层）。没有源时 canGlassPane 返回 false，底板退回实色
+    hazeState: HazeState? = null,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -264,9 +270,25 @@ fun ChatDrawerContent(
         }
     }
 
+    // 全宽组件模式下抽屉也是方边，和页面的卡片保持一致
+    val drawerShape = adaptiveShape(LocalSettings.current.displaySetting.uiCornerRadius.dp)
+    // 底板自己就是一块玻璃：取背景层，不取会话列表，抽屉滑出来时列表内容不会跟着糊成一团
     ModalDrawerSheet(
-        modifier = Modifier.width(drawerWidth),
-        drawerShape = RoundedCornerShape(LocalSettings.current.displaySetting.uiCornerRadius.dp),
+        modifier = Modifier
+            .width(drawerWidth)
+            .glassSurface(
+                shape = drawerShape,
+                baseColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                hazeState = hazeState,
+            ),
+        drawerShape = drawerShape,
+        drawerContainerColor = if (canGlassPane(hazeState)) {
+            Color.Transparent
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
+        // 底色交给玻璃层以后 contentColorFor 推不出内容色，这里显式钉住（= surfaceContainerLow 的默认值）
+        drawerContentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         Column(
             modifier = Modifier.padding(8.dp),
@@ -738,7 +760,7 @@ private fun DrawerEntry(
             .fillMaxWidth()
             .padding(horizontal = 4.dp),
         shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = glassColor(MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Row(
@@ -809,7 +831,9 @@ private fun DrawerBottomBar(
                     transformOrigin = TransformOrigin(0f, 1f)
                 },
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.primaryContainer,
+            // primaryContainer 不是主色 CTA 的实心底色，跟着抽屉一起玻璃；
+            // 文字色 onPrimaryContainer 保持不透明，深色主题下的对比度要真机确认
+            color = glassColor(MaterialTheme.colorScheme.primaryContainer),
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
         ) {
             Row(
@@ -855,7 +879,7 @@ private fun MemoryDreamingEntry(onClick: () -> Unit) {
             .fillMaxWidth()
             .padding(horizontal = 4.dp),
         shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = glassColor(MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Row(
             modifier = Modifier
@@ -982,7 +1006,7 @@ private fun ConversationSortButton(
         Surface(
             onClick = { menuExpanded = true },
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            color = glassColor(MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
             Tooltip(
                 tooltip = { Text(stringResource(R.string.chat_page_sort_conversations)) }
@@ -1038,9 +1062,9 @@ private fun FolderChip(
     Surface(
         shape = CircleShape,
         color = if (selected) {
-            MaterialTheme.colorScheme.secondaryContainer
+            glassColor(MaterialTheme.colorScheme.secondaryContainer)
         } else {
-            MaterialTheme.colorScheme.surfaceContainerLow
+            glassColor(MaterialTheme.colorScheme.surfaceContainerLow)
         },
         modifier = Modifier
             .clip(CircleShape)

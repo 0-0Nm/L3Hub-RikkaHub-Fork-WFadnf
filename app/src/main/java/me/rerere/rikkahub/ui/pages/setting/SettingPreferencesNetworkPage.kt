@@ -64,6 +64,7 @@ import me.rerere.rikkahub.ui.terminal.IconButton
 import me.rerere.rikkahub.ui.terminal.TextButton
 import me.rerere.rikkahub.ui.components.ui.NumberSlider
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.ui.theme.adaptiveHorizontalPadding
 import me.rerere.rikkahub.utils.plus
 import me.rerere.ui.toast.ToastType
 import okhttp3.OkHttpClient
@@ -305,7 +306,8 @@ fun SettingPreferencesNetworkPage(embedded: Boolean = false, vm: SettingVM = koi
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .adaptiveHorizontalPadding(16.dp)
+                .padding(vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             CardGroup {

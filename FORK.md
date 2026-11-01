@@ -299,6 +299,95 @@ L3Hub 自己的设置都在 `Settings` 里，随 `settings.json` 整份序列化
 - 仍是 20fps 节流；`animate = false`（生成中、滚动中）和切后台时不空转；
   色相漂移和位置漂移共用同一份相位状态，没有新增定时器
 
+## 调色板（fork 新增）
+
+设置 → 偏好设置 → 主题 → 「调色板」：内置预设 + 逐个角色自定义，浅色/深色各存一份，管住全应用的配色。
+
+- 优先级：`dynamicColor`（跟随系统动态取色）> 调色板 > `themeId`（预设主题 / 自定义主题）。
+  动态取色开着时调色板整块不生效，页面顶部同一处就能关掉它；默认值仍是上游的「开」，不动老用户
+- 自定义只让用户指定九个角色：primary / onPrimary / secondary / tertiary / error / background /
+  surface / surfaceVariant / onSurface，其余角色（容器色、`surfaceContainer*`、outline、inverseX、fixed 系列）
+  交给 `material3` 模块里的 material-color-utilities 按 HCT 音调展开，不手写二十个色值
+- 生成方式：`paletteColorScheme()` 用四个彩色种子加中性种子（background / surfaceVariant）构造 `DynamicScheme`，
+  `toColorScheme()` 之后再把这九个角色 `copy` 回去，所以选中的颜色所见即所得
+- 取色器复用主题页原来的 `ColorPickerRow`（HSV/RGB 双模式 + `#RRGGBB` 文本输入），
+  已从 `SettingThemePage.kt` 提到 `ui/components/ui/ColorPickerRow.kt`，两处共用，没有引入新依赖
+- 存盘：`Settings.palette`（`PaletteSetting`），DataStore key `palette`。三个字段都可空：
+  `presetId == null` = 不启用，行为与改动前完全一致；`light` / `dark` 为 null 表示该侧用预设种子生成，
+  非 null 表示该侧被逐个改过，所以可以只调其中一套
+
+| 预设 | id | 主色种子 | 辅色 | 第三色 | 错误色 |
+|---|---|---|---|---|---|
+| 默认紫 | `default` | `#6750A4` | `#625B71` | `#7D5260` | `#B3261E` |
+| 海洋蓝 | `ocean` | `#116682` | `#4D616C` | `#5D5B7D` | `#BA1A1A` |
+| 森林绿 | `forest` | `#4C662B` | `#586249` | `#386663` | `#BA1A1A` |
+| 落日橙 | `sunset` | `#8B5000` | `#755843` | `#8C4A60` | `#BA1A1A` |
+| 玫瑰 | `rose` | `#8E4955` | `#76565A` | `#785831` | `#BA1A1A` |
+| 单色灰 | `monochrome` | `#5C5C5C` | `#5C5C5C` | `#5C5C5C` | `#BA1A1A` |
+
+单色灰单独给中性种子 `#5C5C5C`（其余预设的中性色跟随主色）；错误色保留红，
+否则错误提示和普通正文分不开。
+
+改动文件：
+
+| 文件 | 说明 |
+|---|---|
+| `ui/theme/Palette.kt` | 新增：`PaletteColors` / `PaletteSetting` / `PaletteRole` / `paletteColorScheme()` |
+| `ui/theme/PalettePresets.kt` | 新增：六套预设的种子色与展开逻辑 |
+| `ui/theme/Theme.kt` | 动态取色之后、`themeId` 之前插入调色板配色 |
+| `ui/components/ui/ColorPickerRow.kt` | 新增：从 `SettingThemePage` 抽出的取色行 |
+| `ui/pages/setting/SettingPalettePage.kt` | 新增：预设列表（色块 + 名称）、自定义编辑、恢复默认 |
+| `ui/pages/setting/SettingPreferencesThemePage.kt` | 主题分组下加一行「调色板」 |
+| `RouteActivity.kt` | `Screen.SettingPalette` 与对应的 `entry` |
+| `data/datastore/Settings.kt`、`SettingsFields.kt`、`PreferencesStore.kt` | `palette` 字段、字段表、DataStore key |
+| `SettingsFieldsTest` | 样本与 `STORED_KEYS` 补 `palette` |
+
+> `Settings` 加了顶层字段，按本文约定必须同步 `SETTINGS_FIELDS` 和 `STORED_KEYS`，
+> 否则 `every settings property has exactly one field` 与 `stored format stays compatible with existing data` 两个用例会挂。
+
+## 全宽组件（fork 新增）
+
+设置 → 偏好设置 → 通用 → 背景特效一栏里的「全宽组件」开关，就在「玻璃透明度」滑杆下面
+（`DisplaySetting.fullWidthComponents`，默认关）。
+关着的时候每个分支都退回改造前的取值，行为与改动前完全一致。
+
+打开后：
+
+- 气泡不再按内容收缩，左右边缘与消息列表等宽；消息列表的 16dp 左右留白归零
+- `MaterialTheme.shapes` 换成 `SquareShapes`（五个档位都是 `RoundedCornerShape(0.dp)`），
+  卡片、按钮、对话框、菜单一起变直角；气泡自己的 `uiCornerRadius`、接缝小圆角、输入框内外两层圆角
+  都走 `adaptiveShape()`，一起归零
+- 贴边的组件（输入框及其外层容器、顶栏两侧按钮组、搜索框）去掉左右留白；让位改用
+  `WindowInsets.safeDrawing.only(Horizontal)`，所以刘海、横屏侧边系统栏照样让得开，
+  `imePadding()` / `navigationBarsPadding()` 的顺序也没有变
+- 设置页的页面留白同样归零（`Modifier.adaptiveHorizontalPadding`），`CardGroup` 分组卡片撑满屏宽
+
+统一入口在 `ui/theme/FullWidthComponents.kt`：`LocalFullWidthComponents` 加
+`adaptiveShape()` / `adaptiveCornerRadius()` / `adaptiveHorizontalPadding()` /
+`adaptiveHorizontalPaddingValue()` / `fullWidthHorizontalInset()`。主题在 `RikkahubTheme` 里提供这个
+CompositionLocal，页面只读它，不各自去判断 `Settings`。
+
+| 文件 | 说明 |
+|---|---|
+| `ui/theme/FullWidthComponents.kt` | 新增：CompositionLocal、`SquareShapes` 与取值辅助 |
+| `ui/theme/Theme.kt` | 提供 CompositionLocal；`shapes` 多一档 `SquareShapes` |
+| `data/datastore/Settings.kt` | `DisplaySetting.fullWidthComponents`（默认 false） |
+| `ui/pages/chat/ChatList.kt` | 消息列表左右留白归零（保留安全区），搜索框与建议行同步 |
+| `ui/components/message/ChatMessage.kt` | 气泡撑满父宽、圆角归零、用户气泡左侧 24dp 归零 |
+| `ui/components/ui/ChainOfThought.kt` | 思考/工具卡片撑满父宽、圆角归零 |
+| `ui/components/ai/ChatInput.kt` | 输入框贴屏幕边、容器与 TextField 直角、发送/加号按钮直角 |
+| `ui/pages/chat/ChatPage.kt` | 顶栏左右留白归零，顶栏胶囊与导航钮直角 |
+| `ui/components/ui/CardGroup.kt` | 分组卡片圆角归零（`cardGroupItemShape` 随之变成 `@Composable`） |
+| `ui/components/message/ConversationTodoCard.kt`、`ui/pages/chat/ChatDrawer.kt` | 任务卡与抽屉容器圆角归零 |
+| 五个 `SettingPreferences*Page.kt`、`SettingProviderPage.kt` | 页面左右留白归零 |
+| `res/values{,-zh}/strings.xml` | 开关的标题与说明 |
+
+> 这个开关在 `DisplaySetting` 里，跟着 `display_setting` 整份 JSON 走，
+> 所以**不用**改 `SETTINGS_FIELDS` / `PreferencesStore` 的 key —— 只有加在 `Settings` 顶层的字段才要。
+
+默认关闭，打开后仍然保留的内边距（有意为之）：气泡内部文字 10dp、输入框内部的 `inputPadding`、
+`CardGroup` 每项内部的 16dp、对话框按钮区。这些是内容离组件边缘的距离，不是组件边缘离屏幕的距离。
+
 ## 还要做的
 
 1. **签名**：在 `local.properties`（已 gitignore）加四项，之后所有版本都用同一个 keystore，否则无法覆盖升级

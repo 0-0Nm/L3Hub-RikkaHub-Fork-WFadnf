@@ -85,6 +85,7 @@ import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
+import me.rerere.rikkahub.ui.components.ui.glassAssistChipColors
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.rememberSharedPreferenceString
 import me.rerere.rikkahub.ui.terminal.Card
@@ -828,6 +829,8 @@ private fun ColumnScope.ModelList(
                     leadingIcon = {
                         AutoAIIcon(name = provider.name, modifier = Modifier.size(16.dp))
                     },
+                    // 供应商胶囊是玻璃底
+                    colors = glassAssistChipColors(),
                 )
             }
         }

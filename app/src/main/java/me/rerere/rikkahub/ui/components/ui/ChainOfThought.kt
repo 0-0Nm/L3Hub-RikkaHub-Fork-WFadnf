@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CardColors
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -48,6 +47,8 @@ import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.terminal.Card
 import me.rerere.rikkahub.ui.terminal.TopAppBar
+import me.rerere.rikkahub.ui.theme.LocalFullWidthComponents
+import me.rerere.rikkahub.ui.theme.adaptiveShape
 
 /**
  * 外层 ChainOfThought 是否处于「全部折叠」状态，供步骤内部（如思考块）联动收起。
@@ -86,9 +87,10 @@ fun <T> ChainOfThought(
     val shouldFillCollapseControlWidth = expanded || !collapsedAdaptiveWidth
 
     Card(
-        modifier = modifier,
+        // 全宽组件模式下整张卡片撑满父宽，和气泡、其它卡片对齐
+        modifier = modifier.then(if (LocalFullWidthComponents.current) Modifier.fillMaxWidth() else Modifier),
         colors = cardColors,
-        shape = RoundedCornerShape(20.dp),
+        shape = adaptiveShape(20.dp),
         border = border,
     ) {
         Column(

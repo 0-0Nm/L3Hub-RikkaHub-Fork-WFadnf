@@ -46,6 +46,7 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
+import me.rerere.rikkahub.ui.components.ui.glassFilterChipColors
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.rememberAssistantState
 import me.rerere.rikkahub.ui.terminal.Card
@@ -168,6 +169,8 @@ private fun AssistantPickerSheet(
                             label = { Text(tag.name) },
                             selected = tag.id in selectedTagIds,
                             shape = RoundedCornerShape(50),
+                            // 标签 chip 是玻璃底，选中态用玻璃的 secondaryContainer
+                            colors = glassFilterChipColors(),
                         )
                     }
                 }

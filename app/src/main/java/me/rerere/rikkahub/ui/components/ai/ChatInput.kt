@@ -130,7 +130,10 @@ import me.rerere.rikkahub.ui.pages.chat.VoicePhase
 import me.rerere.rikkahub.ui.pages.chat.VoiceSessionState
 import me.rerere.rikkahub.ui.terminal.IconButton
 import me.rerere.rikkahub.ui.terminal.TextButton
+import me.rerere.rikkahub.ui.theme.LocalFullWidthComponents
 import me.rerere.rikkahub.ui.theme.TerminalPalette
+import me.rerere.rikkahub.ui.theme.adaptiveHorizontalPadding
+import me.rerere.rikkahub.ui.theme.adaptiveShape
 import me.rerere.rikkahub.ui.theme.appButtonShadow
 import me.rerere.rikkahub.utils.SoundEffectPlayer
 import me.rerere.ui.toast.ToastType
@@ -191,7 +194,8 @@ fun ChatInput(
     val containerShape = if (terminalStyle) {
         RoundedCornerShape(2.dp)
     } else {
-        RoundedCornerShape(settings.displaySetting.uiCornerRadius.dp)
+        // 全宽模式下输入框也和屏幕两边齐平，圆角收成直角
+        adaptiveShape(settings.displaySetting.uiCornerRadius.dp)
     }
     val modelListState = rememberModelListState(
         modelId = chatModel?.id,
@@ -270,7 +274,8 @@ fun ChatInput(
         Column(
             modifier = modifier
                 .then(if (applyWindowInsets) Modifier.imePadding().navigationBarsPadding() else Modifier)
-                .padding(horizontal = 8.dp)
+                // 全宽模式下输入框贴到屏幕左右边，键盘 inset 与导航栏 inset 仍然保留
+                .adaptiveHorizontalPadding(8.dp)
                 .padding(bottom = 8.dp + liftedBy)
                 .animateContentSize(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -280,7 +285,8 @@ fun ChatInput(
                     todos = todos,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                        .adaptiveHorizontalPadding(12.dp)
+                        .padding(vertical = 4.dp),
                 )
             }
             MessageQueuePanel(
@@ -661,7 +667,11 @@ private fun SendButton(
 ) {
     val showStop = loading && empty
     val terminal = LocalSettings.current.displaySetting.terminalStyle
-    val shape = if (terminal) RoundedCornerShape(2.dp) else CircleShape
+    val shape = when {
+        terminal -> RoundedCornerShape(2.dp)
+        LocalFullWidthComponents.current -> RoundedCornerShape(0.dp)
+        else -> CircleShape
+    }
     val containerColor = when {
         showStop -> MaterialTheme.colorScheme.errorContainer
         empty -> MaterialTheme.colorScheme.surfaceContainerHigh
@@ -707,7 +717,11 @@ private fun ActionIconButton(
     content: @Composable () -> Unit,
 ) {
     val terminal = LocalSettings.current.displaySetting.terminalStyle
-    val shape = if (terminal) RoundedCornerShape(2.dp) else CircleShape
+    val shape = when {
+        terminal -> RoundedCornerShape(2.dp)
+        LocalFullWidthComponents.current -> RoundedCornerShape(0.dp)
+        else -> CircleShape
+    }
     Surface(
         onClick = onClick,
         modifier = Modifier
@@ -739,6 +753,7 @@ private fun TextInputRow(
 ) {
     val settings = LocalSettings.current
     val terminalStyle = settings.displaySetting.terminalStyle
+    val fullWidth = LocalFullWidthComponents.current
     val filesManager: FilesManager = koinInject()
     val quickMessages = remember(settings.quickMessages, assistant.quickMessageIds) {
         settings.getQuickMessagesOfAssistant(assistant)
@@ -749,7 +764,7 @@ private fun TextInputRow(
     val innerShape = if (terminalStyle) {
         RoundedCornerShape(2.dp)
     } else {
-        RoundedCornerShape((settings.displaySetting.uiCornerRadius - 8).coerceAtLeast(2).dp)
+        adaptiveShape((settings.displaySetting.uiCornerRadius - 8).coerceAtLeast(2).dp)
     }
 
     Column(
@@ -903,7 +918,11 @@ private fun TextInputRow(
                 .onFocusChanged {
                     isFocused = it.isFocused
                 },
-            shape = if (terminalStyle) RoundedCornerShape(0.dp) else MaterialTheme.shapes.largeIncreased,
+            shape = if (terminalStyle || fullWidth) {
+                RoundedCornerShape(0.dp)
+            } else {
+                MaterialTheme.shapes.largeIncreased
+            },
             placeholder = {
                 Text(
                     text = stringResource(
@@ -990,7 +1009,7 @@ private fun CompletionPopup(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(max = 280.dp),
-        shape = RoundedCornerShape(18.dp),
+        shape = adaptiveShape(18.dp),
         tonalElevation = 2.dp,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -1135,7 +1154,11 @@ private fun FullScreenEditor(
                 modifier = Modifier
                     .widthIn(max = 800.dp)
                     .fillMaxHeight(0.9f),
-                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+                shape = if (LocalFullWidthComponents.current) {
+                    RoundedCornerShape(0.dp)
+                } else {
+                    RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+                }
             ) {
                 Column(
                     modifier = Modifier
@@ -1157,7 +1180,7 @@ private fun FullScreenEditor(
                         modifier = Modifier
                             .padding(bottom = 2.dp)
                             .fillMaxSize(),
-                        shape = RoundedCornerShape(32.dp),
+                        shape = adaptiveShape(32.dp),
                         placeholder = {
                             Text(placeholder)
                         },

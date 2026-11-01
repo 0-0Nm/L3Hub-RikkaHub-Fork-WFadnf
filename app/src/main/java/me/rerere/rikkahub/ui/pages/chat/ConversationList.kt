@@ -63,6 +63,7 @@ import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.ConversationSortOrder
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.ui.components.ui.glassColor
 import me.rerere.rikkahub.ui.terminal.TextButton
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.mirrorForRtl
@@ -294,7 +295,7 @@ private fun DateHeaderItem(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .background(glassColor(MaterialTheme.colorScheme.surfaceContainerLow))
             .clickable(onClick = onToggle)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -322,7 +323,7 @@ private fun PinnedHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .background(glassColor(MaterialTheme.colorScheme.surfaceContainerLow))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -362,8 +363,10 @@ private fun ConversationItem(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val focusManager = LocalFocusManager.current
+    // 选中态是玻璃高亮：颜色还是原来那个高亮色，只把不透明度交给玻璃设置。
+    // 这里不挂 hazeSource —— 列表每项都糊一遍会掉帧，抽屉底板自己那层玻璃够了。
     val backgroundColor = if (selected) {
-        MaterialTheme.colorScheme.surfaceColorAtElevation(8.dp)
+        glassColor(MaterialTheme.colorScheme.surfaceColorAtElevation(8.dp))
     } else {
         Color.Transparent
     }
@@ -596,7 +599,7 @@ private fun SelectionBar(
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 4.dp),
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = glassColor(MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),

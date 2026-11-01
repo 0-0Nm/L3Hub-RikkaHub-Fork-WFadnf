@@ -2,8 +2,12 @@ package me.rerere.rikkahub.ui.components.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
@@ -44,6 +48,19 @@ fun glassColor(base: Color): Color {
 }
 
 /**
+ * 浮层（抽屉 / BottomSheet）能不能真做成玻璃。
+ *
+ * 想糊出东西就得手上有一个 Haze 源，外加模糊特效开着、不是终端风格。缺任意一条时
+ * [glassSurface] 只剩一层半透明 —— 浮层半透明却不模糊，底下的正文会直接透上来，
+ * 比实色更难读，所以调用方按这个返回 false 保持原来的实色底。
+ */
+@Composable
+fun canGlassPane(hazeState: HazeState? = LocalGlassHazeState.current): Boolean {
+    val displaySetting = LocalSettings.current.displaySetting
+    return hazeState != null && displaySetting.enableBlurEffect && !LocalTerminalMode.current
+}
+
+/**
  * 毛玻璃底：半透明色 + hazeEffect。
  *
  * - `enableBlurEffect == false`：一条 haze 都不挂，也不改透明度，直接返回原 modifier，
@@ -74,6 +91,10 @@ fun Modifier.glassSurface(
         .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f), shape)
 }
 
+/** BottomSheet 底板圆角：跟 M3 默认的 28dp 顶角对齐，玻璃底和内容裁切才不会错位。 */
+val GlassSheetShape: Shape =
+    RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 0.dp, bottomEnd = 0.dp)
+
 /**
  * 选项卡（`SingleChoiceSegmentedButtonRow` 里的 `SegmentedButton`）的配色。
  *
@@ -89,5 +110,48 @@ fun glassSegmentedButtonColors() = if (
     SegmentedButtonDefaults.colors(
         activeContainerColor = glassColor(MaterialTheme.colorScheme.surface),
         activeContentColor = MaterialTheme.colorScheme.primary,
+    )
+}
+
+/**
+ * 开关配色：未选中的轨道（关着的时候它就是开关的「容器」）走玻璃底。
+ *
+ * 轨道淡下去以后形状全靠描边认，所以描边留 0.5 不透明度；选中态保持主色实心，
+ * 「开着」得一眼看得出来。关闭模糊特效 / 终端风格时整份交回 M3 默认配色。
+ */
+@Composable
+fun glassSwitchColors() = if (
+    !LocalSettings.current.displaySetting.enableBlurEffect || LocalTerminalMode.current
+) {
+    SwitchDefaults.colors()
+} else {
+    SwitchDefaults.colors(
+        uncheckedTrackColor = glassColor(MaterialTheme.colorScheme.surfaceContainerHighest),
+        uncheckedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+    )
+}
+
+/** FilterChip 配色：未选中是玻璃底，选中态是玻璃底的 secondaryContainer。 */
+@Composable
+fun glassFilterChipColors() = if (
+    !LocalSettings.current.displaySetting.enableBlurEffect || LocalTerminalMode.current
+) {
+    FilterChipDefaults.filterChipColors()
+} else {
+    FilterChipDefaults.filterChipColors(
+        containerColor = glassColor(MaterialTheme.colorScheme.surfaceContainerLow),
+        selectedContainerColor = glassColor(MaterialTheme.colorScheme.secondaryContainer),
+    )
+}
+
+/** AssistChip 配色：同上，只有一层玻璃底。 */
+@Composable
+fun glassAssistChipColors() = if (
+    !LocalSettings.current.displaySetting.enableBlurEffect || LocalTerminalMode.current
+) {
+    AssistChipDefaults.assistChipColors()
+} else {
+    AssistChipDefaults.assistChipColors(
+        containerColor = glassColor(MaterialTheme.colorScheme.surfaceContainerLow),
     )
 }

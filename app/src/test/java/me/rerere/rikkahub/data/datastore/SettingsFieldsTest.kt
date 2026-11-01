@@ -16,6 +16,8 @@ import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.ui.theme.CustomTheme
+import me.rerere.rikkahub.ui.theme.PaletteColors
+import me.rerere.rikkahub.ui.theme.PaletteSetting
 import me.rerere.search.SearchCommonOptions
 import me.rerere.search.SearchServiceOptions
 import org.junit.Assert.assertEquals
@@ -115,6 +117,11 @@ private val SAMPLE = Settings(
     dynamicColor = false,
     themeId = "custom",
     customThemes = listOf(CustomTheme(id = "theme", name = "Theme")),
+    palette = PaletteSetting(
+        presetId = "ocean",
+        light = PaletteColors(primary = 0xFF112233, onPrimary = 0xFF445566),
+        dark = PaletteColors(primary = 0xFF778899),
+    ),
     developerMode = true,
     appLockEnabled = true,
     appLockTimeoutMinutes = 15,
@@ -193,6 +200,7 @@ private val STORED_KEYS = setOf(
     "dynamic_color",
     "theme_id",
     "custom_themes",
+    "palette",
     "display_setting",
     "network_setting",
     "developer_mode",

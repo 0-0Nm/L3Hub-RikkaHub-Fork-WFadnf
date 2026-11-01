@@ -36,7 +36,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButtonColors
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.SwitchColors
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarColors
 import androidx.compose.material3.TopAppBarDefaults
@@ -50,6 +49,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import me.rerere.rikkahub.ui.components.ui.glassSwitchColors
 import me.rerere.rikkahub.ui.theme.LocalTerminalMode
 import me.rerere.rikkahub.ui.theme.TerminalPalette
 
@@ -560,7 +560,8 @@ fun Switch(
     modifier: Modifier = Modifier,
     thumbContent: (@Composable () -> Unit)? = null,
     enabled: Boolean = true,
-    colors: SwitchColors = SwitchDefaults.colors(),
+    // 未选中的轨道走玻璃底；关闭模糊特效时 glassSwitchColors 交回 M3 默认配色
+    colors: SwitchColors = glassSwitchColors(),
     interactionSource: MutableInteractionSource? = null,
 ) {
     if (!LocalTerminalMode.current) {

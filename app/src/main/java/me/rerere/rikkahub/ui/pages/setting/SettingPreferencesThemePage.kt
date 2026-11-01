@@ -32,6 +32,7 @@ import me.rerere.rikkahub.ui.components.ui.switchItem
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.rememberAmoledDarkMode
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.ui.theme.adaptiveHorizontalPadding
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 
@@ -48,7 +49,8 @@ fun SettingPreferencesThemePage(embedded: Boolean = false, vm: SettingVM = koinV
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .adaptiveHorizontalPadding(16.dp)
+                .padding(vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             CardGroup {
@@ -62,6 +64,12 @@ fun SettingPreferencesThemePage(embedded: Boolean = false, vm: SettingVM = koinV
                     onClick = { navController.navigate(Screen.SettingTheme) },
                     headlineContent = { Text(stringResource(R.string.setting_page_theme_setting)) },
                     supportingContent = { Text(stringResource(R.string.setting_page_theme_setting_desc)) },
+                    trailingContent = { Icon(HugeIcons.ArrowRight01, contentDescription = null) },
+                )
+                item(
+                    onClick = { navController.navigate(Screen.SettingPalette) },
+                    headlineContent = { Text(stringResource(R.string.setting_page_palette)) },
+                    supportingContent = { Text(stringResource(R.string.setting_page_palette_desc)) },
                     trailingContent = { Icon(HugeIcons.ArrowRight01, contentDescription = null) },
                 )
                 switchItem(

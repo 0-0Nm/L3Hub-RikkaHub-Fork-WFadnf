@@ -20,6 +20,7 @@ import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.ui.theme.CustomTheme
+import me.rerere.rikkahub.ui.theme.PaletteSetting
 import me.rerere.rikkahub.ui.theme.PresetThemes
 import me.rerere.search.SearchCommonOptions
 import me.rerere.search.SearchServiceOptions
@@ -33,6 +34,8 @@ data class Settings(
     val dynamicColor: Boolean = true,
     val themeId: String = PresetThemes[0].id,
     val customThemes: List<CustomTheme> = emptyList(),
+    // 调色板：预设或用户逐个改过的深浅两套颜色，默认不启用（跟随 themeId / 动态取色）
+    val palette: PaletteSetting = PaletteSetting(),
     val developerMode: Boolean = false,
     val displaySetting: DisplaySetting = DisplaySetting(),
     val networkSetting: NetworkSetting = NetworkSetting(),
@@ -234,6 +237,8 @@ data class DisplaySetting(
     val uiCornerRadius: Int = 24,
     // 输入框卡片的内边距，和圆角一起决定内部元素是否和外框同心
     val inputPadding: Int = 8,
+    // 全宽组件：气泡/卡片撑满父宽、圆角收成直角、贴边组件去掉左右内边距
+    val fullWidthComponents: Boolean = false,
     // 模糊特效下气泡/输入框/顶栏的底色不透明度
     val blurOpacity: Float = 0.45f,
     // 玻璃底（设置项/选项卡/按钮/顶栏图标）的透明度，0 = 全透明，1 = 原实色

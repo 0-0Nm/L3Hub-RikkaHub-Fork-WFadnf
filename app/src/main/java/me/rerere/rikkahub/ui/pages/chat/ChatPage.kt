@@ -144,8 +144,10 @@ import me.rerere.rikkahub.ui.pages.chat.terminal.terminalHelpText
 import me.rerere.rikkahub.ui.terminal.IconButton
 import me.rerere.rikkahub.ui.terminal.TextButton
 import me.rerere.rikkahub.ui.terminal.TopAppBar
+import me.rerere.rikkahub.ui.theme.LocalFullWidthComponents
 import me.rerere.rikkahub.ui.theme.TerminalPalette
 import me.rerere.rikkahub.ui.theme.TerminalTheme
+import me.rerere.rikkahub.ui.theme.adaptiveHorizontalPaddingValue
 import me.rerere.rikkahub.ui.theme.appButtonShadow
 import me.rerere.rikkahub.utils.base64Decode
 import me.rerere.rikkahub.utils.copyMessageToClipboard
@@ -188,6 +190,9 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     }
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    // 背景层（AssistantBackground）单独一份 Haze 源：抽屉和浮层的玻璃都取它，
+    // 取聊天列表会把正文一起糊进来。提到这一层是为了抽屉也拿得到
+    val backgroundHazeState = rememberHazeState()
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     val density = LocalDensity.current
@@ -286,6 +291,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
         isBigScreen -> {
             PermanentNavigationDrawer(
                 drawerContent = {
+                    // 大屏的抽屉是和正文并排的一栏，背后没有背景层可取样，保持实色底板
                     ChatDrawerContent(
                         navController = navController,
                         current = conversation,
@@ -310,6 +316,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     assistant = assistant,
                     currentChatModel = currentChatModel,
                     bigScreen = true,
+                    backgroundHazeState = backgroundHazeState,
                     errors = errors,
                     onDismissError = { vm.dismissError(it) },
                     onClearAllErrors = { vm.clearAllErrors() },
@@ -328,6 +335,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                         settings = setting,
                         onNewChat = startNewChat,
                         onOpenSettings = openSettingsFromDrawer,
+                        hazeState = backgroundHazeState,
                     )
                 }
             ) {
@@ -345,6 +353,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     assistant = assistant,
                     currentChatModel = currentChatModel,
                     bigScreen = false,
+                    backgroundHazeState = backgroundHazeState,
                     errors = errors,
                     onDismissError = { vm.dismissError(it) },
                     onClearAllErrors = { vm.clearAllErrors() },
@@ -377,6 +386,8 @@ private fun ChatPageContent(
     errors: List<ChatError>,
     onDismissError: (Uuid) -> Unit,
     onClearAllErrors: () -> Unit,
+    // 背景层的 Haze 源：抽屉和浮层共用，见 ChatPage 里的注释
+    backgroundHazeState: HazeState,
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
@@ -422,7 +433,6 @@ private fun ChatPageContent(
 
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val hazeState = rememberHazeState()
-    val backgroundHazeState = rememberHazeState()
     var showFilesSheet by remember { mutableStateOf(false) }
     var showTaskTree by remember { mutableStateOf(false) }
     var showUsageSheet by remember { mutableStateOf(false) }
@@ -1075,6 +1085,7 @@ private fun ChatPageContent(
         if (showTaskTree) {
             SubAgentTaskSheet(
                 conversationId = conversation.id,
+                hazeState = backgroundHazeState,
                 onDismiss = { showTaskTree = false },
                 onOpenConversation = { id ->
                     showTaskTree = false
@@ -1253,12 +1264,17 @@ private fun TopBar(
         navigationIcon = {
             CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
                 Row(
-                    modifier = Modifier.padding(start = 12.dp),
+                    // 全宽模式下顶栏两侧不再留白，仍然保留状态栏与刘海的 inset
+                    modifier = Modifier.padding(start = adaptiveHorizontalPaddingValue(12.dp)),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (!bigScreen) {
-                        val navShape = if (terminal) RoundedCornerShape(2.dp) else CircleShape
+                        val navShape = when {
+                            terminal -> RoundedCornerShape(2.dp)
+                            LocalFullWidthComponents.current -> RoundedCornerShape(0.dp)
+                            else -> CircleShape
+                        }
                         val navColor = MaterialTheme.colorScheme.surfaceContainerLow
                         Surface(
                             onClick = {
@@ -1294,7 +1310,13 @@ private fun TopBar(
 
                     if (chatModel != null) {
                         // 模型 + 供应商两个图标并成一个胶囊，高度和右侧按钮组一致
-                        val modelPillShape = if (terminal) RoundedCornerShape(2.dp) else RoundedCornerShape(50)
+                        val modelPillShape = if (terminal) {
+                            RoundedCornerShape(2.dp)
+                        } else if (LocalFullWidthComponents.current) {
+                            RoundedCornerShape(0.dp)
+                        } else {
+                            RoundedCornerShape(50)
+                        }
                         val modelPillColor = MaterialTheme.colorScheme.surfaceContainerLow
                         val provider = chatModel.findProvider(settings.providers)
                         Row(
@@ -1332,10 +1354,16 @@ private fun TopBar(
             }
         },
         actions = {
-            val pillShape = if (terminal) RoundedCornerShape(2.dp) else RoundedCornerShape(50)
+            val pillShape = if (terminal) {
+                RoundedCornerShape(2.dp)
+            } else if (LocalFullWidthComponents.current) {
+                RoundedCornerShape(0.dp)
+            } else {
+                RoundedCornerShape(50)
+            }
             val pillColor = MaterialTheme.colorScheme.surfaceContainerLow
             Row(
-                modifier = Modifier.padding(end = 8.dp),
+                modifier = Modifier.padding(end = adaptiveHorizontalPaddingValue(8.dp)),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -30,6 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.data.model.TodoItem
 import me.rerere.rikkahub.data.model.TodoStatus
+import me.rerere.rikkahub.ui.theme.adaptiveShape
 
 /**
  * 会话顶部的任务清单卡片。清单存在会话上, 压缩上下文不会丢。
@@ -48,7 +48,7 @@ internal fun ConversationTodoCard(
 
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+        shape = adaptiveShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 2.dp,
     ) {

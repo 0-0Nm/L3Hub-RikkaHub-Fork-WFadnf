@@ -90,6 +90,7 @@ import me.rerere.rikkahub.ui.terminal.IconButton
 import me.rerere.rikkahub.ui.terminal.OutlinedButton
 import me.rerere.rikkahub.ui.terminal.TextButton
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.ui.theme.adaptiveHorizontalPadding
 import me.rerere.rikkahub.utils.ImageUtils
 import me.rerere.rikkahub.utils.plus
 import me.rerere.ui.components.RikkaConfirmDialog
@@ -183,7 +184,8 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                 onValueChange = { searchQuery = it },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .adaptiveHorizontalPadding(16.dp)
+                    .padding(vertical = 8.dp),
                 placeholder = { Text(stringResource(R.string.setting_provider_page_search_providers)) },
                 leadingIcon = {
                     Icon(HugeIcons.Search01, contentDescription = null)

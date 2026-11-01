@@ -21,17 +21,22 @@ import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
+import dev.chrisbanes.haze.HazeState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.ui.components.ui.GlassSheetShape
+import me.rerere.rikkahub.ui.components.ui.canGlassPane
+import me.rerere.rikkahub.ui.components.ui.glassSurface
 import me.rerere.rikkahub.ui.terminal.IconButton
 import me.rerere.rikkahub.ui.terminal.TextButton
 import me.rerere.rikkahub.utils.copyMessageToClipboard
@@ -39,7 +44,9 @@ import me.rerere.rikkahub.utils.copyMessageToClipboard
 @Composable
 fun ChatMessageCopySheet(
     message: UIMessage,
-    onDismissRequest: () -> Unit
+    onDismissRequest: () -> Unit,
+    // 底板玻璃的取样源；选字要读得清，没有源时老实保持实色
+    hazeState: HazeState? = null,
 ) {
     val context = LocalContext.current
     ModalBottomSheet(
@@ -47,6 +54,19 @@ fun ChatMessageCopySheet(
         sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)),
         sheetGesturesEnabled = false,
         dragHandle = null,
+        modifier = Modifier.glassSurface(
+            shape = GlassSheetShape,
+            baseColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            hazeState = hazeState,
+        ),
+        shape = GlassSheetShape,
+        containerColor = if (canGlassPane(hazeState)) {
+            Color.Transparent
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
+        // 同抽屉：底色可能变透明，内容色显式钉住
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         Column(
             modifier = Modifier

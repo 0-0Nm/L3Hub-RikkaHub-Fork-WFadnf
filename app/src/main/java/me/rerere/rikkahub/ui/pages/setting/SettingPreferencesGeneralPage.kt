@@ -50,6 +50,7 @@ import me.rerere.rikkahub.ui.terminal.RadioButton
 import me.rerere.rikkahub.ui.terminal.TextButton
 import me.rerere.rikkahub.ui.components.ui.NumberSlider
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.ui.theme.adaptiveHorizontalPadding
 import me.rerere.rikkahub.utils.AppLanguage
 import me.rerere.rikkahub.utils.getActivity
 import me.rerere.rikkahub.utils.plus
@@ -78,7 +79,8 @@ fun SettingPreferencesGeneralPage(embedded: Boolean = false, vm: SettingVM = koi
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .adaptiveHorizontalPadding(16.dp)
+                .padding(vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             var showNicknameDialog by remember { mutableStateOf(false) }
@@ -294,6 +296,12 @@ fun SettingPreferencesGeneralPage(embedded: Boolean = false, vm: SettingVM = koi
                         )
                     }
                 }
+                switchItem(
+                    checked = displaySetting.fullWidthComponents,
+                    onCheckedChange = { updateDisplaySetting(displaySetting.copy(fullWidthComponents = it)) },
+                    supportingContent = { Text(stringResource(R.string.setting_display_page_full_width_desc)) },
+                    headlineContent = { Text(stringResource(R.string.setting_display_page_full_width_title)) },
+                )
                 formItem(
                     headlineContent = { Text(stringResource(R.string.setting_display_page_input_layout_title)) },
                     supportingContent = { Text(stringResource(R.string.setting_display_page_input_layout_desc)) },

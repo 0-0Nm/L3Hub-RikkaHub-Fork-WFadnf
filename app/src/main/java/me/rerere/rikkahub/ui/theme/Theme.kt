@@ -66,11 +66,17 @@ fun RikkahubTheme(
     }
     val amoledDarkMode by rememberAmoledDarkMode()
 
+    // 调色板：深浅两套各自生成；没启用时返回 null，继续用主题设置里的配色
+    val paletteScheme = remember(settings.palette, darkTheme) {
+        settings.palette.generateColorScheme(darkTheme)
+    }
+
     val colorScheme = when {
         settings.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
+        paletteScheme != null -> paletteScheme
         else -> {
             val theme = findThemeById(settings.themeId, settings.customThemes)
                 ?: findPresetTheme(settings.themeId)
@@ -78,6 +84,8 @@ fun RikkahubTheme(
         }
     }
     val terminal = settings.displaySetting.terminalStyle
+    // 全宽组件：直角 + 组件贴父容器边，由下面的 CompositionLocal 和 shapes 一起提供
+    val fullWidthComponents = settings.displaySetting.fullWidthComponents
     val colorSchemeConverted = remember(darkTheme, amoledDarkMode, colorScheme, terminal) {
         if (terminal) {
             TerminalColorScheme
@@ -120,11 +128,16 @@ fun RikkahubTheme(
         LocalExtendColors provides extendColors,
         LocalOverscrollFactory provides null,
         LocalTerminalMode provides terminal,
+        LocalFullWidthComponents provides fullWidthComponents,
     ) {
         MaterialExpressiveTheme(
             colorScheme = colorSchemeConverted,
             typography = if (terminal) terminalTypography(Typography) else Typography,
-            shapes = if (terminal) TerminalShapes else MaterialTheme.shapes,
+            shapes = when {
+                terminal -> TerminalShapes
+                fullWidthComponents -> SquareShapes
+                else -> MaterialTheme.shapes
+            },
             content = content,
             motionScheme = if (settings.displaySetting.disableAnimations) {
                 SnapMotionScheme
