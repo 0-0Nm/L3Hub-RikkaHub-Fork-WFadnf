@@ -14,14 +14,15 @@ class AutoCompressTrimTest {
         Conversation(assistantId = Uuid.random(), messageNodes = nodes.toList())
 
     @Test
-    fun `force compression falls back when only the tail message is left`() {
+    fun `force compression refuses to swallow the reply being generated`() {
         val conversation = conversation(
             UIMessage.user("summary").copy(isContextCheckpoint = true).toMessageNode(),
             UIMessage.assistant("reply").toMessageNode(),
         )
 
-        assertEquals(
-            ContextTrim(nodeIndex = 2),
+        // 检查点之后只剩这条正在生成的回复：硬压会把它也总结进摘要，
+        // 重试请求里连用户的问题都不剩，模型只能对着摘要重新开一条回复
+        assertNull(
             conversation.resolveAutoCompressTrim(
                 target = AutoCompressTarget.MESSAGES,
                 targetValue = 8,

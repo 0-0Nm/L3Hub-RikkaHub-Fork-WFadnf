@@ -116,9 +116,10 @@ class AutoCompressTest {
     fun `messages mode counts reserved tokens in the recheck`() {
         val conversation = conversation(checkpoint(), bigReply(), bigReply(), bigReply(), bigReply(), bigReply())
 
-        // 保留区 612 没超门限 2000，但加上 1500 的固定开销就超了
+        // 预算 = 门限的一半 = 1000；保留区 612 本身没超，加上 1500 的固定开销就超了，
+        // 回退到 token 模式后固定开销已经吃满预算，只剩 25% 的下限可用
         assertEquals(
-            ContextTrim(nodeIndex = 4),
+            ContextTrim(nodeIndex = 5),
             conversation.resolveAutoCompressTrim(
                 target = AutoCompressTarget.MESSAGES,
                 targetValue = 3,
@@ -127,6 +128,63 @@ class AutoCompressTest {
                 reservedTokens = 1_500,
                 limitTokens = 2_000,
             ),
+        )
+    }
+
+    /** 回归：压缩目标贴着实测占用时，下一轮加一条消息就又过线，每发一条压一次 */
+    @Test
+    fun `messages mode compresses to half of the current usage`() {
+        val conversation = conversation(checkpoint(), *Array(8) { bigReply() })
+
+        // 当前占用 8×204 = 1632；按条数保留 8 条等于一条都不压，
+        // 回退到 token 预算（用量的 50%）后至少要切掉一半
+        assertEquals(
+            ContextTrim(nodeIndex = 5),
+            conversation.resolveAutoCompressTrim(
+                target = AutoCompressTarget.MESSAGES,
+                targetValue = 8,
+                keepTailNodes = null,
+                force = false,
+                limitTokens = 1_632,
+            ),
+        )
+    }
+
+    /** 回归：保留量填得比门限还大时，压缩曾经退化成「没有可压缩范围」，而 MAX 拦截已被放行 */
+    @Test
+    fun `token target larger than the current usage is clamped to the budget`() {
+        val conversation = conversation(checkpoint(), reply(4_000), reply(4_000), reply(4_000), reply(4_000))
+
+        // 设置页只校验下限（≥100），没有上限；夹到预算以内才压得动
+        assertEquals(
+            ContextTrim(nodeIndex = 3),
+            conversation.resolveAutoCompressTrim(
+                target = AutoCompressTarget.TOKENS,
+                targetValue = 16_000,
+                keepTailNodes = null,
+                force = false,
+                limitTokens = 8_000,
+            ),
+        )
+    }
+
+    /** 门限判断要同时看得见「真实 usage」和「刚追加的消息」，取两者的大值 */
+    @Test
+    fun `usage takes the larger of real usage and the visible estimate`() {
+        // 刚粘贴一大段内容：usage 还没更新，估算更悲观
+        assertEquals(
+            2_200,
+            resolveContextUsage(realTokens = 1_000, visibleTokens = 2_000, fixedTokens = 0),
+        )
+        // 工具定义只有 usage 算得到：估算偏小，用 usage
+        assertEquals(
+            5_000,
+            resolveContextUsage(realTokens = 5_000, visibleTokens = 1_000, fixedTokens = 0),
+        )
+        // 压缩完 usage 还没落地，只剩估算
+        assertEquals(
+            1_100,
+            resolveContextUsage(realTokens = null, visibleTokens = 1_000, fixedTokens = 0),
         )
     }
 }

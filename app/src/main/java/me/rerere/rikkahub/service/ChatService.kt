@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.rerere.ai.agent.AgentEvent
 import me.rerere.ai.agent.AgentFinishReason
@@ -82,6 +83,7 @@ import me.rerere.rikkahub.data.model.getAssistantOf
 import me.rerere.rikkahub.data.model.getChatModelOf
 import me.rerere.rikkahub.data.model.getStoredAssistantOf
 import me.rerere.rikkahub.data.model.insertContextCheckpoint
+import me.rerere.rikkahub.data.model.resolveContextUsage
 import me.rerere.rikkahub.data.model.isAwaitingToolApproval
 import me.rerere.rikkahub.data.model.isContextLimitReached
 import me.rerere.rikkahub.data.model.keepRecentContextForTokens
@@ -139,7 +141,6 @@ private val CONTEXT_OVERFLOW_HINTS = listOf(
     "提示词过长",
     "令牌数",
 )
-private const val CONTEXT_ESTIMATE_SAFETY = 1.1f
 
 data class ChatError(
     val id: Uuid = Uuid.random(),
@@ -838,8 +839,11 @@ class ChatService(
                         session.flush()
                         // 整条保存会把库里还在的清单当成内存没同步捡回来，清空要单独落库
                         if (todosCleared) conversationRepo.updateTodos(conversationId, emptyList())
+                        // 上一次就是因为超限失败的，重新生成前先压一次，否则必然再失败
+                        autoCompressIfNeeded(session)
                         runTurn(session)
                     } else {
+                        autoCompressIfNeeded(session)
                         runTurn(session, regenerateNodeId = node.id)
                     }
 
@@ -1169,13 +1173,18 @@ class ChatService(
         withLoadedSession<Unit>(conversationId) { session ->
             // 生成中的回复还没写完，压缩不到它，检查点也不能插到它前面
             check(!session.isGenerating) { context.getString(R.string.chat_page_compress_blocked_generating) }
-            val size = session.state.value.messageNodes.size
-            compressSession(
-                session = session,
-                additionalPrompt = additionalPrompt,
-                trim = ContextTrim((size - keepRecentMessages).coerceIn(0, size)),
-                requireIdle = true,
-            )
+            // 和自动压缩共用一把锁：两边同时跑会插两份摘要，后插的那份还可能把前一份顶到后面去
+            session.compressMutex.withLock {
+                val size = session.state.value.messageNodes.size
+                compressSession(
+                    session = session,
+                    additionalPrompt = additionalPrompt,
+                    trim = ContextTrim((size - keepRecentMessages).coerceIn(0, size)),
+                    requireIdle = true,
+                )
+                // 手动压过之后，自动压缩不该再为同一份上下文总结一遍
+                session.compressedNodeCount = session.state.value.messageNodes.size
+            }
         }
     }
 
@@ -1199,12 +1208,13 @@ class ChatService(
         } else {
             turn.assistant.systemPrompt
         }
-        // 优先用上游返回的真实 usage；只有拿不到 usage 时才按字符估算兜底
+        // 和生成前那次检查用同一把尺子：真实 usage 与估算取大
         val real = message.contextTokens()?.takeIf { it > 0 }
-        val used = real ?: (
-            (session.state.value.estimateContextTokens() + estimateTokens(systemPrompt)) *
-                CONTEXT_ESTIMATE_SAFETY
-            ).toInt()
+        val used = resolveContextUsage(
+            realTokens = real,
+            visibleTokens = session.state.value.estimateContextTokens(),
+            fixedTokens = estimateTokens(systemPrompt),
+        )
         if (used < limit) return
         val source = if (real != null) "usage" else "estimate"
         Log.i(TAG, "runTurn: context $used ($source) >= $limit, compress before next step")
@@ -1264,8 +1274,9 @@ class ChatService(
         val model = settings.getChatModelOf(conversation) ?: return false
         val limit = model.autoCompressLimit(assistant.autoCompressThreshold)
 
-        // 真实用量偶尔缺失（回复没写入 usage、压缩后还没开始下一轮），退回按字符估算；
-        // 估算只数检查点之后的可见内容，不含系统提示词与工具定义，仅作为兜底
+        // 真实用量偶尔缺失（回复没写入 usage、压缩后还没开始下一轮），退回按字符估算。
+        // 两个口径各有盲区：usage 看不到刚追加、还没发出去的消息，估算看不到工具定义，
+        // 所以都算一遍取大的
         val real = conversation.lastContextTokens()?.takeIf { it > 0 }
         val systemPrompt = if (assistant.allowConversationSystemPrompt &&
             !conversation.customSystemPrompt.isNullOrBlank()) {
@@ -1273,25 +1284,20 @@ class ChatService(
         } else {
             assistant.systemPrompt
         }
-        val estimated = if (real == null) {
-            (
-                (conversation.estimateContextTokens() + estimateTokens(systemPrompt)) *
-                    CONTEXT_ESTIMATE_SAFETY
-                ).toInt()
-        } else {
-            null
-        }
-        // 摘要和 systemPrompt 压缩之后仍然占着上下文：截断目标先扣掉这块固定开销，
-        // 才能和上面的门限判断用同一把尺子。real 命中时也要算，它只影响预算。
+        val systemTokens = estimateTokens(systemPrompt)
+        val used = resolveContextUsage(
+            realTokens = real,
+            visibleTokens = conversation.estimateContextTokens(),
+            fixedTokens = systemTokens,
+        )
+        // 摘要和 systemPrompt 压缩之后仍然占着上下文：截断目标先扣掉这块固定开销
         val checkpointMessage = conversation.messageNodes
             .lastOrNull { it.currentMessage.isContextCheckpoint }
             ?.currentMessage
-        val reservedTokens = estimateTokens(systemPrompt) +
+        val reservedTokens = systemTokens +
             (checkpointMessage?.let { estimateMessageTokens(it) } ?: 0)
-        // 有上游 usage 时只信 usage，估算值不再参与门限判断
-        val used = real ?: estimated ?: 0
         if (!force && (limit == null || used < limit)) {
-            Log.d(TAG, "autoCompress: skip used=$used real=$real estimated=$estimated limit=$limit")
+            Log.d(TAG, "autoCompress: skip used=$used real=$real limit=$limit")
             return false
         }
 
@@ -1301,7 +1307,8 @@ class ChatService(
             keepTailNodes = keepTailNodes,
             force = force,
             reservedTokens = reservedTokens,
-            limitTokens = limit,
+            // 用门限判断实际用掉的那个数：两边尺子不一致会留出一段「判超限但没有可压范围」
+            limitTokens = used,
         ) ?: run {
             Log.d(TAG, "autoCompress: no compressible range")
             return false
@@ -1309,7 +1316,7 @@ class ChatService(
 
         Log.i(
             TAG,
-            "autoCompress: conversation=${session.id} used=$used real=$real estimated=$estimated " +
+            "autoCompress: conversation=${session.id} used=$used real=$real " +
                 "limit=$limit reserved=$reservedTokens trim=$trim",
         )
         val statusSender = assistant.name.ifEmpty { context.getString(R.string.assistant_page_default_assistant) }

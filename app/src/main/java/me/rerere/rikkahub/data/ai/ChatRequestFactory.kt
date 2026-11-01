@@ -191,7 +191,8 @@ class ChatRequestFactory(
         messages: List<UIMessage>,
         compressPrompt: String,
     ): String {
-        val (requestMessages, params) = buildStep(turn, messages)
+        // 压缩要看整段范围，不能再按条数截一次
+        val (requestMessages, params) = buildStep(turn, messages, respectMessageLimit = false)
         // 压缩指令不经过输入转换器，模板转换器会把其中的花括号当成模板语法
         val result = withRetry(
             policy = turn.settings.retryPolicy(),
@@ -217,6 +218,7 @@ class ChatRequestFactory(
         turn: ChatTurnContext,
         messages: List<UIMessage>,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+        respectMessageLimit: Boolean = true,
     ): StepRequest {
         val assistant = turn.assistant
         val requestMessages = buildList {
@@ -254,8 +256,15 @@ class ChatRequestFactory(
             if (system.isNotBlank()) {
                 add(UIMessage.system(prompt = system).copy(isSynthetic = true))
             }
+            // 压缩请求必须看到整个压缩范围：这里再按条数砍一次的话，被砍掉的中间那段
+            // 既没进摘要、也不会留在检查点之后，模型以后再也看不到它
+            val contextMessages = if (respectMessageLimit) {
+                messages.limitContext(assistant.contextMessageLimit)
+            } else {
+                messages
+            }
             addAll(
-                messages.limitContext(assistant.contextMessageLimit).map { message ->
+                contextMessages.map { message ->
                     // 子代理回投走 USER 角色（provider 都认），这里补一句说明，模型才不会当成用户说的
                     if (!message.isSubAgentNotice) message else message.copy(
                         parts = listOf(UIMessagePart.Text(SUB_AGENT_NOTICE_FRAMING)) + message.parts,
