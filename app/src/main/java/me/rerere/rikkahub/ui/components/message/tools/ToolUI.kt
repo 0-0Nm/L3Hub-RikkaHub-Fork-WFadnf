@@ -11,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -21,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastForEach
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.common.http.jsonObjectOrNull
@@ -48,7 +50,17 @@ data class ToolUIContext(
     val loading: Boolean,
     /** 发起该工具调用的助手, 拿不到时为 null */
     val assistant: Assistant? = null,
-)
+) {
+    /**
+     * 入参解析出的单列字段, 供各渲染器展示参数用
+     *
+     * 解析结果跟着 context 一起被 remember 缓存 (见 ChatMessageTools), 不会每帧重算;
+     * 纯文本入参、数组入参或非法 JSON 时为 null, 调用方回落到原有展示
+     */
+    val argFields: List<ToolArgField>? by lazy {
+        ToolArgsPresentation.parse(tool.toolName, tool.input)
+    }
+}
 
 /**
  * 单个工具的 UI 渲染器
@@ -83,9 +95,20 @@ interface ToolUIRenderer {
     }
 }
 
-/** 未注册工具使用的默认渲染器, 全部行为来自 [ToolUIRenderer] 的默认实现 */
+/** 未注册工具的内联摘要最多列出几条参数 */
+private const val MAX_INLINE_FIELDS = 3
+
+/** 未注册工具使用的默认渲染器: 内联摘要列出可解析的参数, 详情见 [DefaultToolPreview] */
 private object DefaultToolUIRenderer : ToolUIRenderer {
     override val toolName: String get() = ""
+
+    override fun hasSummary(context: ToolUIContext): Boolean = context.argFields != null
+
+    @Composable
+    override fun Summary(context: ToolUIContext) {
+        val fields = context.argFields ?: return
+        ToolArgsFieldList(fields = fields, compact = true, maxFields = MAX_INLINE_FIELDS)
+    }
 }
 
 /**
@@ -121,7 +144,26 @@ internal fun JsonElement?.getStringContent(key: String): String? =
     this?.jsonObjectOrNull?.get(key)?.jsonPrimitiveOrNull?.contentOrNull
 
 /**
- * 默认工具详情: 入参与输出的 JSON 高亮展示
+ * 参数无法按字段展示时的兜底文本
+ *
+ * 入参不是 JSON 时 `inputAsJson()` 会退化成空对象, 这时直接显示原始文本,
+ * 否则显示格式化后的 JSON, 与改造前的展示保持一致
+ */
+private fun argumentFallbackCode(context: ToolUIContext): String {
+    val arguments = context.arguments
+    if (arguments is JsonObject && arguments.isEmpty() && context.tool.input.isNotBlank()) {
+        return context.tool.input
+    }
+    return runCatching { JsonInstantPretty.encodeToString(arguments) }.getOrDefault(context.tool.input)
+}
+
+private fun String.isJsonLike(): Boolean {
+    val first = trimStart().firstOrNull()
+    return first == '{' || first == '['
+}
+
+/**
+ * 默认工具详情: 入参按单列字段展示 (解析不出字段时回落到 JSON 高亮), 输出仍按 JSON 高亮
  *
  * @param headerActions 标题栏右侧的附加操作区
  */
@@ -154,11 +196,18 @@ fun DefaultToolPreview(
                 Text(stringResource(R.string.chat_message_tool_call_label, context.tool.toolName))
             }
         ) {
-            HighlightCodeBlock(
-                code = JsonInstantPretty.encodeToString(context.arguments),
-                language = "json",
-                style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp)
-            )
+            val fields = context.argFields
+            // 解析不出字段 (纯文本命令、非法 JSON) 时的兜底文本, 跟着入参一起缓存
+            val fallback = remember(context.arguments, context.tool.input) { argumentFallbackCode(context) }
+            if (fields != null) {
+                ToolArgsFieldList(fields = fields)
+            } else {
+                HighlightCodeBlock(
+                    code = fallback,
+                    language = if (fallback.isJsonLike()) "json" else "plaintext",
+                    style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp)
+                )
+            }
         }
         if (context.tool.output.isNotEmpty()) {
             FormItem(

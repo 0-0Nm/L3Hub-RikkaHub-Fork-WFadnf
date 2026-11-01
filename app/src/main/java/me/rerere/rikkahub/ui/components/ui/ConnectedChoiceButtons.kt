@@ -44,7 +44,8 @@ fun <T> ConnectedChoiceButtons(
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
     // 未选中按钮的底色，要和所在容器的底色拉开
-    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    // 浓度走「玻璃透明度」：开了模糊特效是半透明，关掉就是原来的实色
+    containerColor: Color = glassColor(MaterialTheme.colorScheme.surfaceContainerHigh),
     minHeight: Dp = 48.dp,
     content: @Composable (option: T, selected: Boolean) -> Unit,
 ) {
@@ -68,7 +69,8 @@ fun <T> ConnectedMultiChoiceButtons(
     selected: Collection<T>,
     onToggle: (option: T, checked: Boolean) -> Unit,
     modifier: Modifier = Modifier,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    // 浓度走「玻璃透明度」：开了模糊特效是半透明，关掉就是原来的实色
+    containerColor: Color = glassColor(MaterialTheme.colorScheme.surfaceContainerHigh),
     minHeight: Dp = 48.dp,
     content: @Composable (option: T, selected: Boolean) -> Unit,
 ) {

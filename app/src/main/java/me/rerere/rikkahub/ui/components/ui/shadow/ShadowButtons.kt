@@ -11,9 +11,11 @@ import androidx.compose.material3.ButtonShapes
 import androidx.compose.material3.IconButtonColors
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.IconButtonShapes
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
+import me.rerere.rikkahub.ui.components.ui.glassColor
 import me.rerere.rikkahub.ui.theme.LocalTerminalMode
 import me.rerere.rikkahub.ui.theme.appButtonShadow
 import androidx.compose.material3.Button as MaterialButton
@@ -111,7 +113,10 @@ fun FilledTonalButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     shape: Shape = ButtonDefaults.filledTonalShape,
-    colors: ButtonColors = ButtonDefaults.filledTonalButtonColors(),
+    // 玻璃底：开了模糊特效是半透明，关掉回到原来的实色（glassColor 内部判断）
+    colors: ButtonColors = ButtonDefaults.filledTonalButtonColors(
+        containerColor = glassColor(MaterialTheme.colorScheme.secondaryContainer),
+    ),
     elevation: ButtonElevation? = ButtonDefaults.filledTonalButtonElevation(),
     border: BorderStroke? = null,
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
@@ -153,7 +158,10 @@ fun FilledTonalButton(
     shapes: ButtonShapes,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    colors: ButtonColors = ButtonDefaults.filledTonalButtonColors(),
+    // 玻璃底：开了模糊特效是半透明，关掉回到原来的实色（glassColor 内部判断）
+    colors: ButtonColors = ButtonDefaults.filledTonalButtonColors(
+        containerColor = glassColor(MaterialTheme.colorScheme.secondaryContainer),
+    ),
     elevation: ButtonElevation? = ButtonDefaults.filledTonalButtonElevation(),
     border: BorderStroke? = null,
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,

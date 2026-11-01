@@ -87,6 +87,7 @@ import me.rerere.rikkahub.ui.components.ui.ItemAction
 import me.rerere.rikkahub.ui.components.ui.ItemActionMenu
 import me.rerere.rikkahub.ui.components.ui.PagerTab
 import me.rerere.rikkahub.ui.components.ui.PagerTabs
+import me.rerere.rikkahub.ui.components.ui.glassSegmentedButtonColors
 import me.rerere.rikkahub.ui.components.ui.shadow.FilledTonalButton
 import me.rerere.rikkahub.ui.components.ui.switchItem
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -384,6 +385,7 @@ private fun MemorySettingsTab(
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                         AutoCompressTarget.entries.forEachIndexed { index, mode ->
                             SegmentedButton(
+                                colors = glassSegmentedButtonColors(),
                                 selected = autoCompressTargetMode == mode,
                                 onClick = {
                                     autoCompressTargetMode = mode

@@ -48,6 +48,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -111,6 +113,16 @@ import me.rerere.ui.toast.ToastType
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
+
+// 抽屉宽度：原来是写死的 300dp，按比例放大后还要跟屏幕宽度取小，免得窄屏上撑出屏幕
+private val DRAWER_WIDTH_BASE = 300.dp
+private const val DRAWER_WIDTH_SCALE = 1.2f
+
+// 「新聊天」胶囊整体缩放的倍数，锚点在自己的左下角：左下角不动，向右上收缩
+private const val NEW_CHAT_PILL_SCALE = 0.8f
+
+// 底部用户头像（设置入口）整体缩放的倍数，锚点在自己的右下角
+private const val DRAWER_AVATAR_SCALE = 0.8f
 
 @Composable
 fun ChatDrawerContent(
@@ -196,6 +208,8 @@ fun ChatDrawerContent(
 
     // 矮屏（如手表、横屏手机）上顶部固定会把会话列表挤没，改为跟随列表一起滚动
     val windowHeight = LocalWindowInfo.current.containerDpSize.height
+    val windowWidth = LocalWindowInfo.current.containerDpSize.width
+    val drawerWidth = minOf(DRAWER_WIDTH_BASE * DRAWER_WIDTH_SCALE, windowWidth)
     val scrollableHeader = windowHeight < 640.dp
 
     // 抽屉顶部：更新/备份提醒、用户信息、常用入口和文件夹栏
@@ -251,7 +265,7 @@ fun ChatDrawerContent(
     }
 
     ModalDrawerSheet(
-        modifier = Modifier.width(300.dp),
+        modifier = Modifier.width(drawerWidth),
         drawerShape = RoundedCornerShape(LocalSettings.current.displaySetting.uiCornerRadius.dp),
     ) {
         Column(
@@ -787,7 +801,13 @@ private fun DrawerBottomBar(
             onClick = onNewChat,
             modifier = Modifier
                 .weight(1f)
-                .height(52.dp),
+                .height(52.dp)
+                // 只缩绘制，不改布局：缩小后左下角留在原位，点击热区跟着变小的同时仍对齐视觉范围
+                .graphicsLayer {
+                    scaleX = NEW_CHAT_PILL_SCALE
+                    scaleY = NEW_CHAT_PILL_SCALE
+                    transformOrigin = TransformOrigin(0f, 1f)
+                },
             shape = CircleShape,
             color = MaterialTheme.colorScheme.primaryContainer,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -817,6 +837,11 @@ private fun DrawerBottomBar(
             name = name,
             value = avatar,
             avatarSize = 52.dp,
+            modifier = Modifier.graphicsLayer {
+                scaleX = DRAWER_AVATAR_SCALE
+                scaleY = DRAWER_AVATAR_SCALE
+                transformOrigin = TransformOrigin(1f, 1f)
+            },
             onClick = onOpenSettings,
         )
     }

@@ -215,6 +215,7 @@ L3Hub 自己的设置都在 `Settings` 里，随 `settings.json` 整份序列化
 - 关于页：标题改为 L3Hub，注明基于 RikkaHub；链接改为本 fork 仓库与 LICENSE，另保留「上游项目」指向 `rikkahub/rikkahub`
 - 模型编辑：删掉「上下文长度」整段，上下文窗口只保留 WARN / MAX 两个预警门限
 - 界面偏好：新增「上下文预警进度条」开关（`DisplaySetting.showContextMeter`），关闭后输入框上方的进度条整行隐藏
+- 思考卡标题：折叠时用思考内容的第一句当标题（`DisplaySetting.showThinkingSummary`，默认开），没有正文或关掉开关就退回「思考了 N 秒」；截句是 `utils/MarkdownUtils.kt` 里的纯函数 `extractThinkingSummary()`，带单测
 - 压缩检查点：分隔线默认折叠时露出两行摘要预览，展开可看完整摘要并编辑/删除
 - 任务树：工具调用改为等宽字体代码块，输入按 JSON 格式化、shell 输出拆出 exit code 与 stdout，长内容折叠，可逐条展开
 
@@ -252,6 +253,51 @@ L3Hub 自己的设置都在 `Settings` 里，随 `settings.json` 整份序列化
 - `workspace_read_file` 增加 `offset` / `limit`（1-based 行号）与返回里的 `totalLines` / `truncated`，大文件可以分段读，不再整文件塞进上下文。
 - `workspace_shell` 的只读命令（`ls`、`cat`、`grep`、`rg`、`find`、`git status/diff/log` 等）不再逐条询问。命令替换、重定向、子 shell、后台运行、`find -exec/-delete`、`git` 写操作等仍按原策略要求审批；判定逻辑在 `WorkspaceCommandPolicy`，纯函数，有单测。
 - 系统提示里同步说明新工具与免审批范围。
+
+## 玻璃底、选项卡透明度与多色背景（fork）
+
+显示设置 → 「背景特效」选 BLUR / GLASS 后，设置页的开关行、填充色调按钮、选项卡（选项按钮）、
+对话页顶栏的图标按钮都带一层毛玻璃底；同一页下面的「玻璃透明度」控制浓度（0%–100%，默认 35%）。
+
+- 全局开关仍然是 `DisplaySetting.enableBlurEffect`：关掉时这些组件**一条 haze 都不挂**，
+  也不改透明度，直接回到原来的实色 —— 低端机不该为一点美化付代价
+- 没有 haze 源的层级（设置页的背景只有一层纯色）只画半透明底加一道描边：
+  纯色背景糊一遍还是同一个颜色，省掉的是白花的 GPU 时间，视觉上没有差别
+- 顶栏图标按钮原来读 `blurOpacity`（气泡/输入框用），现在读 `glassOpacity`
+- 只给固定层级加效果，**不给列表每一项挂 `hazeSource`**：滚动时每项重糊一次会明显掉帧
+
+改动文件：
+
+| 文件 | 说明 |
+|---|---|
+| `ui/components/ui/GlassSurface.kt` | 新增：`Modifier.glassSurface`、`glassColor`、`glassSegmentedButtonColors`、`LocalGlassHazeState` |
+| `data/datastore/Settings.kt` | `DisplaySetting.glassOpacity`（默认 0.35，跟着 `display_setting` 整份 JSON 走，旧数据缺字段按默认值） |
+| `ui/components/ui/CardGroup.kt` | 开关行 / 按钮行 / 表单项的底色改由毛玻璃底铺 |
+| `ui/components/ui/ConnectedChoiceButtons.kt` | 选项按钮组底色走玻璃透明度 |
+| `ui/components/ui/shadow/ShadowButtons.kt` | 填充色调按钮（`FilledTonalButton`）底色走玻璃透明度 |
+| `ui/components/ai/ChatInputHaze.kt` | 加 `alpha` 参数，让顶栏能单独指定浓度 |
+| `ui/pages/chat/ChatPage.kt` | 顶栏导航钮 / 模型胶囊 / 动作胶囊改读 `glassOpacity` |
+| 五个 `SingleChoiceSegmentedButtonRow` 页面 | 传入 `glassSegmentedButtonColors()` |
+| `ui/pages/chat/MeshGradientBackground.kt` | 多色光斑 + 色相慢漂移 |
+
+主色调用 `primary` 的填充按钮保持实色（半透明会掉文字对比度），只改色调按钮和表面类控件。
+
+### 多色背景
+
+`MeshGradientBackground` 从原来的蓝色系改成四个光斑（蓝 / 青 / 紫品红 / 橙琥珀），
+色相另走一圈 31 秒的慢时钟来回摆动 ±10~18°，饱和度与明度写死，
+所以换色不换亮度，深浅主题都不会忽明忽暗：
+
+| 主题 | 底色 | 光斑明度 / 饱和度 | 光斑 alpha |
+|---|---|---|---|
+| 深色 | 靛紫 → 近黑 `#191428`→`#07060A` | 0.58–0.66 / 0.52–0.62 | 0.22–0.44 |
+| 浅色 | 淡藕荷 → 纯白 `#EAE4F8`→`#FFFFFF` | 1.0 / 0.40–0.60 | 0.34–0.55 |
+
+- 深色压明度加低 alpha，叠在近黑底上不会糊成一片；暖色光斑 alpha 只给 0.22，负责色彩参照不抢戏
+- 浅色明度给满但饱和度封顶 0.6，是淡彩不是荧光
+- 光斑渐隐从「透明黑」改成「同色 alpha = 0」，边缘不再发灰
+- 仍是 20fps 节流；`animate = false`（生成中、滚动中）和切后台时不空转；
+  色相漂移和位置漂移共用同一份相位状态，没有新增定时器
 
 ## 还要做的
 

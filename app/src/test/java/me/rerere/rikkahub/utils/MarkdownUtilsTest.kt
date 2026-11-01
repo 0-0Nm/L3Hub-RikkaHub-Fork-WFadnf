@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.utils
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class MarkdownUtilsTest {
@@ -58,5 +59,84 @@ class MarkdownUtilsTest {
     @Test
     fun `skip code`() {
         assertEquals("运行 即可\n结束", "运行 `ls` 即可\n\n```kotlin\nval a = 1\n```\n\n结束".stripMarkdown())
+    }
+    @Test
+    fun `thinking summary takes first chinese sentence`() {
+        assertEquals(
+            "先确认仓库结构",
+            "先确认仓库结构。然后改 ChatMessageReasoning".extractThinkingSummary()
+        )
+    }
+
+    @Test
+    fun `thinking summary takes first english sentence`() {
+        assertEquals(
+            "Let me check the repo",
+            "Let me check the repo. Then I'll edit the file.".extractThinkingSummary()
+        )
+    }
+
+    @Test
+    fun `thinking summary keeps decimals and file names in one sentence`() {
+        assertEquals(
+            "等 0.5 秒再看 A.kt",
+            "等 0.5 秒再看 A.kt 就够了".extractThinkingSummary()
+        )
+    }
+
+    @Test
+    fun `thinking summary ignores blank lines`() {
+        assertNull("\n\n   \n".extractThinkingSummary())
+    }
+
+    @Test
+    fun `thinking summary skips leading code block`() {
+        assertEquals(
+            "先确认测试",
+            "```kotlin\nval a = 1\n```\n\n先确认测试。再动手".extractThinkingSummary()
+        )
+    }
+
+    @Test
+    fun `thinking summary only code block falls back to null`() {
+        assertNull("```\nfun main() {}\n```".extractThinkingSummary())
+    }
+
+    @Test
+    fun `thinking summary truncates long sentence with ellipsis`() {
+        val long = "一".repeat(THINKING_TITLE_MAX_CHARS + 10)
+        val title = long.extractThinkingSummary()
+        assertEquals(THINKING_TITLE_MAX_CHARS + 1, title!!.length)
+        assertEquals("一".repeat(THINKING_TITLE_MAX_CHARS) + "…", title)
+    }
+
+    @Test
+    fun `thinking summary respects custom max chars`() {
+        assertEquals("先确认仓…", "先确认仓库结构再说".extractThinkingSummary(maxChars = 4))
+    }
+
+    @Test
+    fun `thinking summary returns null for empty text`() {
+        assertNull("".extractThinkingSummary())
+    }
+
+    @Test
+    fun `thinking summary strips markdown marks`() {
+        assertEquals(
+            "先确认仓库结构",
+            "**先确认**仓库结构。## 后面的不算".extractThinkingSummary()
+        )
+        assertEquals(
+            "先看 A.kt 再改",
+            "- 先看 `A.kt` 再改。后面还有".extractThinkingSummary()
+        )
+    }
+
+    @Test
+    fun `thinking summary falls back to next line when first line is only marks`() {
+        assertEquals(
+            "真正的结论",
+            "---\n\n真正的结论。其余细节".extractThinkingSummary()
+        )
     }
 }

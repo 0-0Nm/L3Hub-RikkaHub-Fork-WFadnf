@@ -79,6 +79,7 @@ import me.rerere.rikkahub.ui.components.ui.PagerTab
 import me.rerere.rikkahub.ui.components.ui.PagerTabs
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
+import me.rerere.rikkahub.ui.components.ui.glassSegmentedButtonColors
 import me.rerere.rikkahub.ui.components.ui.shadow.Button
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -429,6 +430,7 @@ private fun McpCommonOptionsConfigure(
             ) {
                 transportTypes.forEachIndexed { index, type ->
                     SegmentedButton(
+                        colors = glassSegmentedButtonColors(),
                         shape = SegmentedButtonDefaults.itemShape(index, transportTypes.size),
                         onClick = {
                             if (index != currentTypeIndex) {

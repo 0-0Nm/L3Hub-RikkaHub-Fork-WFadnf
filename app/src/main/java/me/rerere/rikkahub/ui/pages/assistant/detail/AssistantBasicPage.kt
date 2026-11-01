@@ -54,6 +54,7 @@ import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.TagsInput
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
+import me.rerere.rikkahub.ui.components.ui.glassSegmentedButtonColors
 import me.rerere.rikkahub.ui.components.ui.switchItem
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
@@ -214,6 +215,7 @@ internal fun AssistantBasicContent(
                 SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                     ExecutionPermission.entries.forEachIndexed { index, permission ->
                         SegmentedButton(
+                            colors = glassSegmentedButtonColors(),
                             selected = assistant.executionPermission == permission,
                             onClick = { onUpdate(assistant.copy(executionPermission = permission)) },
                             shape = SegmentedButtonDefaults.itemShape(index, ExecutionPermission.entries.size),

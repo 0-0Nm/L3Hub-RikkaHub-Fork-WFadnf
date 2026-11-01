@@ -285,6 +285,12 @@ fun SettingPreferencesUIPage(embedded: Boolean = false, vm: SettingVM = koinView
                     headlineContent = { Text(stringResource(R.string.setting_display_page_auto_collapse_thinking_title)) },
                 )
                 switchItem(
+                    checked = displaySetting.showThinkingSummary,
+                    onCheckedChange = { updateDisplaySetting(displaySetting.copy(showThinkingSummary = it)) },
+                    supportingContent = { Text(stringResource(R.string.setting_display_page_show_thinking_summary_desc)) },
+                    headlineContent = { Text(stringResource(R.string.setting_display_page_show_thinking_summary_title)) },
+                )
+                switchItem(
                     checked = displaySetting.enableLatexRendering,
                     onCheckedChange = { updateDisplaySetting(displaySetting.copy(enableLatexRendering = it)) },
                     supportingContent = { Text(stringResource(R.string.setting_display_page_enable_latex_rendering_desc)) },

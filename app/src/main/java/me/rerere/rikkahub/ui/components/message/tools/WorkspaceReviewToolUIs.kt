@@ -195,7 +195,7 @@ object WorkspaceTestToolUI : ToolUIRenderer {
                     lines.subList(from - 1, to).joinToString("\n")
                 }.getOrNull()
             }
-            snippetLanguage = languageOf(path)
+            snippetLanguage = syntaxLanguageOf(path)
         }
 
         Column(
@@ -279,16 +279,3 @@ private fun JsonElement?.str(key: String): String? =
 
 private fun JsonElement?.int(key: String): Int =
     this?.jsonObjectOrNull?.get(key)?.jsonPrimitive?.intOrNull ?: 0
-
-private fun languageOf(path: String?): String = when (
-    path?.substringAfterLast('.', "")?.lowercase().orEmpty()
-) {
-    "kt", "kts" -> "kotlin"
-    "java" -> "java"
-    "py" -> "python"
-    "ts", "tsx" -> "typescript"
-    "js", "jsx" -> "javascript"
-    "go" -> "go"
-    "rs" -> "rust"
-    else -> "plaintext"
-}

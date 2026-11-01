@@ -276,6 +276,24 @@ fun SettingPreferencesGeneralPage(embedded: Boolean = false, vm: SettingVM = koi
                         )
                     }
                 }
+                if (displaySetting.enableBlurEffect) {
+                    formItem(
+                        headlineContent = { Text(stringResource(R.string.setting_display_page_glass_opacity_title)) },
+                        supportingContent = { Text(stringResource(R.string.setting_display_page_glass_opacity_desc)) },
+                        trailingContent = {
+                            CardGroupValue("${(displaySetting.glassOpacity * 100).roundToInt()}%")
+                        },
+                    ) {
+                        Slider(
+                            value = displaySetting.glassOpacity,
+                            onValueChange = {
+                                updateDisplaySetting(displaySetting.copy(glassOpacity = it))
+                            },
+                            valueRange = 0f..1f,
+                            steps = 19,
+                        )
+                    }
+                }
                 formItem(
                     headlineContent = { Text(stringResource(R.string.setting_display_page_input_layout_title)) },
                     supportingContent = { Text(stringResource(R.string.setting_display_page_input_layout_desc)) },

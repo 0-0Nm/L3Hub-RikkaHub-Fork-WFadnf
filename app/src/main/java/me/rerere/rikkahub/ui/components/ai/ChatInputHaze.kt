@@ -32,13 +32,15 @@ internal fun Modifier.chatInputHaze(
     displaySetting: DisplaySetting,
     containerColor: Color,
     shape: RoundedCornerShape,
+    // 顶栏图标按钮这类「玻璃底」读 glassOpacity，输入框和气泡读 blurOpacity
+    alpha: Float = displaySetting.blurOpacity,
 ): Modifier {
     return when (displaySetting.effectiveBackgroundEffect) {
         BackgroundEffectType.OFF -> this
 
         BackgroundEffectType.BLUR -> {
             val tint = containerColor.copy(
-                alpha = containerColor.alpha * displaySetting.blurOpacity,
+                alpha = containerColor.alpha * alpha,
             )
             hazeBlur(
                 input = HazeInput.Sources(hazeState),
@@ -55,7 +57,7 @@ internal fun Modifier.chatInputHaze(
                 style = GlassStyle.Material3(
                     containerColor = containerColor,
                     tint = containerColor.copy(
-                        alpha = containerColor.alpha * displaySetting.blurOpacity,
+                        alpha = containerColor.alpha * alpha,
                     ),
                 ) {
                     appearanceResponse(dark = darkMode)

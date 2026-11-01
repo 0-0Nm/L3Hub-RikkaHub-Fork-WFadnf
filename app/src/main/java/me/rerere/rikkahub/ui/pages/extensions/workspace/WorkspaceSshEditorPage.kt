@@ -55,6 +55,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.CardGroupIcon
+import me.rerere.rikkahub.ui.components.ui.glassSegmentedButtonColors
 import me.rerere.rikkahub.ui.components.ui.shadow.Button
 import me.rerere.rikkahub.ui.components.ui.shadow.FilledTonalButton
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -189,6 +190,7 @@ fun WorkspaceSshEditorPage(id: String?) {
                         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                             options.forEachIndexed { index, (type, label) ->
                                 SegmentedButton(
+                                    colors = glassSegmentedButtonColors(),
                                     enabled = editable,
                                     selected = state.authType == type,
                                     onClick = { vm.update { it.copy(authType = type) } },

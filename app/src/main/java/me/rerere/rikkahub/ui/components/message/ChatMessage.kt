@@ -150,6 +150,10 @@ fun ChatMessage(
     assistant: Assistant? = null,
     lastMessage: Boolean = false,
     messageIndex: Int = 0,
+    // 与上一条消息同组（同角色连续）：气泡上沿收紧，头像/模型名只在组首出现
+    joinedToPrevious: Boolean = false,
+    // 与下一条消息同组：气泡下沿收紧
+    joinedToNext: Boolean = false,
     onFork: () -> Unit,
     onRegenerate: () -> Unit,
     onEdit: () -> Unit,
@@ -203,7 +207,11 @@ fun ChatMessage(
         },
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        if (!message.parts.isEmptyUIMessage()) {
+        // 同组后续消息不再重复头像/模型名，否则气泡之间会被头像行顶开，接不到一起。
+        // 想让每条消息都显示头像，把 joinedToPrevious 从这个判断里去掉即可。
+        val showMessageHeader = !message.parts.isEmptyUIMessage() &&
+            (!joinedToPrevious || terminalStyle)
+        if (showMessageHeader) {
             if (terminalStyle) {
                 TerminalMessageHeader(
                     message = message,
@@ -323,6 +331,8 @@ fun ChatMessage(
                                         onToolAnswer = onToolAnswer,
                                         onUserMessageClick = if (message.role == MessageRole.USER) onEdit else null,
                                         hazeState = hazeState,
+                                        joinedToPrevious = joinedToPrevious,
+                                        joinedToNext = joinedToNext,
                                     )
                                 }
                             }
@@ -346,6 +356,8 @@ fun ChatMessage(
                                     onToolAnswer = onToolAnswer,
                                     onUserMessageClick = if (message.role == MessageRole.USER) onEdit else null,
                                     hazeState = hazeState,
+                                    joinedToPrevious = joinedToPrevious,
+                                    joinedToNext = joinedToNext,
                                 )
                             }
                         }
@@ -552,6 +564,8 @@ private fun MessagePartsBlock(
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onUserMessageClick: (() -> Unit)? = null,
     hazeState: HazeState? = null,
+    joinedToPrevious: Boolean = false,
+    joinedToNext: Boolean = false,
 ) {
     val context = LocalContext.current
     // 消息输出HapticFeedback
@@ -597,6 +611,8 @@ private fun MessagePartsBlock(
             onClick = onUserMessageClick,
             onClickCitation = handleClickCitation,
             hazeState = hazeState,
+            joinedToPrevious = joinedToPrevious,
+            joinedToNext = joinedToNext,
         )
         return
     }
@@ -759,6 +775,8 @@ private fun MessagePartsBlock(
                                         role = role,
                                         color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = settings.displaySetting.bubbleOpacity),
                                         hazeState = hazeState,
+                                        joinedToPrevious = joinedToPrevious,
+                                        joinedToNext = joinedToNext,
                                         onClick = { onUserMessageClick?.invoke() },
                                         // 用户气泡不占满整行，和助手的回复错开
                                         modifier = Modifier
@@ -784,6 +802,8 @@ private fun MessagePartsBlock(
                                         role = role,
                                         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = settings.displaySetting.bubbleOpacity),
                                         hazeState = hazeState,
+                                        joinedToPrevious = joinedToPrevious,
+                                        joinedToNext = joinedToNext,
                                         modifier = if (streamingText) Modifier else Modifier.animateContentSize(),
                                     ) {
                                         MarkdownBlock(
@@ -1089,8 +1109,12 @@ private val BubbleCorner = 24.dp
 private val BubbleTailCorner = 6.dp
 private val BubblePressedCorner = 12.dp
 
+// 同组相邻气泡接缝处的圆角：上一条的下圆角与下一条的上圆角都收成这个值，两条气泡看着是连着的
+private val BubbleJoinedCorner = 8.dp
+
 /**
- * 消息气泡：大圆角，靠头像一侧的顶角收紧；可点击时按下其余圆角也跟着收紧
+ * 消息气泡：大圆角，靠头像一侧的顶角收紧；可点击时按下其余圆角也跟着收紧。
+ * 与同组相邻气泡相接的那条边统一收成 [BubbleJoinedCorner]，看上去是一条连线。
  */
 @Composable
 private fun ChatMessageBubble(
@@ -1099,6 +1123,8 @@ private fun ChatMessageBubble(
     hazeState: HazeState? = null,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    joinedToPrevious: Boolean = false,
+    joinedToNext: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -1106,10 +1132,22 @@ private fun ChatMessageBubble(
     val radius = LocalSettings.current.displaySetting.uiCornerRadius.dp
     val corner = lerp(radius, minOf(radius, BubblePressedCorner), pressProgress)
     val tail = minOf(BubbleTailCorner, radius * 0.25f)
+    // 接缝那一侧不能再留小尾巴，否则两条气泡之间会露一个豁口
+    val join = minOf(BubbleJoinedCorner, corner)
     val shape = if (role == MessageRole.USER) {
-        RoundedCornerShape(topStart = corner, topEnd = tail, bottomEnd = corner, bottomStart = corner)
+        RoundedCornerShape(
+            topStart = if (joinedToPrevious) join else corner,
+            topEnd = if (joinedToPrevious) join else tail,
+            bottomEnd = if (joinedToNext) join else corner,
+            bottomStart = if (joinedToNext) join else corner,
+        )
     } else {
-        RoundedCornerShape(topStart = tail, topEnd = corner, bottomEnd = corner, bottomStart = corner)
+        RoundedCornerShape(
+            topStart = if (joinedToPrevious) join else tail,
+            topEnd = if (joinedToPrevious) join else corner,
+            bottomEnd = if (joinedToNext) join else corner,
+            bottomStart = if (joinedToNext) join else corner,
+        )
     }
     val displaySetting = LocalSettings.current.displaySetting
     val effect = displaySetting.effectiveBackgroundEffect
@@ -1245,6 +1283,8 @@ private fun UserMessageContent(
     onClick: (() -> Unit)?,
     onClickCitation: (String) -> Unit,
     hazeState: HazeState?,
+    joinedToPrevious: Boolean = false,
+    joinedToNext: Boolean = false,
 ) {
     val settings = LocalSettings.current.displaySetting
     val attachments = remember(parts) {
@@ -1264,6 +1304,8 @@ private fun UserMessageContent(
         role = MessageRole.USER,
         color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = settings.bubbleOpacity),
         hazeState = hazeState,
+        joinedToPrevious = joinedToPrevious,
+        joinedToNext = joinedToNext,
         onClick = { onClick?.invoke() },
         modifier = Modifier
             .padding(start = 24.dp)

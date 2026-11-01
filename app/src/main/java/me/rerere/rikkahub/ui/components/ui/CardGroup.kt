@@ -24,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemColors
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProvideTextStyle
@@ -43,6 +44,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEachIndexed
+import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.terminal.Switch
 import me.rerere.rikkahub.ui.terminal.TopAppBar
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -231,10 +234,14 @@ private fun CardGroupFormItem(
     count: Int,
     index: Int,
 ) {
+    val shape = cardGroupItemShape(index, count)
+    val glass = LocalSettings.current.displaySetting.enableBlurEffect
     Surface(
-        modifier = item.modifier.fillMaxWidth(),
-        shape = cardGroupItemShape(index, count),
-        color = CustomColors.listItemColors.containerColor,
+        modifier = item.modifier
+            .fillMaxWidth()
+            .glassSurface(shape = shape, baseColor = MaterialTheme.colorScheme.surfaceBright),
+        shape = shape,
+        color = if (glass) Color.Transparent else CustomColors.listItemColors.containerColor,
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -291,18 +298,20 @@ private fun CardGroupListItem(
         animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
     )
 
+    val shape = RoundedCornerShape(
+        topStart = topCorner,
+        topEnd = topCorner,
+        bottomStart = bottomCorner,
+        bottomEnd = bottomCorner,
+    )
+    // 毛玻璃底只加在这类「开关行 / 按钮行」上；列表项本身不挂 hazeSource，避免滚动时每项重糊一次
+    val glass = LocalSettings.current.displaySetting.enableBlurEffect
     ListItem(
         headlineContent = item.headlineContent ?: {},
         modifier = item.modifier
             .fillMaxWidth()
-            .clip(
-                RoundedCornerShape(
-                    topStart = topCorner,
-                    topEnd = topCorner,
-                    bottomStart = bottomCorner,
-                    bottomEnd = bottomCorner,
-                )
-            )
+            .clip(shape)
+            .glassSurface(shape = shape, baseColor = MaterialTheme.colorScheme.surfaceBright)
             .then(
                 if (item.onClick != null) {
                     Modifier.clickable(
@@ -316,7 +325,10 @@ private fun CardGroupListItem(
         supportingContent = item.supportingContent,
         leadingContent = item.leadingContent,
         trailingContent = item.trailingContent,
-        colors = item.colors ?: CustomColors.listItemColors,
+        // 开了毛玻璃底就把底色交给它，ListItem 自己不再铺一层实色
+        colors = if (glass) ListItemDefaults.colors(containerColor = Color.Transparent) else {
+            item.colors ?: CustomColors.listItemColors
+        },
     )
 }
 
@@ -357,38 +369,40 @@ fun CardGroup(
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 private fun CardGroupPreview() {
-    Scaffold(
-        topBar = {
-            LargeFlexibleTopAppBar(
-                title = {
-                    Text("Card Group")
-                },
-                colors = CustomColors.topBarColors,
-            )
-        },
-        containerColor = CustomColors.topBarColors.containerColor,
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
-        ) {
-            CardGroup(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                title = { Text("About") },
+    CompositionLocalProvider(LocalSettings provides Settings()) {
+        Scaffold(
+            topBar = {
+                LargeFlexibleTopAppBar(
+                    title = {
+                        Text("Card Group")
+                    },
+                    colors = CustomColors.topBarColors,
+                )
+            },
+            containerColor = CustomColors.topBarColors.containerColor,
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .fillMaxSize()
             ) {
-                item(
-                    headlineContent = { Text("第一项") },
-                )
-                item(
-                    headlineContent = { Text("第二项") },
-                    supportingContent = { Text("支持文本") },
-                )
-                item(
-                    onClick = {},
-                    headlineContent = { Text("第三项") },
-                    trailingContent = { Text("→") },
-                )
+                CardGroup(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    title = { Text("About") },
+                ) {
+                    item(
+                        headlineContent = { Text("第一项") },
+                    )
+                    item(
+                        headlineContent = { Text("第二项") },
+                        supportingContent = { Text("支持文本") },
+                    )
+                    item(
+                        onClick = {},
+                        headlineContent = { Text("第三项") },
+                        trailingContent = { Text("→") },
+                    )
+                }
             }
         }
     }

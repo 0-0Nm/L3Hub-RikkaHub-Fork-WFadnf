@@ -127,6 +127,7 @@ import me.rerere.rikkahub.ui.components.message.ConversationUsageDetails
 import me.rerere.rikkahub.ui.components.message.usageTokenSpeed
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
+import me.rerere.rikkahub.ui.components.ui.glassSurfaceAlpha
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -1229,12 +1230,14 @@ private fun TopBar(
     val toaster = LocalToaster.current
     val effect = settings.displaySetting.effectiveBackgroundEffect
     val terminal = settings.displaySetting.terminalStyle
+    // 顶栏按钮是「玻璃底」，透明度读玻璃透明度，而不是气泡用的模糊不透明度
+    val glassAlpha = settings.displaySetting.glassSurfaceAlpha
     fun effectColor(base: Color): Color = if (terminal) {
         base
     } else {
         when (effect) {
             BackgroundEffectType.OFF -> base
-            BackgroundEffectType.BLUR -> base.copy(alpha = settings.displaySetting.blurOpacity)
+            BackgroundEffectType.BLUR -> base.copy(alpha = glassAlpha)
             BackgroundEffectType.GLASS -> Color.Transparent
         }
     }
@@ -1277,6 +1280,7 @@ private fun TopBar(
                                     hazeState = hazeState,
                                     displaySetting = settings.displaySetting,
                                     containerColor = navColor,
+                                    alpha = glassAlpha,
                                     shape = navShape,
                                 ),
                             shape = navShape,
@@ -1310,6 +1314,7 @@ private fun TopBar(
                                     hazeState = hazeState,
                                     displaySetting = settings.displaySetting,
                                     containerColor = modelPillColor,
+                                    alpha = glassAlpha,
                                     shape = modelPillShape,
                                 )
                                 .clickable(onClick = onShowModelPicker)
@@ -1350,6 +1355,7 @@ private fun TopBar(
                             hazeState = hazeState,
                             displaySetting = settings.displaySetting,
                             containerColor = pillColor,
+                            alpha = glassAlpha,
                             shape = pillShape,
                         )
                         .padding(horizontal = 2.dp),

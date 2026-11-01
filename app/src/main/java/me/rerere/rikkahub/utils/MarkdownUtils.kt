@@ -79,3 +79,70 @@ fun String.extractThinkingTitle(): String? {
 
     return null
 }
+
+/** 思考卡标题最多显示多少字符，超出的部分截断并加省略号 */
+const val THINKING_TITLE_MAX_CHARS = 24
+
+/** 提取标题时只看思考内容的开头，流式输出时不必每帧重扫全文 */
+const val THINKING_SUMMARY_WINDOW = 2000
+
+/** 中英文句末标点；英文句点要求后面是空白或结尾，避开 `0.5`、`A.kt` 这类 */
+private val THINKING_SENTENCE_END = Regex("""[。！？；…!?;]|\.(?=\s|$)""")
+
+/** 列表、标题、引用的行首标记，可能叠加（`> - #`），要一层层剥 */
+private val THINKING_PREFIX_MARK = Regex("""^\s*(#{1,6}\s+|>\s*|[-+*]\s+|\d+[.)]\s+)""")
+
+/** 加粗、斜体、删除线和行内代码的标记，剥掉后只留文字 */
+private val THINKING_INLINE_MARK = Regex("""\*\*|__|~~|[*`]""")
+
+private val THINKING_TITLE_TRAILING = charArrayOf(' ', '\u3000', '，', ',', '、', '。', '；', ';', '：', ':', '—', '-')
+
+/**
+ * 取思考链的第一句当折叠卡片的标题。
+ *
+ * 行首的围栏代码块（``` / ~~~）整段跳过：思考里常在开头贴一段代码，
+ * 拿它当标题没有意义。Markdown 标记（`**`、`#`、`-`）会剥掉，
+ * 避免标题里露出星号；行内代码只去反引号，保留标识符本身。
+ * 第一句超过 [maxChars] 个字符时截断并补省略号，保证标题只占一行。
+ *
+ * @return 可用的标题，没有可用正文（空串、只有空白/代码块）时返回 null
+ */
+fun String.extractThinkingSummary(maxChars: Int = THINKING_TITLE_MAX_CHARS): String? {
+    var inFence = false
+    for (line in lineSequence()) {
+        if (line.trimStart().startsWith("```") || line.trimStart().startsWith("~~~")) {
+            inFence = !inFence
+            continue
+        }
+        if (inFence) continue
+
+        val candidate = line.stripThinkingMarks()
+        // 只有标点的行（`---`、`***`）当不了标题，接着往下找
+        if (candidate.isEmpty() || candidate.none { it.isLetterOrDigit() }) continue
+
+        val sentenceEnd = THINKING_SENTENCE_END.find(candidate)?.range?.first ?: candidate.length
+        val sentence = candidate.take(sentenceEnd).stripThinkingMarks()
+        val title = if (sentence.isEmpty()) candidate else sentence
+        return title.truncateThinkingTitle(maxChars)
+    }
+    return null
+}
+
+private fun String.stripThinkingMarks(): String {
+    var text = trim()
+    while (true) {
+        val stripped = text.replace(THINKING_PREFIX_MARK, "")
+        if (stripped == text) break
+        text = stripped
+    }
+    return text.replace(THINKING_INLINE_MARK, "").trim()
+}
+
+private fun String.truncateThinkingTitle(maxChars: Int): String {
+    val limit = maxChars.coerceAtLeast(1)
+    val trimmed = trimEnd(*THINKING_TITLE_TRAILING)
+    if (trimmed.length <= limit) return trimmed
+    // 别把代理对（emoji）从中间劈开
+    val cut = if (trimmed[limit - 1].isHighSurrogate()) limit - 1 else limit
+    return trimmed.take(cut).trimEnd(*THINKING_TITLE_TRAILING) + "…"
+}

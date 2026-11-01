@@ -316,6 +316,7 @@
   <string name="db_migrating">正在迁移数据库…</string>
   <string name="deep_thinking">深度思考</string>
   <string name="deep_thinking_seconds">思考了 %1$.1f 秒</string>
+  <string name="deep_thinking_seconds_with_summary">思考了 %1$.1f 秒 · %2$s</string>
   <string name="delete">删除</string>
   <string name="donate_page_afdian_desc">适用于🇨🇳用户</string>
   <string name="donate_page_donation_methods">赞助方式</string>
@@ -726,6 +727,8 @@
   <string name="setting_display_page_ui_corner_radius_title">UI 圆角</string>
   <string name="setting_display_page_ui_corner_radius_desc">%1$d dp，应用于聊天气泡、输入框和侧边栏</string>
   <string name="setting_display_page_show_thinking_content_title">显示思考内容</string>
+  <string name="setting_display_page_show_thinking_summary_title">思考标题取首句</string>
+  <string name="setting_display_page_show_thinking_summary_desc">折叠时用思考内容的第一句作为标题，关闭后只显示思考时长</string>
   <string name="setting_display_page_show_token_usage_desc">显示token用量和消息数量</string>
   <string name="setting_display_page_usage_pie_title">用量饼图</string>
   <string name="setting_display_page_usage_pie_desc">在用量看板中用饼图显示上下文占用</string>
@@ -1945,6 +1948,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="stats_page_export_failed">导出失败：%1$s</string>
   <string name="setting_display_page_blur_opacity_title">模糊不透明度</string>
   <string name="setting_display_page_blur_opacity_desc">模糊特效下气泡、输入框和顶栏按钮的底色浓度，越低越通透</string>
+  <string name="setting_display_page_glass_opacity_title">玻璃透明度</string>
+  <string name="setting_display_page_glass_opacity_desc">设置项、选项卡和顶栏按钮的玻璃底色浓度，越低越通透；关闭模糊特效时恢复原来的实色</string>
   <string name="setting_display_page_empty_slogan_title">新对话标语</string>
   <string name="setting_display_page_empty_slogan_desc">新对话界面中央显示在助手头像下方的一句话，留空使用默认文案</string>
   <string name="chat_empty_default_slogan">今天想聊点什么？</string>

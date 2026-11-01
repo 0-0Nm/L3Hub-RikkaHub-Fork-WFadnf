@@ -201,6 +201,8 @@ data class DisplaySetting(
     val contextMeterAbsolute: Boolean = false,
     val showThinkingContent: Boolean = true,
     val autoCloseThinking: Boolean = true,
+    // 折叠的思考卡标题取思考内容的第一句，关掉则只显示思考时长
+    val showThinkingSummary: Boolean = true,
     val updateCheckDisabledUntilEpochMillis: Long = 0L,
     val showMessageJumper: Boolean = true,
     val messageJumperOnLeft: Boolean = false,
@@ -234,6 +236,8 @@ data class DisplaySetting(
     val inputPadding: Int = 8,
     // 模糊特效下气泡/输入框/顶栏的底色不透明度
     val blurOpacity: Float = 0.45f,
+    // 玻璃底（设置项/选项卡/按钮/顶栏图标）的透明度，0 = 全透明，1 = 原实色
+    val glassOpacity: Float = 0.35f,
     // 新对话界面中央的自定义标语
     val emptyChatSlogan: String = "",
     // 终端风格会话界面：等宽字体、深色背景和命令行提示符

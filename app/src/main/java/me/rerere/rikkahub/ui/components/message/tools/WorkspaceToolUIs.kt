@@ -248,7 +248,7 @@ private fun FileContentSummary(text: String, path: String?, loading: Boolean) {
     ) {
         CodeHighlightText(
             code = preview,
-            language = languageOf(path),
+            language = syntaxLanguageOf(path),
             fontSize = 11.sp,
             lineHeight = 14.sp,
             maxLines = FILE_SUMMARY_MAX_LINES,
@@ -277,7 +277,7 @@ private fun FileContentPreview(path: String?, code: String) {
         )
         HighlightCodeBlock(
             code = code,
-            language = languageOf(path),
+            language = syntaxLanguageOf(path),
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -289,6 +289,9 @@ private fun FileContentPreview(path: String?, code: String) {
 object ShellToolUI : ToolUIRenderer {
     private const val TITLE_MAX_CHARS = 40
     private const val SUMMARY_MAX_LINES = 8
+
+    /** 内联摘要里最多列出几条入参 (command + cwd + timeout) */
+    private const val SUMMARY_MAX_ARGS = 3
 
     override val toolName: String = "workspace_shell"
 
@@ -302,10 +305,15 @@ object ShellToolUI : ToolUIRenderer {
         return stringResource(R.string.tool_ui_shell, truncated)
     }
 
-    override fun hasSummary(context: ToolUIContext): Boolean = context.content != null
+    override fun hasSummary(context: ToolUIContext): Boolean =
+        context.argFields != null || context.content != null
 
     @Composable
     override fun Summary(context: ToolUIContext) {
+        // 参数逐条列出: command 是带高亮的 bash 块, 其余 (cwd/timeout) 是单列行
+        context.argFields?.let { fields ->
+            ToolArgsFieldList(fields = fields, compact = true, maxFields = SUMMARY_MAX_ARGS)
+        }
         val content = context.content ?: return
         val combined = remember(content) {
             listOf(content.getStringContent("stdout"), content.getStringContent("stderr"))
@@ -340,12 +348,12 @@ object ShellToolUI : ToolUIRenderer {
     @Composable
     override fun Preview(context: ToolUIContext, onDismissRequest: () -> Unit) {
         val content = context.content
-        if (content == null) {
+        val fields = context.argFields
+        if (content == null && fields == null) {
             DefaultToolPreview(context = context)
             return
         }
         val command = context.arguments.getStringContent("command").orEmpty()
-        val cwd = context.arguments.getStringContent("cwd")
         val stdout = content.getStringContent("stdout").orEmpty()
         val stderr = content.getStringContent("stderr").orEmpty()
         Column(
@@ -365,13 +373,19 @@ object ShellToolUI : ToolUIRenderer {
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                 )
-                ShellExitStatus(content, MaterialTheme.typography.labelMedium)
+                if (content != null) {
+                    ShellExitStatus(content, MaterialTheme.typography.labelMedium)
+                }
             }
-            HighlightCodeBlock(
-                code = if (cwd.isNullOrBlank()) command else "# cwd: $cwd\n$command",
-                language = "bash",
-                modifier = Modifier.fillMaxWidth(),
-            )
+            if (fields != null) {
+                ToolArgsFieldList(fields = fields)
+            } else {
+                HighlightCodeBlock(
+                    code = command,
+                    language = "bash",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             if (stdout.isNotEmpty()) {
                 Text(text = "stdout", style = MaterialTheme.typography.labelMedium)
                 HighlightCodeBlock(
@@ -425,36 +439,3 @@ private fun JsonElement?.long(key: String): Long? =
     this?.jsonObjectOrNull?.get(key)?.jsonPrimitiveOrNull?.longOrNull
 
 private const val FILE_SUMMARY_MAX_LINES = 10
-
-/** 由文件扩展名推断语法高亮语言 */
-private fun languageOf(path: String?): String = when (
-    path?.substringAfterLast('.', "")?.lowercase().orEmpty()
-) {
-    "kt", "kts" -> "kotlin"
-    "java" -> "java"
-    "js", "mjs", "cjs" -> "javascript"
-    "ts" -> "typescript"
-    "tsx" -> "tsx"
-    "jsx" -> "jsx"
-    "py" -> "python"
-    "rb" -> "ruby"
-    "go" -> "go"
-    "rs" -> "rust"
-    "c", "h" -> "c"
-    "cpp", "cc", "cxx", "hpp", "hxx" -> "cpp"
-    "cs" -> "csharp"
-    "swift" -> "swift"
-    "php" -> "php"
-    "sh", "bash", "zsh" -> "bash"
-    "json" -> "json"
-    "xml" -> "xml"
-    "html", "htm" -> "html"
-    "css" -> "css"
-    "scss" -> "scss"
-    "yaml", "yml" -> "yaml"
-    "toml" -> "toml"
-    "md", "markdown" -> "markdown"
-    "sql" -> "sql"
-    "gradle" -> "groovy"
-    else -> "plaintext"
-}

@@ -83,7 +83,9 @@ import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.isEmptyUIMessage
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowDownDouble
@@ -116,6 +118,28 @@ import kotlin.uuid.Uuid
 private const val TAG = "ChatList"
 private const val LoadingIndicatorKey = "LoadingIndicator"
 private const val ScrollBottomKey = "ScrollBottomKey"
+
+// 消息之间的纵向间距：原来由 LazyColumn 的 verticalArrangement 统一给 12dp（终端风格 8dp），
+// 现在改成 0，交给每个 item 按分组情况自己加，这样同组和跨组才能用不同的间距。
+private val MESSAGE_GAP_JOINED = 2.dp
+private val MESSAGE_GAP_ROLE_CHANGE = 16.dp
+private val MESSAGE_GAP_TERMINAL = 8.dp
+
+/**
+ * 气泡分组用的角色：只有普通的气泡消息才参与分组。
+ *
+ * 压缩检查点、子代理通知在界面上是独立卡片，不是气泡，所以返回 null 打断分组；
+ * SYSTEM / TOOL 这类不走气泡样式的节点同理，各自单独成组。空消息不占高度，也打断分组。
+ */
+private fun MessageNode.bubbleGroupRole(): MessageRole? {
+    val message = messages.getOrNull(selectIndex) ?: return null
+    if (message.isContextCheckpoint || message.isSubAgentNotice) return null
+    if (message.parts.isEmptyUIMessage()) return null
+    return when (message.role) {
+        MessageRole.USER, MessageRole.ASSISTANT -> message.role
+        else -> null
+    }
+}
 
 @Composable
 fun ChatList(
@@ -350,7 +374,7 @@ private fun ChatListNormal(
                     )
                 },
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(if (terminalStyle) 8.dp else 12.dp),
+                verticalArrangement = Arrangement.spacedBy(0.dp),
                 modifier = Modifier
                     .fillMaxSize()
                     .topFadingEdge(innerPadding.calculateTopPadding() + 24.dp)
@@ -365,7 +389,21 @@ private fun ChatListNormal(
                 items = conversation.messageNodes,
                 key = { index, item -> item.id },
             ) { index, node ->
+                // 同角色连续的两条消息算一组：气泡接缝两侧的圆角收小、间距压到最小
+                val groupRole = node.bubbleGroupRole()
+                val joinedToPrevious = !terminalStyle && groupRole != null &&
+                    conversation.messageNodes.getOrNull(index - 1)?.bubbleGroupRole() == groupRole
+                val joinedToNext = !terminalStyle && groupRole != null &&
+                    conversation.messageNodes.getOrNull(index + 1)?.bubbleGroupRole() == groupRole
+                val itemGap = when {
+                    terminalStyle -> MESSAGE_GAP_TERMINAL
+                    joinedToPrevious -> MESSAGE_GAP_JOINED
+                    else -> MESSAGE_GAP_ROLE_CHANGE
+                }
                 Column {
+                    if (itemGap > 0.dp) {
+                        Spacer(Modifier.height(itemGap))
+                    }
                     ListSelectableItem(
                         key = node.id,
                         onSelectChange = {
@@ -417,6 +455,8 @@ private fun ChatListNormal(
                             conversationId = conversation.id,
                             lastMessage = index == lastMessageIndex,
                             messageIndex = index,
+                            joinedToPrevious = joinedToPrevious,
+                            joinedToNext = joinedToNext,
                         )
                     }
                 }
@@ -424,17 +464,29 @@ private fun ChatListNormal(
 
             if (!loading && assistant?.allowConversationSystemPrompt == true && onConversationSystemPromptChange != null) {
                 item(key = "ConversationSystemPrompt") {
-                    ConversationSystemPromptButton(
-                        customSystemPrompt = conversation.customSystemPrompt,
-                        onSystemPromptChange = onConversationSystemPromptChange,
-                    )
+                    Column {
+                        Spacer(
+                            Modifier.height(
+                                if (terminalStyle) MESSAGE_GAP_TERMINAL else MESSAGE_GAP_ROLE_CHANGE
+                            )
+                        )
+                        ConversationSystemPromptButton(
+                            customSystemPrompt = conversation.customSystemPrompt,
+                            onSystemPromptChange = onConversationSystemPromptChange,
+                        )
+                    }
                 }
             }
 
             if (loading) {
                 item(LoadingIndicatorKey) {
                     Row(
-                        modifier = Modifier.padding(8.dp),
+                        modifier = Modifier.padding(
+                            start = 8.dp,
+                            end = 8.dp,
+                            bottom = 8.dp,
+                            top = if (terminalStyle) 8.dp else MESSAGE_GAP_ROLE_CHANGE,
+                        ),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {

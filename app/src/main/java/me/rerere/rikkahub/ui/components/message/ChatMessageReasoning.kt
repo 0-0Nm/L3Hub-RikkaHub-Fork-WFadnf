@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -50,6 +51,8 @@ import me.rerere.rikkahub.ui.components.richtext.SelectableContent
 import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.modifier.shimmer
+import me.rerere.rikkahub.utils.THINKING_SUMMARY_WINDOW
+import me.rerere.rikkahub.utils.extractThinkingSummary
 import me.rerere.rikkahub.utils.extractThinkingTitle
 import kotlin.time.Clock
 import kotlin.time.Duration
@@ -199,7 +202,20 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
     collapsedAdaptiveWidth: Boolean = false,
 ) {
     val (state, loading) = rememberReasoningState(reasoning)
-    val thinkingTitle = reasoning.reasoning.extractThinkingTitle()
+    val settings = LocalSettings.current
+    val summaryEnabled = settings.displaySetting.showThinkingSummary
+    // 只解析开头一段：流式输出时思考内容每帧都在变长，全文扫一遍太贵
+    val thinkingSummary = remember(reasoning.reasoning, summaryEnabled) {
+        if (summaryEnabled) {
+            reasoning.reasoning.take(THINKING_SUMMARY_WINDOW).extractThinkingSummary()
+        } else {
+            null
+        }
+    }
+    // 首句标题关掉后回到原版行为：流式过程中用整行加粗的标题
+    val thinkingTitle = remember(reasoning.reasoning, thinkingSummary) {
+        if (thinkingSummary == null) reasoning.reasoning.extractThinkingTitle() else null
+    }
     val showThinkingTitle = loading && thinkingTitle != null
     val chatFontFamily = LocalTextStyle.current.fontFamily
 
@@ -215,10 +231,23 @@ fun ChainOfThoughtScope.ChatMessageReasoningStep(
             )
         },
         label = {
-            if (showThinkingTitle) {
-                ReasoningTitle(title = thinkingTitle!!)
-            } else {
-                Text(
+            when {
+                thinkingSummary != null -> Text(
+                    text = stringResource(
+                        R.string.deep_thinking_seconds_with_summary,
+                        state.duration.toDouble(DurationUnit.SECONDS).toFloat(),
+                        thinkingSummary,
+                    ),
+                    style = MaterialTheme.typography.titleSmall.copy(fontFamily = chatFontFamily),
+                    color = MaterialTheme.colorScheme.secondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.shimmer(isLoading = loading),
+                )
+
+                showThinkingTitle -> ReasoningTitle(title = thinkingTitle!!)
+
+                else -> Text(
                     text = stringResource(
                         R.string.deep_thinking_seconds,
                         state.duration.toDouble(DurationUnit.SECONDS).toFloat()

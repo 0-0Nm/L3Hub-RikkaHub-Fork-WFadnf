@@ -52,6 +52,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.db.fts.MessageSearchResult
 import me.rerere.rikkahub.data.db.fts.MessageSearchSort
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.glassSegmentedButtonColors
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.terminal.IconButton
 import me.rerere.rikkahub.ui.terminal.RadioButton
@@ -155,6 +156,7 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
             ) {
                 MessageSearchScope.entries.forEachIndexed { index, scope ->
                     SegmentedButton(
+                        colors = glassSegmentedButtonColors(),
                         selected = vm.searchScope == scope,
                         onClick = { vm.onScopeChange(scope) },
                         shape = SegmentedButtonDefaults.itemShape(
