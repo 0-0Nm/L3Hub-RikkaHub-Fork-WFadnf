@@ -257,7 +257,7 @@ private fun Conversation.trimToTokenBudget(budget: Int, reservedTokens: Int): Co
     // 「取最接近目标的边界」允许轻微超出。超出到检查点之后一条都压不掉时，预算等于没起作用，
     // 减半再算一次，保证至少切掉一条，否则压缩会在最后一步空转成「没有可压缩范围」
     val checkpointIndex = messageNodes.indexOfLast { it.currentMessage.isContextCheckpoint }
-    if (trim.nodeIndex <= checkpointIndex + 1 && effectiveTarget > 0) {
+    if (trim.nodeIndex <= checkpointIndex + 1 && trim.partIndex == 0 && effectiveTarget > 0) {
         return keepRecentContextForTokens(effectiveTarget / 2)
     }
     return trim
