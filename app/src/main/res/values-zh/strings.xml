@@ -949,7 +949,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_page_web_server_start">启动</string>
   <string name="setting_page_web_server_stop">停止</string>
 
-  <string name="setting_page_ssh_title">在终端中使用</string>
+  <string name="setting_page_ssh_title">在终端中使用（暂不可用）</string>
   <string name="setting_page_ssh_title_desc">用系统 ssh 客户端连接本应用，在命令行里下命令</string>
   <string name="setting_page_ssh_enable">SSH 服务</string>
   <string name="setting_page_ssh_enable_desc">内置 SSH 服务端，提供按行执行的命令行界面</string>

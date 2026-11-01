@@ -991,7 +991,7 @@
   <string name="setting_page_web_server_start">Start</string>
   <string name="setting_page_web_server_stop">Stop</string>
 
-  <string name="setting_page_ssh_title">Use in a terminal</string>
+  <string name="setting_page_ssh_title">Use in terminal (unavailable)</string>
   <string name="setting_page_ssh_title_desc">Connect with the system ssh client and drive this app from the command line</string>
   <string name="setting_page_ssh_enable">SSH server</string>
   <string name="setting_page_ssh_enable_desc">Built-in SSH server that exposes a line based command interface</string>
