@@ -24,8 +24,8 @@ android {
         applicationId = "com.rikkahub.l3hub.wfadnf"
         minSdk = 26
         targetSdk = 37
-        versionCode = 257
-        versionName = "L.3.1.1.79"
+        versionCode = 258
+        versionName = "L.3.1.1.80"
         buildConfigField("boolean", "UPDATE_CHECK_ENABLED", "false")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -95,10 +95,8 @@ android {
             // 包名和签名不变，可以直接覆盖安装。
             isDebuggable = false
             // R8 本机一次要 8 分钟, 日常构建先不开; 需要时把下面两行打开, 或交给 CI 出包
-            // [排查中] 内置 SSH 在 R8 处理后运行期 NoClassDefFoundError(ServerBuilder)，
-            // 先关掉 R8 做对照：能在关闭后跑通就说明是规则问题，跑不通就是 sshd 字节码/多版本 jar 问题
             optimization {
-                enable = false
+                enable = true
             }
             proguardFiles("proguard-rules.pro")
             buildConfigField("String", "VERSION_NAME", "\"${android.defaultConfig.versionName}\"")
