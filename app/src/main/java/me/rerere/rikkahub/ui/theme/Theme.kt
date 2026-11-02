@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.ui.theme
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
 import android.os.Build
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.snap
@@ -146,9 +149,7 @@ fun RikkahubTheme(
             },
             content = {
                 // 编辑模式：全屏盖一层取色器，点哪算哪
-                androidx.compose.foundation.layout.Box(
-                    modifier = androidx.compose.ui.Modifier.fillMaxSize()
-                ) {
+                Box(modifier = Modifier.fillMaxSize()) {
                     content()
                     ColorProbeOverlay()
                 }
