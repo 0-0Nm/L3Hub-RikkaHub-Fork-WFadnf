@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import android.content.ClipData
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -25,10 +28,15 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,6 +46,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,14 +56,25 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Copy01
+import me.rerere.hugeicons.stroke.Download04
 import me.rerere.hugeicons.stroke.PencilEdit01
 import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.hugeicons.stroke.Tick01
+import me.rerere.hugeicons.stroke.Upload02
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.export.PaletteSerializer
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.CardGroupScope
@@ -67,6 +88,7 @@ import me.rerere.rikkahub.ui.theme.PalettePresets
 import me.rerere.rikkahub.ui.theme.PaletteRole
 import me.rerere.rikkahub.ui.theme.PaletteSetting
 import me.rerere.rikkahub.ui.theme.argbLong
+import me.rerere.rikkahub.ui.theme.parseHexColor
 import me.rerere.rikkahub.ui.theme.findPalettePreset
 import me.rerere.rikkahub.utils.plus
 import me.rerere.ui.components.RikkaConfirmDialog
@@ -92,6 +114,55 @@ fun SettingPalettePage(vm: SettingVM = koinViewModel()) {
         vm.updateSettings { it.copy(palette = fn(it.palette)) }
     }
 
+    val context = LocalContext.current
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    fun notify(message: String) {
+        scope.launch { snackbarHostState.showSnackbar(message) }
+    }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val json = PaletteSerializer.exportToJson(settings.palette)
+        scope.launch {
+            val saved = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)
+                        ?.bufferedWriter()
+                        ?.use { it.write(json) }
+                        ?: error("no output stream")
+                }.isSuccess
+            }
+            notify(
+                context.getString(
+                    if (saved) R.string.setting_palette_page_export_done
+                    else R.string.setting_palette_page_failed
+                )
+            )
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val imported = withContext(Dispatchers.IO) {
+                runCatching { PaletteSerializer.import(context, uri).getOrThrow() }.getOrNull()
+            }
+            if (imported != null) {
+                updatePalette { imported }
+                notify(context.getString(R.string.setting_palette_page_import_done))
+            } else {
+                notify(context.getString(R.string.setting_palette_page_failed))
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
@@ -101,6 +172,7 @@ fun SettingPalettePage(vm: SettingVM = koinViewModel()) {
                 colors = CustomColors.topBarColors,
             )
         },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
@@ -146,6 +218,20 @@ fun SettingPalettePage(vm: SettingVM = koinViewModel()) {
                         supportingContent = { Text(stringResource(R.string.setting_palette_page_enable_desc)) },
                     )
                 }
+            }
+
+            item("seedColor") {
+                SeedColorCard(
+                    onApply = { colors, dark ->
+                        updatePalette {
+                            it.copy(
+                                presetId = it.presetId ?: DEFAULT_PALETTE_ID,
+                                light = if (dark) it.light else colors,
+                                dark = if (dark) colors else it.dark,
+                            )
+                        }
+                    },
+                )
             }
 
             item("presetsTitle") {
@@ -196,6 +282,39 @@ fun SettingPalettePage(vm: SettingVM = koinViewModel()) {
                         colors = darkColors,
                         headline = darkTitle,
                         onClick = { editingDarkMode = true },
+                    )
+                }
+            }
+
+            item("transfer") {
+                CardGroup {
+                    item(
+                        onClick = { exportLauncher.launch("l3hub-palette.json") },
+                        leadingContent = { Icon(HugeIcons.Download04, contentDescription = null) },
+                        headlineContent = { Text(stringResource(R.string.setting_palette_page_export)) },
+                        supportingContent = { Text(stringResource(R.string.setting_palette_page_export_desc)) },
+                    )
+                    item(
+                        onClick = {
+                            val json = PaletteSerializer.exportToJson(settings.palette)
+                            scope.launch {
+                                clipboard.setClipEntry(
+                                    ClipEntry(ClipData.newPlainText("palette", json))
+                                )
+                                snackbarHostState.showSnackbar(
+                                    context.getString(R.string.setting_palette_page_copied)
+                                )
+                            }
+                        },
+                        leadingContent = { Icon(HugeIcons.Copy01, contentDescription = null) },
+                        headlineContent = { Text(stringResource(R.string.setting_palette_page_copy)) },
+                        supportingContent = { Text(stringResource(R.string.setting_palette_page_copy_desc)) },
+                    )
+                    item(
+                        onClick = { importLauncher.launch(arrayOf("application/json")) },
+                        leadingContent = { Icon(HugeIcons.Upload02, contentDescription = null) },
+                        headlineContent = { Text(stringResource(R.string.setting_palette_page_import)) },
+                        supportingContent = { Text(stringResource(R.string.setting_palette_page_import_desc)) },
                     )
                 }
             }
@@ -309,7 +428,7 @@ private fun PalettePreview(colors: PaletteColors, darkMode: Boolean) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(scheme.surface)
+            .background(scheme.surfaceContainer)
             .border(1.dp, scheme.outlineVariant, RoundedCornerShape(16.dp))
             .padding(12.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -472,6 +591,7 @@ private fun PaletteColorDialog(
             ColorPickerRow(
                 color = color,
                 onColorChange = { color = it },
+                showAlpha = true,
             )
         },
         confirmButton = {
@@ -501,3 +621,114 @@ private fun PaletteRole.labelRes(): Int = when (this) {
 }
 
 private fun Long.toHexCode(): String = "#%06X".format(this and 0xFFFFFF)
+
+/**
+ * 输入一个色号，当场展开成深浅两套色卡。
+ *
+ * 「应用」只写其中一侧：既有的自定义色不会被顺手清掉，想只调浅色就只点浅色。
+ */
+@Composable
+private fun SeedColorCard(onApply: (PaletteColors, Boolean) -> Unit) {
+    var input by rememberSaveable { mutableStateOf("") }
+    val seed = remember(input) { parseHexColor(input) }
+    val invalid = input.isNotBlank() && seed == null
+    val lightColors = remember(seed) { seed?.let { PaletteColors.fromSeed(it, dark = false) } }
+    val darkColors = remember(seed) { seed?.let { PaletteColors.fromSeed(it, dark = true) } }
+
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = stringResource(R.string.setting_palette_page_seed_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = stringResource(R.string.setting_palette_page_seed_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            OutlinedTextField(
+                value = input,
+                onValueChange = { input = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("HEX") },
+                placeholder = { Text("#6750A4") },
+                singleLine = true,
+                isError = invalid,
+                trailingIcon = if (input.isEmpty()) {
+                    null
+                } else {
+                    {
+                        IconButton(onClick = { input = "" }) {
+                            Icon(HugeIcons.Cancel01, contentDescription = null)
+                        }
+                    }
+                },
+            )
+
+            if (lightColors != null && darkColors != null) {
+                SeedPreviewRow(
+                    colors = lightColors,
+                    dark = false,
+                    label = stringResource(R.string.setting_palette_page_light_palette),
+                )
+                SeedPreviewRow(
+                    colors = darkColors,
+                    dark = true,
+                    label = stringResource(R.string.setting_palette_page_dark_palette),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { onApply(lightColors, false) }) {
+                        Text(stringResource(R.string.setting_palette_page_apply_light))
+                    }
+                    TextButton(onClick = { onApply(darkColors, true) }) {
+                        Text(stringResource(R.string.setting_palette_page_apply_dark))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 一行色卡预览：底色用 surfaceContainer，和真界面用的是同一个角色。 */
+@Composable
+private fun SeedPreviewRow(colors: PaletteColors, dark: Boolean, label: String) {
+    val scheme = remember(colors, dark) { colors.generateColorScheme(dark) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(scheme.surfaceContainer)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = scheme.onSurface,
+        )
+        Spacer(Modifier.weight(1f))
+        listOf(scheme.primary, scheme.secondary, scheme.tertiary, scheme.error).forEach { swatch ->
+            Canvas(
+                modifier = Modifier
+                    .size(18.dp)
+                    .clip(CircleShape)
+            ) {
+                drawCircle(color = swatch)
+            }
+        }
+    }
+}

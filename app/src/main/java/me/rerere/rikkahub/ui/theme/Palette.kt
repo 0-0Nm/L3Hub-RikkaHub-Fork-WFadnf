@@ -76,7 +76,8 @@ data class PaletteColors(
         secondary = secondary,
         tertiary = tertiary,
         error = error,
-        neutral = background,
+        // 中性族的种子改用「表层色」：容器色要跟它走，而不是跟背景色走
+        neutral = surface,
         neutralVariant = surfaceVariant,
     ).copy(
         primary = Color(primary.toInt()),
@@ -89,7 +90,45 @@ data class PaletteColors(
         surface = Color(surface.toInt()),
         surfaceVariant = Color(surfaceVariant.toInt()),
         onSurface = Color(onSurface.toInt()),
-    )
+    ).withSurfaceFamily(surface = surface, dark = dark)
+
+    companion object {
+        /** 展开用的默认错误色。种子里没有红，出错提示就会和正文混在一起。 */
+        const val DEFAULT_ERROR = 0xFFB3261EL
+
+        /**
+         * 用一个色号当种子，展开成九个可编辑的角色。
+         *
+         * 主色/辅色/第三色都从这个色号派生，中性色压到低彩度再展开，
+         * 得到的是一张能直接用的色卡，而不是把同一个颜色刷九遍。
+         */
+        fun fromSeed(seed: Long, dark: Boolean): PaletteColors {
+            val opaque = seed and 0xFFFFFFFFL
+            val hct = Hct.fromInt(opaque.toInt())
+            val neutral = Hct.from(hct.hue, 4.0, hct.tone)
+            val neutralVariant = Hct.from(hct.hue, 8.0, hct.tone)
+            val scheme = paletteColorScheme(
+                dark = dark,
+                primary = opaque,
+                secondary = opaque,
+                tertiary = opaque,
+                error = DEFAULT_ERROR,
+                neutral = neutral.toInt().toLong() and 0xFFFFFFFFL,
+                neutralVariant = neutralVariant.toInt().toLong() and 0xFFFFFFFFL,
+            )
+            return PaletteColors(
+                primary = opaque,
+                onPrimary = scheme.onPrimary.argbLong(),
+                secondary = scheme.secondary.argbLong(),
+                tertiary = scheme.tertiary.argbLong(),
+                error = scheme.error.argbLong(),
+                background = scheme.background.argbLong(),
+                surface = scheme.surface.argbLong(),
+                surfaceVariant = scheme.surfaceVariant.argbLong(),
+                onSurface = scheme.onSurface.argbLong(),
+            )
+        }
+    }
 }
 
 /**
@@ -153,3 +192,65 @@ internal fun paletteColorScheme(
 }
 
 internal fun Color.argbLong(): Long = toArgb().toLong() and 0xFFFFFFFFL
+
+
+/**
+ * M3 表面族的音调（tone），深浅各一套。
+ *
+ * 数值取自 M3 规范：surfaceDim / surfaceBright / surfaceContainerLowest…Highest。
+ * 音调是固定的，色相和彩度由「表层色」决定——这正是改 surface 能带动整族的原因。
+ */
+internal data class SurfaceTones(
+    val dim: Double,
+    val bright: Double,
+    val lowest: Double,
+    val low: Double,
+    val container: Double,
+    val high: Double,
+    val highest: Double,
+)
+
+internal val LightSurfaceTones = SurfaceTones(
+    dim = 87.0,
+    bright = 98.0,
+    lowest = 100.0,
+    low = 96.0,
+    container = 94.0,
+    high = 92.0,
+    highest = 90.0,
+)
+
+internal val DarkSurfaceTones = SurfaceTones(
+    dim = 6.0,
+    bright = 24.0,
+    lowest = 4.0,
+    low = 10.0,
+    container = 12.0,
+    high = 17.0,
+    highest = 22.0,
+)
+
+/**
+ * 把整族表面色按「表层色」的色相重算一遍。
+ *
+ * 只覆盖 surface 一个字段是不够的：应用里绝大多数容器用的是 surfaceContainer*，
+ * 它们原先由中性种子展开、音调钉死，所以改 surface 在浅色下几乎看不出来。
+ * 重算之后改一次表层色，卡片、顶栏、列表项、弹层跟着一起走。
+ */
+internal fun ColorScheme.withSurfaceFamily(surface: Long, dark: Boolean): ColorScheme {
+    val seed = Hct.fromInt(surface.toInt())
+    val tones = if (dark) DarkSurfaceTones else LightSurfaceTones
+
+    fun at(tone: Double): Color = Color(Hct.from(seed.hue, seed.chroma, tone).toInt())
+
+    return copy(
+        surface = Color(surface.toInt()),
+        surfaceDim = at(tones.dim),
+        surfaceBright = at(tones.bright),
+        surfaceContainerLowest = at(tones.lowest),
+        surfaceContainerLow = at(tones.low),
+        surfaceContainer = at(tones.container),
+        surfaceContainerHigh = at(tones.high),
+        surfaceContainerHighest = at(tones.highest),
+    )
+}

@@ -308,12 +308,26 @@ L3Hub 自己的设置都在 `Settings` 里，随 `settings.json` 整份序列化
 - 优先级：`dynamicColor`（跟随系统动态取色）> 调色板 > `themeId`（预设主题 / 自定义主题）。
   动态取色开着时调色板整块不生效，页面顶部同一处就能关掉它；默认值仍是上游的「开」，不动老用户
 - 自定义只让用户指定九个角色：primary / onPrimary / secondary / tertiary / error / background /
-  surface / surfaceVariant / onSurface，其余角色（容器色、`surfaceContainer*`、outline、inverseX、fixed 系列）
-  交给 `material3` 模块里的 material-color-utilities 按 HCT 音调展开，不手写二十个色值
-- 生成方式：`paletteColorScheme()` 用四个彩色种子加中性种子（background / surfaceVariant）构造 `DynamicScheme`，
+  surface / surfaceVariant / onSurface，其余角色交给 `material3` 模块里的 material-color-utilities
+  按 HCT 音调展开，不手写二十个色值；`surfaceContainer*` 和 `surfaceBright/Dim` 由「表层色」单独接管，见下一条
+- 生成方式：`paletteColorScheme()` 用四个彩色种子加中性种子（surface / surfaceVariant）构造 `DynamicScheme`，
   `toColorScheme()` 之后再把这九个角色 `copy` 回去，所以选中的颜色所见即所得
-- 取色器复用主题页原来的 `ColorPickerRow`（HSV/RGB 双模式 + `#RRGGBB` 文本输入），
-  已从 `SettingThemePage.kt` 提到 `ui/components/ui/ColorPickerRow.kt`，两处共用，没有引入新依赖
+- 表面族由「表层色」接管：`withSurfaceFamily()` 取 surface 的 HCT 色相和彩度，
+  按 M3 固定音调（浅色 87/98/100/96/94/92/90，深色 6/24/4/10/12/17/22）重算
+  `surfaceDim`、`surfaceBright` 和 `surfaceContainerLowest…Highest`。
+  早先只覆盖 `surface` 一个字段，而应用里 118 处用的是 `surfaceContainer*`，
+  它们由中性种子展开、音调钉死，所以浅色下改「表层色」几乎看不出变化。
+  「背景色」从此只管自己（聊天页底、Markdown 底），不再偷偷带动整族容器色
+- 取色器：`ColorPickerRow`（HSV/RGB 双模式 + 色卡 + 色号输入 + 可选 A 通道滑杆），
+  已从 `SettingThemePage.kt` 提到 `ui/components/ui/ColorPickerRow.kt`，两处共用，没有引入新依赖。
+  色号输入框只在失焦时回写规范格式——之前每敲一个字符就被 `remember(argb)` 重置，
+  粘贴 `#466E7A` 会被立刻改写成 `rgb(70 110 122)`
+- 色号：`#RRGGBB` / `#AARRGGBB` / `#RGB` 三种写法，解析和格式化在 `ui/theme/ColorHex.kt`，
+  纯计算，JVM 单测直接跑。不带 alpha 按不透明处理
+- 从色号生成：调色板页顶部填一个色号，`PaletteColors.fromSeed()` 当场展开成深浅两套色卡，
+  可以只应用到其中一侧
+- 导出 / 导入：`data/export/PaletteSerializer.kt`，外面套项目既有的 `ExportData`（version + type + data），
+  导入时也吃裸的 `PaletteSetting` 对象，方便从剪贴板粘一段手写的
 - 存盘：`Settings.palette`（`PaletteSetting`），DataStore key `palette`。三个字段都可空：
   `presetId == null` = 不启用，行为与改动前完全一致；`light` / `dark` 为 null 表示该侧用预设种子生成，
   非 null 表示该侧被逐个改过，所以可以只调其中一套
@@ -337,7 +351,9 @@ L3Hub 自己的设置都在 `Settings` 里，随 `settings.json` 整份序列化
 | `ui/theme/Palette.kt` | 新增：`PaletteColors` / `PaletteSetting` / `PaletteRole` / `paletteColorScheme()` |
 | `ui/theme/PalettePresets.kt` | 新增：六套预设的种子色与展开逻辑 |
 | `ui/theme/Theme.kt` | 动态取色之后、`themeId` 之前插入调色板配色 |
-| `ui/components/ui/ColorPickerRow.kt` | 新增：从 `SettingThemePage` 抽出的取色行 |
+| `ui/components/ui/ColorPickerRow.kt` | 新增：从 `SettingThemePage` 抽出的取色行，含色卡与 A 通道 |
+| `ui/theme/ColorHex.kt` | 新增：色号解析 / 格式化（纯函数） |
+| `data/export/PaletteSerializer.kt` | 新增：调色板导出与导入 |
 | `ui/pages/setting/SettingPalettePage.kt` | 新增：预设列表（色块 + 名称）、自定义编辑、恢复默认 |
 | `ui/pages/setting/SettingPreferencesThemePage.kt` | 主题分组下加一行「调色板」 |
 | `RouteActivity.kt` | `Screen.SettingPalette` 与对应的 `entry` |
