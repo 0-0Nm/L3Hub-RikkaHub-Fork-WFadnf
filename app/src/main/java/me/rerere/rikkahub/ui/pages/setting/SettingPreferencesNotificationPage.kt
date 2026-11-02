@@ -4,28 +4,33 @@ import android.content.Intent
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -40,19 +45,19 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DisplaySetting
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
-import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceButtons
-import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceLabel
+import me.rerere.rikkahub.ui.components.ui.CardGroupValue
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionNotification
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.components.ui.switchItem
-import me.rerere.rikkahub.ui.terminal.TextButton
+import me.rerere.rikkahub.ui.floating.FloatingPanelSizing
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.adaptiveHorizontalPadding
 import me.rerere.rikkahub.utils.plus
 import me.rerere.rikkahub.utils.toLocalDateTime
 import org.koin.androidx.compose.koinViewModel
 import java.time.Instant
+import kotlin.math.roundToInt
 
 private val UPDATE_PAUSE_DAY_OPTIONS = listOf(7, 14, 21)
 private const val MILLIS_PER_DAY = 24 * 60 * 60 * 1_000L
@@ -62,11 +67,25 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
     val settings by vm.settings.collectAsStateWithLifecycle()
     var displaySetting by remember(settings) { mutableStateOf(settings.displaySetting) }
     var showUpdatePauseDialog by remember { mutableStateOf(false) }
+    var showFloatingIconPicker by remember { mutableStateOf(false) }
     var selectedUpdatePauseDays by remember { mutableStateOf(UPDATE_PAUSE_DAY_OPTIONS.first()) }
 
     fun updateDisplaySetting(setting: DisplaySetting) {
         displaySetting = setting
         vm.updateSettings { it.copy(displaySetting = setting) }
+    }
+
+    // 滑块拖动时只改这三份草稿，松手才写设置：每帧落盘要把整份 DisplaySetting 重新编码一遍
+    var draftPanelWidth by remember(displaySetting.floatingPanelWidthRatio) {
+        mutableFloatStateOf(FloatingPanelSizing.clampWidthRatio(displaySetting.floatingPanelWidthRatio))
+    }
+    var draftPanelHeight by remember(displaySetting.floatingPanelHeightRatio) {
+        mutableFloatStateOf(FloatingPanelSizing.clampHeightRatio(displaySetting.floatingPanelHeightRatio))
+    }
+    var draftPreviewHeight by remember(displaySetting.floatingPreviewMaxHeight) {
+        mutableFloatStateOf(
+            FloatingPanelSizing.clampPreviewHeight(displaySetting.floatingPreviewMaxHeight).toFloat()
+        )
     }
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -187,6 +206,84 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
                     },
                     headlineContent = { Text(stringResource(R.string.setting_page_preferences_notification_floating_window)) },
                 )
+                if (displaySetting.enableFloatingChatWindow) {
+                    item(
+                        onClick = { showFloatingIconPicker = true },
+                        leadingContent = {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.secondaryContainer),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                FloatingBubbleIconThumb(
+                                    icon = displaySetting.floatingBubbleIcon,
+                                    size = 20.dp,
+                                )
+                            }
+                        },
+                        headlineContent = { Text(stringResource(R.string.floating_bubble_icon_title)) },
+                        supportingContent = { Text(stringResource(R.string.floating_bubble_icon_desc)) },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, contentDescription = null) },
+                    )
+                    formItem(
+                        headlineContent = { Text(stringResource(R.string.floating_panel_width)) },
+                        trailingContent = {
+                            CardGroupValue(FloatingPanelSizing.percentLabel(draftPanelWidth))
+                        },
+                    ) {
+                        Slider(
+                            value = draftPanelWidth,
+                            onValueChange = { draftPanelWidth = FloatingPanelSizing.clampWidthRatio(it) },
+                            onValueChangeFinished = {
+                                updateDisplaySetting(displaySetting.copy(floatingPanelWidthRatio = draftPanelWidth))
+                            },
+                            valueRange = FloatingPanelSizing.MIN_WIDTH_RATIO..FloatingPanelSizing.MAX_WIDTH_RATIO,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    formItem(
+                        headlineContent = { Text(stringResource(R.string.floating_panel_height)) },
+                        trailingContent = {
+                            CardGroupValue(FloatingPanelSizing.percentLabel(draftPanelHeight))
+                        },
+                    ) {
+                        Slider(
+                            value = draftPanelHeight,
+                            onValueChange = { draftPanelHeight = FloatingPanelSizing.clampHeightRatio(it) },
+                            onValueChangeFinished = {
+                                updateDisplaySetting(displaySetting.copy(floatingPanelHeightRatio = draftPanelHeight))
+                            },
+                            valueRange = FloatingPanelSizing.MIN_HEIGHT_RATIO..FloatingPanelSizing.MAX_HEIGHT_RATIO,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    formItem(
+                        headlineContent = { Text(stringResource(R.string.floating_preview_height)) },
+                        trailingContent = {
+                            CardGroupValue(
+                                stringResource(R.string.floating_size_dp, draftPreviewHeight.roundToInt())
+                            )
+                        },
+                    ) {
+                        Slider(
+                            value = draftPreviewHeight,
+                            onValueChange = { draftPreviewHeight = it },
+                            onValueChangeFinished = {
+                                updateDisplaySetting(
+                                    displaySetting.copy(
+                                        floatingPreviewMaxHeight =
+                                            FloatingPanelSizing.clampPreviewHeight(draftPreviewHeight.roundToInt()),
+                                    )
+                                )
+                            },
+                            valueRange = FloatingPanelSizing.MIN_PREVIEW_HEIGHT_DP.toFloat()..
+                                FloatingPanelSizing.MAX_PREVIEW_HEIGHT_DP.toFloat(),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
                 if (displaySetting.enableFloatingChatWindow && !canDrawOverlays) {
                     item(
                         onClick = ::requestOverlayPermission,
@@ -222,6 +319,16 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
             }
 
         }
+    }
+    if (showFloatingIconPicker) {
+        FloatingBubbleIconPicker(
+            current = displaySetting.floatingBubbleIcon,
+            onSelect = { icon ->
+                // 旧图片由 FilesManager.saveBubbleIcon 自己在写入成功之后清掉，这里只管存设置
+                updateDisplaySetting(displaySetting.copy(floatingBubbleIcon = icon))
+            },
+            onDismiss = { showFloatingIconPicker = false },
+        )
     }
     if (embedded) {
         content()

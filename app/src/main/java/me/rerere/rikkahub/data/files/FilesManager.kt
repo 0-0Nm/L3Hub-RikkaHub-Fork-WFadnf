@@ -225,6 +225,28 @@ class FilesManager(
         }
     }
 
+    /**
+     * 悬浮球的自定义图标。
+     *
+     * 单独放一个目录、不登记 managed files：它不是会话内容，不该出现在「文件管理」里，
+     * 更不该被那里的「按日期清理」顺手删掉。目录里只留一张，换图时旧的才删。
+     */
+    fun saveBubbleIcon(uri: Uri): Uri? = runCatching {
+        val dir = context.filesDir.resolve(FileFolders.BUBBLE_ICON)
+        if (!dir.exists()) {
+            dir.mkdirs()
+        }
+        val target = File(dir, buildUuidFileName(getFileNameFromUri(uri), getFileMimeType(uri)))
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            target.outputStream().use { output -> input.copyTo(output) }
+        } ?: error("Cannot open input stream for $uri")
+        // 写成功之后再清理旧的：中途失败时上一张还能用
+        dir.listFiles()?.filter { it != target }?.forEach { it.delete() }
+        target.toUri()
+    }.onFailure {
+        Log.w(TAG, "saveBubbleIcon failed: $uri", it)
+    }.getOrNull()
+
     suspend fun countChatFiles(): Pair<Int, Long> = withContext(Dispatchers.IO) {
         val dir = context.filesDir.resolve(FileFolders.UPLOAD)
         if (!dir.exists()) {
@@ -524,6 +546,7 @@ object FileFolders {
     const val FONTS = "fonts"
     const val TOOL_OUTPUTS = "tool_outputs"
     const val MEDIA_CREATION = "media_creation"
+    const val BUBBLE_ICON = "bubble_icon"
 }
 
 suspend fun FilesManager.saveUploadFromUri(

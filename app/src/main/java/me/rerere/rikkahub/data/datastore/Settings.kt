@@ -14,6 +14,7 @@ import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TITLE_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TRANSLATION_PROMPT
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
+import me.rerere.rikkahub.data.model.FloatingBubbleIcon
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
@@ -223,6 +224,13 @@ data class DisplaySetting(
     val enableNotificationOnMessageGeneration: Boolean = false,
     val enableLiveUpdateNotification: Boolean = false,
     val enableFloatingChatWindow: Boolean = false,
+    // 面板宽度占屏幕宽度的比例，设置里的滑块和面板右下角的拖动改的是同一个值
+    val floatingPanelWidthRatio: Float = 1.0f,
+    // 面板最高占可用高度的比例；内容少时照常收缩，这个只是上限
+    val floatingPanelHeightRatio: Float = 1.0f,
+    // 面板里预览区的最大高度(dp)，超出后在预览区内部滚动
+    val floatingPreviewMaxHeight: Int = 200,
+    val floatingBubbleIcon: FloatingBubbleIcon = FloatingBubbleIcon.AppLogo,
     val codeBlockAutoWrap: Boolean = false,
     val codeBlockAutoCollapse: Boolean = false,
     val showLineNumbers: Boolean = false,

@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.Lifecycle
@@ -46,6 +47,8 @@ import kotlinx.coroutines.launch
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.conversationIntent
+import me.rerere.rikkahub.data.datastore.DisplaySetting
+import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.GenerationPhase
 import me.rerere.rikkahub.data.model.generationPhase
@@ -70,6 +73,7 @@ class ChatFloatingWindows(
     private val context: Application,
     private val appScope: AppScope,
     private val tracker: ChatFloatingTracker,
+    private val settingsStore: SettingsStore,
     lazyChatService: Lazy<ChatService>,
 ) {
     private val chatService by lazyChatService
@@ -139,7 +143,13 @@ class ChatFloatingWindows(
 
     private fun installBubble(): FxControl = FloatingX.install(BUBBLE_TAG) {
         compose {
-            WindowContent { state -> ChatFloatingBubble(state = state, onClick = tracker::expand) }
+            WindowContent { state, display ->
+                ChatFloatingBubble(
+                    state = state,
+                    icon = display.floatingBubbleIcon,
+                    onClick = tracker::expand,
+                )
+            }
         }
         anchor(FxGravity.CENTER_END, dy = -dp(96f))
         margin(left = dp(8f), right = dp(8f))
@@ -151,11 +161,27 @@ class ChatFloatingWindows(
 
     private fun installPanel(): FxControl = FloatingX.install(PANEL_TAG) {
         compose {
-            WindowContent { state ->
+            WindowContent { state, display ->
                 val conversationId = state.conversationId
                 ChatFloatingPanel(
                     state = state,
+                    widthFraction = display.floatingPanelWidthRatio,
+                    heightFraction = display.floatingPanelHeightRatio,
                     maxHeight = rememberPanelMaxHeight(),
+                    previewMaxHeight = display.floatingPreviewMaxHeight.dp,
+                    onResize = { width, height, previewHeight ->
+                        appScope.launch {
+                            settingsStore.update { settings ->
+                                settings.copy(
+                                    displaySetting = settings.displaySetting.copy(
+                                        floatingPanelWidthRatio = width,
+                                        floatingPanelHeightRatio = height,
+                                        floatingPreviewMaxHeight = previewHeight,
+                                    )
+                                )
+                            }
+                        }
+                    },
                     onCollapse = tracker::collapse,
                     onDismiss = tracker::dismiss,
                     onOpenConversation = { openConversation(conversationId) },
@@ -186,13 +212,17 @@ class ChatFloatingWindows(
         }
     }
 
-    // 窗口隐藏时生命周期退回 STARTED，只在显示时订阅，流式输出不会让隐藏的窗口跟着重组
+    // 窗口隐藏时生命周期退回 STARTED，只在显示时订阅，流式输出不会让隐藏的窗口跟着重组。
+    // 设置也走这条路：面板尺寸和图标只在窗口真的显示时才需要。
     @Composable
-    private fun WindowContent(content: @Composable (FloatingChatUiState) -> Unit) {
+    private fun WindowContent(content: @Composable (FloatingChatUiState, DisplaySetting) -> Unit) {
         val state by uiState.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+        val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle(
+            minActiveState = Lifecycle.State.RESUMED,
+        )
         RikkahubTheme {
             CompositionLocalProvider(LocalUriHandler provides uriHandler) {
-                state?.let { content(it) }
+                state?.let { content(it, settings.displaySetting) }
             }
         }
     }
