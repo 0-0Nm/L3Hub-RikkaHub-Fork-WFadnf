@@ -90,6 +90,10 @@ data class PaletteColors(
         surface = Color(surface.toInt()),
         surfaceVariant = Color(surfaceVariant.toInt()),
         onSurface = Color(onSurface.toInt()),
+        // 正文用的是 onSurfaceVariant（216 处），它不跟 onSurface 走的话，
+        // 改「表面上的文字颜色」只在标题那 40 处生效，看着就像没生效。
+        // 音调按 M3 的关系错开一档，默认值下几乎看不出差别。
+        onSurfaceVariant = Color(onSurface.toInt()).shiftTone(if (dark) -10.0 else 20.0),
     ).withSurfaceFamily(surface)
 
     companion object {
@@ -196,6 +200,12 @@ internal fun paletteColorScheme(
 }
 
 internal fun Color.argbLong(): Long = toArgb().toLong() and 0xFFFFFFFFL
+
+/** 保持色相和彩度，只把音调挪一档——用来从正文色推出次要文字色。 */
+private fun Color.shiftTone(delta: Double): Color {
+    val hct = Hct.fromInt(toArgb())
+    return Color(Hct.from(hct.hue, hct.chroma, (hct.tone + delta).coerceIn(0.0, 100.0)).toInt())
+}
 
 /**
  * 表面族允许的最大彩度。

@@ -973,6 +973,7 @@
   <string name="setting_palette_page_seed_title">Build a palette from a hex</string>
   <string name="setting_palette_page_seed_desc">Type one color and preview it as a full card, light and dark. Apply to either side.</string>
   <string name="setting_palette_page_apply_light">Apply to light</string>
+  <string name="setting_palette_page_applied">Currently applied</string>
   <string name="setting_palette_page_apply_dark">Apply to dark</string>
   <string name="setting_palette_page_export">Export palette</string>
   <string name="setting_palette_page_export_desc">Save the palette settings as a JSON file</string>

@@ -929,6 +929,7 @@
   <string name="setting_palette_page_seed_title">从色号生成调色板</string>
   <string name="setting_palette_page_seed_desc">填一个十六进制色号，当场展开成深浅两套色卡，可以只应用其中一侧。</string>
   <string name="setting_palette_page_apply_light">应用到浅色</string>
+  <string name="setting_palette_page_applied">当前生效</string>
   <string name="setting_palette_page_apply_dark">应用到深色</string>
   <string name="setting_palette_page_export">导出调色板</string>
   <string name="setting_palette_page_export_desc">把调色板设置存成 JSON 文件</string>

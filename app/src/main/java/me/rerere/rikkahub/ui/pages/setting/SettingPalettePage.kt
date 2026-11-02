@@ -225,6 +225,10 @@ fun SettingPalettePage(vm: SettingVM = koinViewModel()) {
                 }
             }
 
+            item("appliedScheme") {
+                AppliedSchemeCard(title = stringResource(R.string.setting_palette_page_applied))
+            }
+
             item("seedColor") {
                 SeedColorCard(
                     onApply = { colors, dark ->
@@ -636,6 +640,59 @@ private fun PaletteRole.labelRes(): Int = when (this) {
     PaletteRole.SURFACE -> R.string.palette_role_surface
     PaletteRole.SURFACE_VARIANT -> R.string.palette_role_surface_variant
     PaletteRole.ON_SURFACE -> R.string.palette_role_on_surface
+}
+
+/**
+ * 当前真正生效的四个角色。
+ *
+ * 读的是 MaterialTheme.colorScheme，不是编辑面板里的临时值：保存后回到这一页，
+ * 这块跟着变就说明颜色进到主题里了，不变就说明卡在别处——省得对着聊天页猜。
+ * 从外到内分别是 background、surface、surfaceVariant，两种文字色和主色。
+ */
+@Composable
+private fun AppliedSchemeCard(title: String) {
+    val scheme = MaterialTheme.colorScheme
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(scheme.background)
+                .padding(8.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(scheme.surface)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("Aa", style = MaterialTheme.typography.titleMedium, color = scheme.onSurface)
+                Text("正文", style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
+                Spacer(Modifier.weight(1f))
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(scheme.surfaceVariant),
+                )
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(scheme.primary),
+                )
+            }
+        }
+    }
 }
 
 /**

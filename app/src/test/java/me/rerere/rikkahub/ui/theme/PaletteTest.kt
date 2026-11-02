@@ -66,6 +66,49 @@ class PaletteTest {
     }
 
     @Test
+    fun `every edited role lands verbatim`() {
+        // 九个角色都是用户直接选的，生成完整配色后必须原样出现在 scheme 里。
+        // 有一个对不上，界面上那一条就"改了没反应"。
+        val input = PaletteColors(
+            primary = 0xFF101010,
+            onPrimary = 0xFF202020,
+            secondary = 0xFF303030,
+            tertiary = 0xFF404040,
+            error = 0xFF505050,
+            background = 0xFF606060,
+            surface = 0xFF707070,
+            surfaceVariant = 0xFF808080,
+            onSurface = 0xFF909090,
+        )
+        val scheme = input.generateColorScheme(dark = false)
+
+        val pairs = listOf(
+            "primary" to (input.primary to scheme.primary.argbLong()),
+            "onPrimary" to (input.onPrimary to scheme.onPrimary.argbLong()),
+            "secondary" to (input.secondary to scheme.secondary.argbLong()),
+            "tertiary" to (input.tertiary to scheme.tertiary.argbLong()),
+            "error" to (input.error to scheme.error.argbLong()),
+            "background" to (input.background to scheme.background.argbLong()),
+            "surface" to (input.surface to scheme.surface.argbLong()),
+            "surfaceVariant" to (input.surfaceVariant to scheme.surfaceVariant.argbLong()),
+            "onSurface" to (input.onSurface to scheme.onSurface.argbLong()),
+        )
+        pairs.forEach { (name, values) ->
+            assertEquals(name, values.first, values.second)
+        }
+    }
+
+    @Test
+    fun `body text follows the chosen text color`() {
+        // 正文用的 onSurfaceVariant 必须跟着 onSurface 走，否则改文字色只有标题会变
+        val dark = PaletteColors(onSurface = 0xFF00FF00).generateColorScheme(dark = false)
+        val light = PaletteColors(onSurface = 0xFF00FF00).generateColorScheme(dark = true)
+
+        assertNotEquals(0xFF49454F, dark.onSurfaceVariant.argbLong())
+        assertNotEquals(0xFFCAC4D0, light.onSurfaceVariant.argbLong())
+    }
+
+    @Test
     fun `surface lands verbatim`() {
         val green = PaletteColors(surface = 0xFF1B5E20).generateColorScheme(dark = false)
 
