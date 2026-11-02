@@ -39,8 +39,12 @@ class WorkspaceReminderTransformer(
         val prompts = buildList {
             workspaceIds.forEach { workspaceId ->
                 val workspace = workspaceRepository.getById(workspaceId) ?: return@forEach
-                // 与 ChatToolFactory 保持一致: 仅在 shell 就绪时注入
-                if (workspace.shellStatus != WorkspaceShellStatus.READY.name) return@forEach
+                // 没就绪的工作区不注册工具（见 ChatToolFactory）。什么都不说会让模型
+                // 只看到「没有这个工具」而不知道原因，这里明确告诉它工作区存在但不可用。
+                if (workspace.shellStatus != WorkspaceShellStatus.READY.name) {
+                    add(workspace to buildNotReadyPrompt(workspace))
+                    return@forEach
+                }
                 val layout = workspaceRepository.layout(workspaceId) ?: return@forEach
                 val cwd = ctx.workspaceCwds[workspaceId]?.ifBlank { null }
 
@@ -361,6 +365,22 @@ private fun buildSshWorkspacePrompt(
     }
     append("</workspace>")
 }
+
+private fun buildNotReadyPrompt(workspace: WorkspaceEntity): String =
+    buildString {
+        appendLine("<workspace>")
+        appendLine(
+            "You are bound to a workspace named \"${workspace.name}\" (${workspace.workspaceDir()}), " +
+                "but it is not ready yet: status=${workspace.shellStatus}."
+        )
+        appendLine(
+            "- None of the workspace_* tools are registered for it. Do not claim to have read, searched or changed anything there."
+        )
+        appendLine(
+            "- If the user expects files in this workspace, tell them the Rootfs installation (or the connection) still has to finish."
+        )
+        append("</workspace>")
+    }
 
 private fun buildUnreachablePrompt(workspace: WorkspaceEntity, layout: WorkspaceLayout, error: Throwable): String =
     buildString {

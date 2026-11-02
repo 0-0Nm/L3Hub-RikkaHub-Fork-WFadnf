@@ -249,7 +249,8 @@ internal fun WorkspaceTarget.requiresShellApproval(command: String): Boolean {
     return when (executionPermission) {
         ExecutionPermission.FULL -> false
         ExecutionPermission.READ_ONLY -> false
-        ExecutionPermission.READ_WRITE -> true
+        // 写文件免审批不等于给命令开口子: 只读命令照旧免确认, 其余仍然要问
+        ExecutionPermission.READ_WRITE -> risk != WorkspaceCommandPolicy.Risk.READ_ONLY
         ExecutionPermission.APPROVAL -> when {
             // 破坏性命令始终要确认，用户关掉审批也不放行
             risk == WorkspaceCommandPolicy.Risk.DANGEROUS -> true
@@ -932,8 +933,10 @@ private suspend fun WorkspaceRepository.readTextInRootfs(
 private suspend fun WorkspaceRepository.readRootfsBuffer(
     workspaceId: String,
     path: String,
+    knownSize: Long? = null,
 ): ByteArrayOutputStream {
-    val size = absoluteFileSize(workspaceId, path)
+    // 检索时目录列表已经给过大小, 不再为每个文件多跑一次 stat（SSH 上就是每文件两次往返）
+    val size = knownSize ?: absoluteFileSize(workspaceId, path)
     require(size <= MAX_READ_FILE_BYTES) {
         "File is too large to read: $path (${size / 1024 / 1024}MB, max ${MAX_READ_FILE_BYTES / 1024 / 1024}MB). Use shell commands like head, tail, or grep to read parts of it."
     }
@@ -1156,7 +1159,8 @@ private suspend fun WorkspaceRepository.readTextForSearch(
     sizeBytes: Long,
 ): String? {
     if (sizeBytes > MAX_GREP_FILE_BYTES) return null
-    val bytes = runCatching { readRootfsBuffer(workspaceId, path) }.getOrNull() ?: return null
+    val bytes = runCatching { readRootfsBuffer(workspaceId, path, knownSize = sizeBytes) }
+        .getOrNull() ?: return null
     val array = bytes.toByteArray()
     if (array.take(4096).any { it == 0.toByte() }) return null
     return array.toString(Charsets.UTF_8)

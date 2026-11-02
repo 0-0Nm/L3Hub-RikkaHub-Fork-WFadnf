@@ -177,24 +177,44 @@ object WorkspaceTestToolUI : ToolUIRenderer {
         val content = context.content?.jsonObjectOrNull
         var expanded by remember { mutableStateOf<JsonObject?>(null) }
         var snippet by remember { mutableStateOf<String?>(null) }
+        var snippetError by remember { mutableStateOf<String?>(null) }
         var snippetLanguage by remember { mutableStateOf("kotlin") }
 
         LaunchedEffect(expanded) {
             val target = expanded ?: return@LaunchedEffect
             val path = target.str("file") ?: return@LaunchedEffect
             val line = target.int("line")
+            val cwd = context.arguments.str("cwd").orEmpty().trim('/')
             snippet = null
-            snippet = withContext(Dispatchers.IO) {
-                if (workspaceId == null) return@withContext null
-                runCatching {
-                    val text = repository.readText(workspaceId, path)
-                    val lines = text.lines()
-                    val from = (line - 6).coerceAtLeast(1)
-                    val to = (line + 6).coerceAtMost(lines.size)
-                    if (from > to) return@runCatching null
-                    lines.subList(from - 1, to).joinToString("\n")
-                }.getOrNull()
+            snippetError = null
+            // 诊断里的 file 是仓库相对路径, 而 readText 按工作区文件根解析。
+            // 仓库不在文件根时先按原样读, 再按 cwd 补一次; 两次都失败就把原因显示出来,
+            // 不要停在「读取文件…」让人以为还在读。
+            val loaded = withContext(Dispatchers.IO) {
+                if (workspaceId == null) {
+                    return@withContext Result.failure(IllegalStateException("这个会话没有绑定工作区"))
+                }
+                val candidates = buildList {
+                    add(path)
+                    if (cwd.isNotEmpty() && !path.startsWith("$cwd/")) add("$cwd/$path")
+                }.distinct()
+                var lastError: Throwable? = null
+                for (candidate in candidates) {
+                    val result = runCatching {
+                        val text = repository.readText(workspaceId, candidate)
+                        val lines = text.lines()
+                        val from = (line - 6).coerceAtLeast(1)
+                        val to = (line + 6).coerceAtMost(lines.size)
+                        require(from <= to) { "$candidate 只有 ${lines.size} 行, 定位不到第 $line 行" }
+                        lines.subList(from - 1, to).joinToString("\n")
+                    }
+                    if (result.isSuccess) return@withContext result
+                    lastError = result.exceptionOrNull()
+                }
+                Result.failure(lastError ?: IllegalStateException("没有可读的路径"))
             }
+            snippet = loaded.getOrNull()
+            snippetError = loaded.exceptionOrNull()?.message?.takeIf { it.isNotBlank() }
             snippetLanguage = syntaxLanguageOf(path)
         }
 
@@ -246,7 +266,13 @@ object WorkspaceTestToolUI : ToolUIRenderer {
                         Text(diagnostic.str("message").orEmpty(), style = MaterialTheme.typography.bodySmall)
                         if (isExpanded) {
                             val code = snippet
-                            if (code == null) {
+                            if (code == null && snippetError != null) {
+                                Text(
+                                    text = "读取源码失败：$snippetError",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            } else if (code == null) {
                                 Text("读取文件…", style = MaterialTheme.typography.labelSmall)
                             } else {
                                 HighlightCodeBlock(

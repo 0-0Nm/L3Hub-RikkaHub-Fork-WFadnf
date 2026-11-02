@@ -586,10 +586,9 @@ private fun WorkspaceToolApprovalCard(
     executionPermission: ExecutionPermission,
     onToolApprovalChange: (String, Boolean) -> Unit,
 ) {
-    // 这些开关只有审批档位会读；自动档一律放行，整块不展示，其余档位灰显并说明以档位为准
-    if (executionPermission == ExecutionPermission.FULL) return
-    val switchesEnabled = workspace != null && executionPermission == ExecutionPermission.APPROVAL
-    val showsHint = executionPermission != ExecutionPermission.APPROVAL
+    // 这些开关是工作区级配置，与「当前选中的助手」无关：用户在设置页里改的是工作区本身，
+    // 真正读取它们的是「审批」档位。之前按当前助手的档位灰显/隐藏，换个助手聊天时判断就错了。
+    val switchesEnabled = workspace != null
     val overrides = workspace?.toolApprovalOverrides().orEmpty()
     val fileWriteTools = workspace?.capabilities()?.fileWriteTools ?: true
     val tools = workspaceToolApprovalItems().filter { (toolName) ->
@@ -605,16 +604,11 @@ private fun WorkspaceToolApprovalCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (showsHint) {
-                    Text(
-                        text = stringResource(
-                            R.string.workspace_detail_tool_approval_permission_hint,
-                            stringResource(executionPermission.labelRes()),
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
+                Text(
+                    text = "这些开关只在「审批」执行档位生效；其它档位不会读取它们。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
             }
         },
     ) {

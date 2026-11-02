@@ -21,17 +21,17 @@ enum class WorkspaceType(val capabilities: WorkspaceCapabilities) {
 /** 一种工作区能用哪些功能; 调用方按能力判断, 不直接比较类型 */
 data class WorkspaceCapabilities(
     /** 运行在本机 PRoot Rootfs 里: 需要安装 Rootfs, 挂载了 /skills、/upload、/tool_outputs 等应用目录 */
-    val rootfs: Boolean,
+    val rootfs: Boolean = false,
     /** 支持交互式终端 */
-    val terminal: Boolean,
+    val terminal: Boolean = false,
     /** 文件在本机; 否则每次访问都要走网络, 也没法交给系统文件选择器 */
-    val localFiles: Boolean,
+    val localFiles: Boolean = false,
     /**
      * AI 可以用写文件、编辑文件工具直接写入; 否则只能经 shell 修改文件。
      * SFTP 覆盖写入时服务器打开文件就会清空原内容, 写到一半被取消或断线会留下残缺的文件;
      * shell 命令连同要写的内容一起发到远程, 在那边本地写入, 写入过程不经过网络。
      */
-    val fileWriteTools: Boolean,
+    val fileWriteTools: Boolean = false,
 )
 
 enum class WorkspaceShellStatus {
@@ -63,7 +63,9 @@ data class RootfsInstallProgress(
 data class WorkspaceConfig(
     val maxReadBytes: Long = 512 * 1024,
     val maxWriteBytes: Long = 2 * 1024 * 1024,
-    val maxListEntries: Int = 500,
+    // 后端要多给一些，工具层（workspace_list 取 500 条）才能判断目录是否还有剩余并置 truncated；
+    // 两层都用 500 的话永远看不出截断
+    val maxListEntries: Int = 2_000,
     val maxSearchResults: Int = 100,
 )
 

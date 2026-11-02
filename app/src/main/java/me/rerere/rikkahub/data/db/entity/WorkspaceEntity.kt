@@ -48,8 +48,10 @@ data class WorkspaceEntity(
 ) {
     fun isSsh(): Boolean = type == WorkspaceType.SSH.name
 
+    // 类型字段损坏/来自更新的版本时按「什么都不能做」处理:
+    // 兜底成 LOCAL 等于把 rootfs、本机文件、写文件工具一起送出去, 方向反了
     fun capabilities(): WorkspaceCapabilities =
-        runCatching { WorkspaceType.valueOf(type) }.getOrDefault(WorkspaceType.LOCAL).capabilities
+        runCatching { WorkspaceType.valueOf(type) }.getOrNull()?.capabilities ?: WorkspaceCapabilities()
 
     fun sshSettings(): SshWorkspaceSettings? = sshConfig?.let { config ->
         runCatching { JsonInstant.decodeFromString<SshWorkspaceSettings>(config) }.getOrNull()
