@@ -61,6 +61,7 @@ class LocalWorkspaceBackend(
 
     // 在 Rootfs 内用 shell 写入: Rootfs 里的绝对路径软链只有 PRoot 内才能正确解析
     override fun writeAbsoluteText(path: String, text: String, overwrite: Boolean): WorkspaceFileEntry {
+        requireInsideWritableRoot(path)
         val pathArg = path.shellQuote()
         val result = runCommand(
             action = "Write file",
@@ -84,6 +85,31 @@ class LocalWorkspaceBackend(
             stdin = text.toByteArray(Charsets.UTF_8),
         )
         return result.stdout.parseEntry()
+    }
+
+    /**
+     * 写入前按可写根做一次真路径校验。
+     *
+     * `/workspace` 下的软链可能指向 bind mount 到宿主机的目录（/skills、/upload 等）,
+     * 那样「写在可写区里」实际会落到工作区之外。判定放在宿主侧用 canonicalFile 做:
+     * 两边都是宿主路径, 不受 PRoot 路径翻译影响。只在路径字面上落在某个可写根下时才校验,
+     * 用户显式批准写到根外的行为不受影响; 映射不出来时按原样放行。
+     */
+    private fun requireInsideWritableRoot(path: String) {
+        val root = manager.layout.writableRoots
+            .filter { path == it || path.startsWith("$it/") }
+            .maxByOrNull { it.length } ?: return
+        val hostRoot = runCatching { manager.resolveRootfsFile(root, root).canonicalFile }
+            .getOrNull() ?: return
+        val target = runCatching {
+            val file = manager.resolveRootfsFile(root, path)
+            val parent = file.parentFile?.canonicalFile ?: return@runCatching null
+            parent.resolve(file.name).canonicalFile
+        }.getOrNull() ?: return
+        val inside = target.path == hostRoot.path || target.path.startsWith(hostRoot.path + File.separator)
+        require(inside) {
+            "Refusing to write through a symlink that leaves the writable area: $path"
+        }
     }
 
     override fun localFile(area: WorkspaceStorageArea, path: String): File {

@@ -385,7 +385,7 @@ private fun createWriteFileTool(
         require(target.supportsFileWrite) {
             "Workspace '${target.name}' does not support file write tools"
         }
-        val path = params.absolutePath("path")
+        val path = params.writePath("path", target.layout)
         val text = params.string("text") ?: error("text is required")
         val overwrite = params["overwrite"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: true
         // 写之前先看文件在不在: 既是快照的判据, 也是「已修改文件」里的新建标记
@@ -468,7 +468,7 @@ private fun createEditFileTool(
         require(target.supportsFileWrite) {
             "Workspace '${target.name}' does not support file write tools"
         }
-        val path = params.absolutePath("path")
+        val path = params.writePath("path", target.layout)
         val oldText = params.string("old_text") ?: error("old_text is required")
         val newText = params.string("new_text") ?: error("new_text is required")
         val replaceAll = params["replace_all"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
@@ -956,13 +956,34 @@ private fun kotlinx.serialization.json.JsonObject.absolutePath(name: String): St
     return path
 }
 
+/**
+ * 写类工具用的路径: 在读路径规则之外再折叠 `.` 与 `..`, 并把 `..` 直接拒掉。
+ *
+ * 审批判定和落盘必须用同一个规范形式, 否则 `/workspace/../etc/x` 会在审批时被判成
+ * 「在可写区内」, 到真正写入时才被折叠成 `/etc/x`。补丁工具早就这么做了, 这里对齐。
+ */
+internal fun WorkspaceLayout.normalizeWritePath(raw: String): String {
+    val cleaned = raw.replace('\\', '/').trim()
+    require(cleaned.isNotEmpty()) { "path is required" }
+    require(cleaned.startsWith("/")) { "path must be an absolute path inside Rootfs" }
+    require(!cleaned.contains('\u0000')) { "path contains invalid character" }
+    require(cleaned.split('/').none { it == ".." }) { "path must not contain '..': $raw" }
+    val segments = cleaned.split('/').filter { it.isNotEmpty() && it != "." }
+    return "/" + segments.joinToString("/")
+}
+
+private fun kotlinx.serialization.json.JsonObject.writePath(
+    name: String,
+    layout: WorkspaceLayout,
+): String = layout.normalizeWritePath(absolutePath(name))
+
 // 免强制审批的可写安全区由工作区后端给出, 本地为工作区文件目录、临时目录和技能目录
 private fun kotlinx.serialization.json.JsonElement.pathOutsideWritableRoots(
     layout: WorkspaceLayout,
     name: String,
 ): Boolean =
     runCatching {
-        !layout.isWritable(jsonObject.absolutePath(name))
+        !layout.isWritable(layout.normalizeWritePath(jsonObject.absolutePath(name)))
     }.getOrDefault(true)
 
 private fun JsonObjectBuilder.putPathProperty(layout: WorkspaceLayout, required: Boolean) {
