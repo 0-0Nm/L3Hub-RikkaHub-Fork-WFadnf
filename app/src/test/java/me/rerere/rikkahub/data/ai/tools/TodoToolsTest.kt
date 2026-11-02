@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.data.ai.tools
 
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import me.rerere.rikkahub.data.model.TodoItem
 import me.rerere.rikkahub.data.model.TodoStatus
 import me.rerere.rikkahub.utils.JsonInstant
@@ -39,5 +41,23 @@ class TodoToolsTest {
         assertEquals(todos, decoded)
         assertTrue(json.contains("in_progress"))
         assertTrue(json.contains("completed"))
+    }
+
+    @Test
+    fun `status synonyms are accepted`() {
+        fun status(value: String?): TodoStatus = buildJsonObject {
+            if (value != null) put("status", value)
+        }.parseStatus()
+
+        assertEquals(TodoStatus.IN_PROGRESS, status("in_progress"))
+        assertEquals(TodoStatus.IN_PROGRESS, status("In-Progress"))
+        assertEquals(TodoStatus.IN_PROGRESS, status("  doing  "))
+        assertEquals(TodoStatus.IN_PROGRESS, status("running"))
+        assertEquals(TodoStatus.COMPLETED, status("done"))
+        assertEquals(TodoStatus.COMPLETED, status("FINISHED"))
+        assertEquals(TodoStatus.COMPLETED, status("completed"))
+        // 认不出来的写法一律当未开始, 不要猜成进行中
+        assertEquals(TodoStatus.PENDING, status("whatever"))
+        assertEquals(TodoStatus.PENDING, status(null))
     }
 }

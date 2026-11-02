@@ -207,9 +207,26 @@ class ChatService(
         }
     }
 
-    /** todo_write 工具直接写库，这里同步内存里的会话状态，聊天页卡片才能立刻刷新 */
-    fun syncTodos(conversationId: Uuid, todos: List<TodoItem>) {
-        sessionManager.get(conversationId)?.update { current ->
+    /** 会话当前内存里的清单；会话没加载时返回 null，由调用方决定是否读库 */
+    fun currentTodos(conversationId: Uuid): List<TodoItem>? =
+        sessionManager.get(conversationId)?.state?.value?.todos
+
+    /**
+     * 任务清单的唯一写入口。
+     *
+     * 之前是「工具直接写库 + 另一次调用同步内存」，两条路没有顺序保证：库先写、内存后改，
+     * 中间任何一次 flush 都会把旧清单整条写回去；而内存里算出来的归属节点要等下一次整条保存
+     * 才落库，进程在这之间被杀就丢了归属（压缩恰好会删掉那条 todo_write 消息）。
+     * 这里按会话的既有规矩走：先 update 再 flush。
+     */
+    suspend fun updateTodos(conversationId: Uuid, todos: List<TodoItem>) {
+        val session = sessionManager.get(conversationId)
+        if (session == null) {
+            // 会话没加载（比如从终端/Web 入口触发），只能直接落库
+            conversationRepo.updateTodos(conversationId, todos)
+            return
+        }
+        session.update { current ->
             // 清单跟着写下它的那条消息走：记住写入时的最后一个节点
             val ownerNodeId = current.messageNodes.lastOrNull()?.id
             if (current.todos == todos && current.todosOwnerNodeId == ownerNodeId) {
@@ -218,6 +235,7 @@ class ChatService(
                 current.copy(todos = todos, todosOwnerNodeId = ownerNodeId)
             }
         }
+        session.flush()
     }
 
     private val sessionManager = ConversationSessionManager(

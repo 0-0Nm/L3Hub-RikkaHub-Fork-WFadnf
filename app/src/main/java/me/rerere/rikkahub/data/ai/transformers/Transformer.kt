@@ -6,6 +6,7 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.TodoItem
 
 class TransformerContext(
     val context: Context,
@@ -14,6 +15,7 @@ class TransformerContext(
     val settings: Settings,
     val processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
     val workspaceCwds: Map<String, String> = emptyMap(),
+    val todos: List<TodoItem> = emptyList(),
 )
 
 interface MessageTransformer {
@@ -66,6 +68,7 @@ suspend fun List<UIMessage>.transforms(
     settings: Settings,
     processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
     workspaceCwds: Map<String, String> = emptyMap(),
+    todos: List<TodoItem> = emptyList(),
 ): List<UIMessage> {
     val ctx = TransformerContext(
         context = context,
@@ -74,6 +77,7 @@ suspend fun List<UIMessage>.transforms(
         settings = settings,
         processingStatus = processingStatus,
         workspaceCwds = workspaceCwds,
+        todos = todos,
     )
     return transformers.fold(this) { acc, transformer ->
         transformer.transform(ctx, acc)

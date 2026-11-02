@@ -434,8 +434,5 @@ private fun JsonElement?.boolean(key: String): Boolean? =
 private fun JsonElement?.int(key: String): Int? =
     this?.jsonObjectOrNull?.get(key)?.jsonPrimitiveOrNull?.intOrNull
 
-/** 从工具输出 JSON 读取长整型字段 */
-private fun JsonElement?.long(key: String): Long? =
-    this?.jsonObjectOrNull?.get(key)?.jsonPrimitiveOrNull?.longOrNull
 
 private const val FILE_SUMMARY_MAX_LINES = 10

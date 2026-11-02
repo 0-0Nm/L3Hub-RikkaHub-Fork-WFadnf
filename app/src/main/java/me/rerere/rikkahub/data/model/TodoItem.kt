@@ -10,6 +10,11 @@ import kotlinx.serialization.Serializable
 data class TodoItem(
     val content: String,
     val status: TodoStatus = TodoStatus.PENDING,
+    /**
+     * 稳定标识，供 todo_update 单条翻状态用。
+     * 老数据里没有这个字段（null），读出来照常显示；todo_write 会补上。
+     */
+    val id: String? = null,
 )
 
 @Serializable

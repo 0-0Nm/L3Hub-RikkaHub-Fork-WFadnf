@@ -77,11 +77,8 @@ internal fun ConversationTodoCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    textDecoration = if (!expanded && current?.status == TodoStatus.COMPLETED) {
-                        TextDecoration.LineThrough
-                    } else {
-                        TextDecoration.None
-                    },
+                    // current 只可能是进行中或未开始（全部完成时是 null 走「全部完成」文案），
+                    // 这里原来判断 COMPLETED 的分支永远不会成立
                     modifier = Modifier.weight(1f),
                 )
             }

@@ -40,6 +40,7 @@ import me.rerere.rikkahub.data.ai.transformers.visualTransforms
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.TodoItem
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MemoryFile
 import me.rerere.rikkahub.data.model.getAssistantOf
@@ -70,6 +71,8 @@ class ChatTurnContext(
     val workspaceCwds: Map<String, String>,
     val memories: List<MemoryFile>,
     val tools: List<Tool>,
+    /** 会话级任务清单，注入到消息尾部（不进系统提示词，见 TodoStateTransformer） */
+    val todos: List<TodoItem> = emptyList(),
 )
 
 /** 把会话变成发给模型的请求：系统提示词、上下文裁剪、输入输出转换都在这里 */
@@ -90,6 +93,8 @@ class ChatRequestFactory(
         OcrTransformer,
         templateTransformer,
         WorkspaceReminderTransformer(workspaceRepository),
+        // 放在最后: 其它转换器可能插入消息, 清单要贴着最后一条真实 user 消息
+        TodoStateTransformer,
     )
 
     private val outputTransformers: List<OutputMessageTransformer> = listOf(
@@ -115,6 +120,7 @@ class ChatRequestFactory(
             conversationSystemPrompt = conversation.customSystemPrompt,
             workspaceCwds = workspaceCwds,
             memories = if (assistant.enableMemory) memoryRepository.getFiles(assistant.memoryId) else emptyList(),
+            todos = conversation.todos,
             tools = chatToolFactory.createTools(
                 settings = settings,
                 assistant = assistant,
@@ -287,6 +293,7 @@ class ChatRequestFactory(
             settings = turn.settings,
             processingStatus = processingStatus,
             workspaceCwds = turn.workspaceCwds,
+            todos = turn.todos,
         )
         val params = TextGenerationParams(
             model = turn.model,

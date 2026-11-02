@@ -18,6 +18,7 @@ import org.koin.java.KoinJavaComponent.getKoin
 import kotlin.uuid.Uuid
 
 const val TODO_WRITE_TOOL_NAME = "todo_write"
+const val TODO_UPDATE_TOOL_NAME = "todo_update"
 
 private const val MAX_TODO_ITEMS = 50
 private const val MAX_TODO_TEXT_CHARS = 300
@@ -73,51 +74,159 @@ fun createTodoTools(
             val params = it.jsonObject
             val raw = params["todos"] as? JsonArray
                 ?: error("todos is required")
-            val items = raw.mapNotNull { element ->
-                val obj = runCatching { element.jsonObject }.getOrNull() ?: return@mapNotNull null
-                val content = obj["content"]?.jsonPrimitive?.contentOrNull
+            var dropped = 0
+            val parsed = raw.mapNotNull { element ->
+                val obj = runCatching { element.jsonObject }.getOrNull()
+                val content = obj?.get("content")?.jsonPrimitive?.contentOrNull
                     ?.trim()
                     ?.take(MAX_TODO_TEXT_CHARS)
                     ?.takeIf { text -> text.isNotEmpty() }
-                    ?: return@mapNotNull null
-                TodoItem(content = content, status = obj.parseStatus())
-            }.take(MAX_TODO_ITEMS)
-
-            conversationRepository.updateTodos(conversationId, items)
-            // 会话在内存里还有一份状态，不同步的话聊天页的卡片要等重新加载才更新
-            runCatching {
-                getKoin().get<me.rerere.rikkahub.service.ChatService>()
-                    .syncTodos(conversationId, items)
+                // obj 为 null 时 content 必然也为 null, 但编译器不会替我们推，两个都判
+                if (obj == null || content == null) {
+                    dropped++
+                    return@mapNotNull null
+                }
+                // 已经带 id 的原样保留，没有的补一个：后续 todo_update 靠它定位单条
+                val id = obj?.get("id")?.jsonPrimitive?.contentOrNull
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?: Uuid.random().toString().take(8)
+                TodoItem(content = content, status = obj.parseStatus(), id = id)
             }
+            // 截断和丢弃都不能静默：模型以为自己写了 60 条，实际只存了 50 条，
+            // 后面它就会按一张不存在的清单干活
+            val truncated = parsed.size > MAX_TODO_ITEMS
+            val items = parsed.take(MAX_TODO_ITEMS)
+
+            writeTodos(conversationRepository, conversationId, items)
 
             val completed = items.count { it.status == TodoStatus.COMPLETED }
-            val current = items.firstOrNull { it.status == TodoStatus.IN_PROGRESS }
+            val inProgress = items.count { it.status == TodoStatus.IN_PROGRESS }
             listOf(
                 UIMessagePart.Text(
-                    buildJsonObject {
-                        put("total", items.size)
-                        put("completed", completed)
-                        put("inProgress", current?.content)
-                        put("items", buildJsonArray {
-                            items.forEach { item ->
-                                add(buildJsonObject {
-                                    put("content", item.content)
-                                    put("status", item.status.name.lowercase())
-                                })
-                            }
-                        })
-                        put("hint", "Keep the list updated with todo_write as you work.")
-                    }.toString() +
-                        "\n\nCurrent todo list:\n" +
-                        formatTodoLines(items)
+                    buildString {
+                        appendLine(
+                            "total=${items.size} completed=$completed " +
+                                "inProgress=${items.firstOrNull { it.status == TodoStatus.IN_PROGRESS }?.content ?: "none"}"
+                        )
+                        if (dropped > 0) {
+                            appendLine("warning: $dropped item(s) had no usable `content` and were dropped")
+                        }
+                        if (truncated) {
+                            appendLine("warning: only the first $MAX_TODO_ITEMS items were kept, split the work or trim the list")
+                        }
+                        if (inProgress > 1) {
+                            appendLine("warning: $inProgress items are in_progress, keep exactly one")
+                        }
+                        append("Current todo list:\n")
+                        append(formatTodoLines(items))
+                    }
                 )
             )
         },
-    )
+    ),
+    createTodoUpdateTool(conversationRepository, conversationId),
 )
 
+/**
+ * 列表写入口。会话在内存里也有一份状态，只写库的话聊天页要等重新加载才更新；
+ * 只改内存的话归属节点要等下一次整条保存才落库。两者都交给 ChatService 处理。
+ */
+private suspend fun writeTodos(
+    conversationRepository: ConversationRepository,
+    conversationId: Uuid,
+    items: List<TodoItem>,
+) {
+    val chatService = runCatching { getKoin().get<me.rerere.rikkahub.service.ChatService>() }.getOrNull()
+    if (chatService != null) {
+        chatService.updateTodos(conversationId, items)
+    } else {
+        conversationRepository.updateTodos(conversationId, items)
+    }
+}
+
+/**
+ * 单条更新。
+ *
+ * 让模型「翻一个状态」时不必把整张表复述一遍：既省 token，也少一类手滑改坏别的项。
+ * id 由 todo_write 分配并显示在清单里。
+ */
+private fun createTodoUpdateTool(
+    conversationRepository: ConversationRepository,
+    conversationId: Uuid,
+): Tool = Tool(
+    name = TODO_UPDATE_TOOL_NAME,
+    description = """
+        Change the status of one task without rewriting the whole list.
+        Use the id shown next to each item (for example `3f2a9c1d`). Prefer this over todo_write once the list exists.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("id", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Item id from the current task list")
+                })
+                put("status", buildJsonObject {
+                    put("type", "string")
+                    put("enum", buildJsonArray {
+                        add(kotlinx.serialization.json.JsonPrimitive("pending"))
+                        add(kotlinx.serialization.json.JsonPrimitive("in_progress"))
+                        add(kotlinx.serialization.json.JsonPrimitive("completed"))
+                    })
+                })
+            },
+            required = listOf("id", "status"),
+        )
+    },
+    needsApproval = { false },
+    execute = {
+        val params = it.jsonObject
+        val id = params["id"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+        require(id.isNotEmpty()) { "id is required" }
+        val status = params.parseStatus()
+        val current = readTodos(conversationRepository, conversationId)
+            ?: error("This conversation is not loaded; call todo_write with the full list instead")
+        val index = current.indexOfFirst { it.id == id }
+        if (index < 0) {
+            error(
+                "Unknown todo id '$id'. Current ids: ${current.joinToString { it.id ?: "-" }}. " +
+                    "If the list was written before ids existed, call todo_write once to assign them."
+            )
+        }
+        val updated = current.toMutableList().apply { this[index] = this[index].copy(status = status) }
+        writeTodos(conversationRepository, conversationId, updated)
+
+        val completed = updated.count { it.status == TodoStatus.COMPLETED }
+        val inProgress = updated.count { it.status == TodoStatus.IN_PROGRESS }
+        listOf(
+            UIMessagePart.Text(
+                buildString {
+                    appendLine("updated id=$id status=${status.name.lowercase()}")
+                    appendLine("total=${updated.size} completed=$completed inProgress=$inProgress")
+                    if (inProgress > 1) appendLine("warning: $inProgress items are in_progress, keep exactly one")
+                    append("Current todo list:\n")
+                    append(formatTodoLines(updated))
+                }
+            )
+        )
+    },
+)
+
+/** 当前清单：优先内存（会话已加载），否则读库 */
+private suspend fun readTodos(
+    conversationRepository: ConversationRepository,
+    conversationId: Uuid,
+): List<TodoItem>? {
+    runCatching { getKoin().get<me.rerere.rikkahub.service.ChatService>() }
+        .getOrNull()
+        ?.currentTodos(conversationId)
+        ?.let { return it }
+    return runCatching { conversationRepository.getConversationById(conversationId)?.todos }.getOrNull()
+}
+
 /** 模型的输出不一定守规矩, 常见的同义写法都收下 */
-private fun JsonObject.parseStatus(): TodoStatus {
+internal fun JsonObject.parseStatus(): TodoStatus {
     val value = this["status"]?.jsonPrimitive?.contentOrNull
         ?.trim()
         ?.lowercase()
@@ -146,6 +255,7 @@ private fun formatTodoLines(todos: List<TodoItem>): String = buildString {
             TodoStatus.IN_PROGRESS -> "[>]"
             TodoStatus.PENDING -> "[ ]"
         }
-        appendLine("- $mark ${item.content}")
+        val id = item.id?.let { "$it " }.orEmpty()
+        appendLine("- $mark $id${item.content}")
     }
 }
