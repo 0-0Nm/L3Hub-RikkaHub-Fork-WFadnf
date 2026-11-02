@@ -80,7 +80,7 @@ private fun colorDistance(a: Color, b: Color): Double {
 /** 超出这个距离就认为未匹配到任何颜色——多半是图片、渐变或者半透明叠出来的。 */
 private const val MATCH_THRESHOLD = 0.0035
 
-private fun ColorScheme.roleColors(): Map<PaletteRole, Color> = mapOf(
+internal fun ColorScheme.roleColors(): Map<PaletteRole, Color> = mapOf(
     PaletteRole.PRIMARY to primary,
     PaletteRole.ON_PRIMARY to onPrimary,
     PaletteRole.PRIMARY_CONTAINER to primaryContainer,

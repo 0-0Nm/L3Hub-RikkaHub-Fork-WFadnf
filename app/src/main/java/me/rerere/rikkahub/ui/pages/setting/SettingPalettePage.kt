@@ -30,6 +30,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -107,6 +108,7 @@ import me.rerere.rikkahub.ui.theme.formatHexColor
 import me.rerere.rikkahub.ui.theme.hexDigitCount
 import me.rerere.rikkahub.ui.theme.isCompleteHexColor
 import me.rerere.rikkahub.ui.theme.parseHexColor
+import me.rerere.rikkahub.ui.theme.roleColors
 import me.rerere.rikkahub.utils.plus
 import me.rerere.ui.components.RikkaConfirmDialog
 import org.koin.androidx.compose.koinViewModel
@@ -417,6 +419,12 @@ private fun CardGroupScope.paletteSideItem(
     trailingContent = { Icon(HugeIcons.PencilEdit01, contentDescription = stringResource(R.string.edit)) },
 )
 
+/** 界面真正读取 LocalUiSlots 的位置槽；其余槽组件直接读 colorScheme，单独设置不会生效。 */
+private val CONSUMED_SLOTS = setOf(
+    UiSlot.PAGE_BACKGROUND, UiSlot.TOP_BAR, UiSlot.CARD, UiSlot.LIST_ITEM,
+    UiSlot.INPUT_BAR, UiSlot.AI_BUBBLE, UiSlot.USER_BUBBLE,
+)
+
 @Composable
 private fun PaletteSectionTitle(text: String) {
     Text(
@@ -477,9 +485,9 @@ private fun PaletteEditSheet(
     var mode by rememberSaveable { mutableStateOf(0) }
     // 预览默认收起：它占半屏，挡着下面的列表
     var previewOpen by rememberSaveable { mutableStateOf(false) }
-    val effectiveSlots = remember(colors, slots, darkMode) {
-        slots.overlay(uiSlotsFrom(colors.generateColorScheme(darkMode)))
-    }
+    val scheme = remember(colors, darkMode) { colors.generateColorScheme(darkMode) }
+    val baseSlots = remember(scheme) { uiSlotsFrom(scheme) }
+    val effectiveSlots = remember(colors, slots, scheme) { slots.overlay(baseSlots) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -668,7 +676,9 @@ private fun PaletteEditSheet(
     editingRole?.let { role ->
         PaletteColorDialog(
             role = role,
-            initial = colors[role] ?: 0xFF000000L,
+            scheme = scheme,
+            baseSlots = baseSlots,
+            effectiveSlots = effectiveSlots,
             onDismiss = { editingRole = null },
             onConfirm = { argb ->
                 colors = colors.with(role, argb)
@@ -815,11 +825,22 @@ private fun PaletteColorRow(
 @Composable
 private fun PaletteColorDialog(
     role: PaletteRole,
-    initial: Long,
+    scheme: ColorScheme,
+    baseSlots: UiSlots,
+    effectiveSlots: UiSlots,
     onDismiss: () -> Unit,
     onConfirm: (Long) -> Unit,
 ) {
-    var color by remember(initial) { mutableStateOf(Color(initial.toInt())) }
+    // 角色 -> 色值映射缓存一份；未单独设置过的角色直接用派生色当取色器初值，
+    // 避免取色器里显示纯黑、一保存就把该角色写死成黑色
+    val roleColors = remember(scheme) { scheme.roleColors() }
+    val roleColor = roleColors[role]
+    var color by remember(role, roleColor) { mutableStateOf(roleColor ?: Color(0xFF000000)) }
+
+    // 这个角色经「位置层」画在哪些位置（只算界面真正消费的槽）
+    val affected = remember(role, roleColor, baseSlots) {
+        CONSUMED_SLOTS.filter { slot -> baseSlots.get(slot) == roleColor }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -834,15 +855,64 @@ private fun PaletteColorDialog(
             }
         },
         text = {
-            // 限高再让它自己滚：M3 的 AlertDialog 不会替内容滚动，
-            // 把可滚动内容直接丢进 text 槽会滚得乱七八糟
-            Box(Modifier.heightIn(max = 400.dp)) {
-                ColorPickerRow(
-                    color = color,
-                    onColorChange = { color = it },
-                    showAlpha = true,
-                    scrollable = true,
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (roleColor == null) {
+                    Text(
+                        text = stringResource(R.string.setting_palette_page_impact_none),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    // 界面示意图：按真实取色路径画，品红 = 界面里等于这个颜色的区域
+                    RoleImpactPreview(
+                        roleColor = roleColor,
+                        scheme = scheme,
+                        slots = effectiveSlots,
+                    )
+                    // 位置层清单：名称 + 是否被单独设置覆盖
+                    affected.forEach { slot ->
+                        val covered = effectiveSlots.get(slot).argbLong() != baseSlots.get(slot).argbLong()
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Box(
+                                Modifier
+                                    .size(14.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(effectiveSlots.get(slot))
+                            )
+                            Text(
+                                text = stringResource(slot.labelRes),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            if (covered) {
+                                Text(
+                                    text = stringResource(R.string.setting_palette_page_impact_covered),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            Spacer(Modifier.weight(1f))
+                            Text(
+                                text = formatHexColor(effectiveSlots.get(slot).argbLong()),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+                // 限高再让它自己滚：M3 的 AlertDialog 不会替内容滚动，
+                // 把可滚动内容直接丢进 text 槽会滚得乱七八糟
+                Box(Modifier.heightIn(max = 240.dp)) {
+                    ColorPickerRow(
+                        color = color,
+                        onColorChange = { color = it },
+                        showAlpha = true,
+                        scrollable = true,
+                    )
+                }
             }
         },
         confirmButton = {
@@ -855,6 +925,135 @@ private fun PaletteColorDialog(
                 Text(stringResource(android.R.string.cancel))
             }
         },
+    )
+}
+
+/**
+ * 小号界面示意图：品红 = 改这一格会跟着变的位置。
+ *
+ * 每个区域的取色路径和真实界面一致——消费槽读 LocalUiSlots，其余区域读
+ * colorScheme（组件就是这么写的）。角色色等于哪块区域的取色，哪块就刷品红，
+ * 一眼看出改这一格到底动到哪、哪些区域其实不归它管。
+ */
+@Composable
+private fun RoleImpactPreview(
+    roleColor: Color?,
+    scheme: ColorScheme,
+    slots: UiSlots,
+) {
+    val highlight = Color(0xFFFF00FF)
+    fun h(c: Color): Color = if (c == roleColor) highlight else c
+
+    // 与真实界面一致的区域取色，用来判断「有没有区域是这个颜色」
+    val regionColors = listOf(
+        slots.pageBackground, slots.topBar, scheme.onSurface, scheme.primary,
+        slots.aiBubble, scheme.outlineVariant, scheme.onSurfaceVariant,
+        slots.userBubble, scheme.onPrimaryContainer,
+        slots.card, scheme.outline, slots.inputBar,
+        slots.listItem, scheme.secondary,
+    )
+    val highlightedAny = remember(roleColor, regionColors) {
+        roleColor != null && regionColors.any { it == roleColor }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(h(slots.pageBackground))
+            .border(1.dp, slots.divider, RoundedCornerShape(16.dp)),
+    ) {
+        // 顶栏：底走消费槽，标题/按钮走 colorScheme
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(h(slots.topBar))
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("聊天", style = MaterialTheme.typography.titleSmall, color = h(scheme.onSurface))
+            Spacer(Modifier.weight(1f))
+            Box(Modifier.size(10.dp).clip(CircleShape).background(h(scheme.primary)))
+        }
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            // AI 气泡：底走消费槽，文字/描边走 colorScheme
+            Text(
+                text = "好的，我看看",
+                style = MaterialTheme.typography.bodySmall,
+                color = h(scheme.onSurfaceVariant),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(h(slots.aiBubble))
+                    .border(1.dp, h(scheme.outlineVariant), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
+            )
+            // 用户气泡
+            Text(
+                text = "把这段颜色调一下",
+                style = MaterialTheme.typography.bodySmall,
+                color = h(scheme.onPrimaryContainer),
+                modifier = Modifier
+                    .align(Alignment.End)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(h(slots.userBubble))
+                    .border(1.dp, h(scheme.outlineVariant), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
+            )
+            // 卡片：底走消费槽，标题/说明/描边走 colorScheme
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(h(slots.card))
+                    .border(1.dp, h(scheme.outline), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("设置项", style = MaterialTheme.typography.bodySmall, color = h(scheme.onSurface))
+                Spacer(Modifier.weight(1f))
+                Text("次要说明", style = MaterialTheme.typography.labelSmall, color = h(scheme.onSurfaceVariant))
+            }
+            // 列表项：底走消费槽，文字/图标走 colorScheme
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(h(slots.listItem))
+                    .border(1.dp, h(scheme.outlineVariant), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("列表项", style = MaterialTheme.typography.bodySmall, color = h(scheme.onSurface))
+                Spacer(Modifier.weight(1f))
+                Box(Modifier.size(12.dp).clip(CircleShape).background(h(scheme.secondary)))
+            }
+            // 输入框：底走消费槽，文字/描边/按钮走 colorScheme
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(h(slots.inputBar))
+                    .border(1.dp, h(scheme.outlineVariant), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("输入消息…", style = MaterialTheme.typography.bodySmall, color = h(scheme.onSurfaceVariant))
+                Spacer(Modifier.weight(1f))
+                Box(Modifier.size(16.dp).clip(CircleShape).background(h(scheme.primary)))
+            }
+        }
+    }
+    Text(
+        text = stringResource(
+            if (highlightedAny) R.string.setting_palette_page_impact_hint
+            else R.string.setting_palette_page_impact_unused
+        ),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp),
     )
 }
 
