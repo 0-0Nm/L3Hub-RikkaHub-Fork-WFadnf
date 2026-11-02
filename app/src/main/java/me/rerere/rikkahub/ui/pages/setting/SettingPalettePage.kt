@@ -344,7 +344,7 @@ fun SettingPalettePage(vm: SettingVM = koinViewModel()) {
                 CardGroup {
                     item(
                         onClick = { ColorProbeState.enabled = true },
-                        leadingContent = { Icon(HugeIcons.PaintBoard, contentDescription = null) },
+                        leadingContent = { Icon(HugeIcons.PencilEdit01, contentDescription = null) },
                         headlineContent = { Text(stringResource(R.string.setting_palette_page_probe)) },
                         supportingContent = { Text(stringResource(R.string.setting_palette_page_probe_desc)) },
                     )
