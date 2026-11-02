@@ -806,7 +806,7 @@ private fun MessagePartsBlock(
                                 } else if (settings.displaySetting.showAssistantBubble) {
                                     ChatMessageBubble(
                                         role = role,
-                                        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = settings.displaySetting.bubbleOpacity),
+                                        color = LocalUiSlots.current.aiBubble.copy(alpha = settings.displaySetting.bubbleOpacity),
                                         hazeState = hazeState,
                                         joinedToPrevious = joinedToPrevious,
                                         joinedToNext = joinedToNext,
@@ -1238,7 +1238,7 @@ private fun ChatMessageCitations(annotations: List<UIMessageAnnotation>) {
         ChatMessageFileChip(
             text = stringResource(R.string.citations_count, annotations.size),
             onClick = { expand = !expand },
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            color = LocalUiSlots.current.aiBubble,
             icon = { FaviconRow(urls = urls, size = 18.dp) },
         )
         if (expand) {

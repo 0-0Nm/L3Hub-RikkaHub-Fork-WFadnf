@@ -131,6 +131,7 @@ import me.rerere.rikkahub.ui.pages.chat.VoiceSessionState
 import me.rerere.rikkahub.ui.terminal.IconButton
 import me.rerere.rikkahub.ui.terminal.TextButton
 import me.rerere.rikkahub.ui.theme.LocalFullWidthComponents
+import me.rerere.rikkahub.ui.theme.LocalUiSlots
 import me.rerere.rikkahub.ui.theme.TerminalPalette
 import me.rerere.rikkahub.ui.theme.adaptiveHorizontalPadding
 import me.rerere.rikkahub.ui.theme.adaptiveShape
@@ -186,7 +187,7 @@ fun ChatInput(
 ) {
     val toaster = LocalToaster.current
     val terminalStyle = settings.displaySetting.terminalStyle
-    val containerColor = if (terminalStyle) TerminalPalette.Surface else MaterialTheme.colorScheme.surfaceContainerLow
+    val containerColor = if (terminalStyle) TerminalPalette.Surface else LocalUiSlots.current.inputBar
 
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current

@@ -461,6 +461,8 @@ private fun PaletteEditSheet(
     var editingSlot by remember { mutableStateOf<UiSlot?>(null) }
     // 0 = 按位置（22 个），1 = 按颜色角色（48 个）
     var mode by rememberSaveable { mutableStateOf(0) }
+    // 预览默认收起：它占半屏，挡着下面的列表
+    var previewOpen by rememberSaveable { mutableStateOf(false) }
     val effectiveSlots = remember(colors, slots, darkMode) {
         slots.overlay(uiSlotsFrom(colors.generateColorScheme(darkMode)))
     }
@@ -527,11 +529,7 @@ private fun PaletteEditSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            Spacer(Modifier.height(12.dp))
-
-            PaletteScreenPreview(slots = effectiveSlots)
-
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
@@ -544,6 +542,20 @@ private fun PaletteEditSheet(
                     onClick = { mode = 1 },
                     label = { Text(stringResource(R.string.setting_palette_page_mode_roles)) },
                 )
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = { previewOpen = !previewOpen }) {
+                    Text(
+                        stringResource(
+                            if (previewOpen) R.string.setting_palette_page_preview_hide
+                            else R.string.setting_palette_page_preview_show
+                        )
+                    )
+                }
+            }
+
+            if (previewOpen) {
+                PaletteScreenPreview(slots = effectiveSlots)
+                Spacer(Modifier.height(8.dp))
             }
 
             var advancedOpen by rememberSaveable { mutableStateOf(false) }
