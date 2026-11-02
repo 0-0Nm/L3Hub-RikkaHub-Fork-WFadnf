@@ -510,6 +510,26 @@ debug 里 dex 有 38 个、release 压缩后只剩 2 个，差的就是 R8。上
 
 > `-x :web:buildWebUi` 只是跳过 React 前端的 pnpm 构建；正式出包要去掉这个参数，否则 APK 里没有 web UI 静态资源。
 
+## 发版：交给 GitHub Actions
+
+本机不跑 Gradle（Termux 上编译会把机器拖死），出包和发版都放在 runner 上：
+
+1. 改 `app/build.gradle.kts` 的 `versionCode` / `versionName`（每次各 +1，例如 279 / `L.3.1.1.101`），连同改动一起提交
+2. `git tag v3.1.1-preview.101 && git push origin v3.1.1-preview.101`
+3. tag 推上去自动触发 `build-apk.yml`：checkout（含子模块）→ pnpm 装 web-ui → `tools/build-apk.sh`（`:app:assembleGithubDebug`，跳过 lint vital）→ 产物改名 → 建 prerelease
+
+产物是 `L3Hub-<tag>-arm64-v8a.apk` 加同名 `.sha256`：包名 `com.rikkahub.l3hub.wfadnf.debug`、arm64-v8a、
+R8 已开，可以直接覆盖安装。Release notes 由流程按「上一个 tag..本 tag」的提交自己生成——本仓库不走 PR，
+GitHub 自带的 `--generate-notes` 只会给一行 Full Changelog。
+
+几点：
+
+- `ci.yml` 只跑单测、只跟分支；tag 触发的构建由 `build-apk.yml` 负责，同一份代码不重复跑
+- `:terminal` / `:workspace` 带 CMake，配置阶段需要 NDK 28.2.13676358（约 700MB）。两个 workflow 都缓存了这个目录；
+  不缓存的话每次现下，下坏过一次（`Error reading Zip content from a SeekableByteChannel`），整轮直接红
+- 同一个 tag 重跑不会失败：release 已存在时覆盖资产、刷新说明
+- 只想要个包不发版：`workflow_dispatch` 触发 `build-apk.yml`，tag 留空，产物在 run 的 artifact 里
+
 ## 和上游同步
 
 ```bash
