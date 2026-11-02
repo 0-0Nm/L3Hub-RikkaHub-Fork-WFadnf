@@ -146,6 +146,10 @@ import kotlin.math.abs
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.uuid.Uuid
 
+// 一条消息内部各块（思考卡、正文气泡、附件、引用）之间的垂直间距。
+// 这些块直接作为父 Column 的子项发射，缺了它卡片和气泡会像素级贴死。
+private val MessageBlockGap = 4.dp
+
 @Composable
 fun ChatMessage(
     node: MessageNode,
@@ -344,6 +348,7 @@ fun ChatMessage(
                         } else {
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(MessageBlockGap),
                                 horizontalAlignment = if (message.role == MessageRole.USER) {
                                     Alignment.End
                                 } else {
