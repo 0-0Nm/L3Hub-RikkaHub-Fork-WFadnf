@@ -59,6 +59,7 @@ import me.rerere.rikkahub.data.ai.subagent.SUB_AGENT_STATE_FAILED
 import me.rerere.rikkahub.data.ai.subagent.SUB_AGENT_STATE_RUNNING
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.ui.components.message.ConversationTodoCard
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.ui.components.ui.GlassSheetShape
@@ -331,6 +332,16 @@ private fun AgentDetail(
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     SectionTitle(stringResource(R.string.task_tree_task))
                     CodeBlock(text = task, maxLines = 10)
+                }
+            }
+        }
+
+        // 选中哪个会话就看哪个会话的清单：主会话和子代理各自有一份
+        if (conversation.todos.isNotEmpty()) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    SectionTitle("任务清单")
+                    ConversationTodoCard(todos = conversation.todos, initiallyExpanded = true)
                 }
             }
         }

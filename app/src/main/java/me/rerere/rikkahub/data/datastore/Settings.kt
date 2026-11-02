@@ -200,6 +200,8 @@ data class DisplaySetting(
     val useL3HubReasoningStyle: Boolean = false,
     // 为按钮与开关显示阴影
     val buttonShadow: Boolean = false,
+    // 任务清单全部完成后从输入框上方收起；回看走输入框左边的「+」菜单
+    val hideCompletedTodoCard: Boolean = true,
     // Usage 看板的上下文占用用饼图显示
     val usagePieChart: Boolean = false,
     // 关闭所有动效：Material 的 motionScheme 换成 snap，列表/卡片的过渡直接跳变

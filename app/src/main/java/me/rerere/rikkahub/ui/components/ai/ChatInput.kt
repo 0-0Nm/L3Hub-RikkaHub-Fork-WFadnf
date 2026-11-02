@@ -111,6 +111,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.TodoItem
+import me.rerere.rikkahub.data.model.TodoStatus
 import me.rerere.rikkahub.service.MessageQueueState
 import me.rerere.rikkahub.service.QueuedMessage
 import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionContext
@@ -281,7 +282,11 @@ fun ChatInput(
                 .animateContentSize(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            if (todos.isNotEmpty()) {
+            // 清单只在「还没做完」的时候占位置。全部完成后收起来，
+            // 回看走输入框左边的 + 号菜单（FilesPicker 里始终能看到完整清单）。
+            val hideCompletedTodos = LocalSettings.current.displaySetting.hideCompletedTodoCard &&
+                todos.isNotEmpty() && todos.all { it.status == TodoStatus.COMPLETED }
+            if (todos.isNotEmpty() && !hideCompletedTodos) {
                 ConversationTodoCard(
                     todos = todos,
                     modifier = Modifier

@@ -212,6 +212,14 @@ fun SettingPreferencesUIPage(embedded: Boolean = false, vm: SettingVM = koinView
                     headlineContent = { Text(stringResource(R.string.setting_display_page_button_shadow_title)) },
                 )
                 switchItem(
+                    checked = displaySetting.hideCompletedTodoCard,
+                    onCheckedChange = {
+                        updateDisplaySetting(displaySetting.copy(hideCompletedTodoCard = it))
+                    },
+                    supportingContent = { Text("任务全部完成后从输入框上方收起；随时可以从「+」菜单里回看") },
+                    headlineContent = { Text("完成后收起任务清单") },
+                )
+                switchItem(
                     checked = displaySetting.showDateTimeInMessage,
                     onCheckedChange = { updateDisplaySetting(displaySetting.copy(showDateTimeInMessage = it)) },
                     supportingContent = { Text(stringResource(R.string.setting_display_page_show_datetime_in_message_desc)) },

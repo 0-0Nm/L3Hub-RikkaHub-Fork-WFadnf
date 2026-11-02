@@ -39,9 +39,10 @@ import me.rerere.rikkahub.ui.theme.adaptiveShape
 internal fun ConversationTodoCard(
     todos: List<TodoItem>,
     modifier: Modifier = Modifier,
+    initiallyExpanded: Boolean = false,
 ) {
     if (todos.isEmpty()) return
-    var expanded by remember { mutableStateOf(false) }
+    var expanded by remember(initiallyExpanded) { mutableStateOf(initiallyExpanded) }
     val completed = todos.count { it.status == TodoStatus.COMPLETED }
     val current = todos.firstOrNull { it.status == TodoStatus.IN_PROGRESS }
         ?: todos.firstOrNull { it.status == TodoStatus.PENDING }
