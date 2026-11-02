@@ -98,6 +98,11 @@ fun RikkahubTheme(
             colorScheme
         }
     }
+    // 位置层：终端模式下整体走终端配色，调色板的位置覆盖不参与
+    val uiSlots = remember(settings.palette, terminal, darkTheme, colorSchemeConverted) {
+        if (terminal) uiSlotsFrom(colorSchemeConverted)
+        else settings.palette.uiSlots(darkTheme, colorSchemeConverted)
+    }
     val extendColors = if (darkTheme || terminal) ExtendDarkColors else ExtendLightColors
     val effectiveDark = darkTheme || terminal
 
@@ -124,6 +129,7 @@ fun RikkahubTheme(
     }
 
     CompositionLocalProvider(
+        LocalUiSlots provides uiSlots,
         LocalDarkMode provides effectiveDark,
         LocalExtendColors provides extendColors,
         LocalOverscrollFactory provides null,

@@ -554,6 +554,10 @@ data class PaletteSetting(
     val presetId: String? = null,
     val light: PaletteColors? = null,
     val dark: PaletteColors? = null,
+    /** 按位置的覆盖（浅色）。null = 全部跟着角色走。 */
+    val lightSlots: UiSlotColors? = null,
+    /** 按位置的覆盖（深色）。 */
+    val darkSlots: UiSlotColors? = null,
 ) {
     val enabled: Boolean get() = presetId != null
 
@@ -568,6 +572,14 @@ data class PaletteSetting(
 
     fun generateColorScheme(darkMode: Boolean): ColorScheme? =
         colors(darkMode)?.generateColorScheme(darkMode)
+
+    fun slotColors(darkMode: Boolean): UiSlotColors? = if (darkMode) darkSlots else lightSlots
+
+    /** 这一套最终生效的位置颜色；没开调色板时退回 [fallback] 派生出来的那套。 */
+    fun uiSlots(darkMode: Boolean, fallback: ColorScheme): UiSlots {
+        val base = uiSlotsFrom(generateColorScheme(darkMode) ?: fallback)
+        return slotColors(darkMode)?.overlay(base) ?: base
+    }
 }
 
 /**

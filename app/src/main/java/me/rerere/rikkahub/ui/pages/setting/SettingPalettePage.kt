@@ -30,6 +30,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -93,6 +94,10 @@ import me.rerere.rikkahub.ui.theme.PalettePresets
 import me.rerere.rikkahub.ui.theme.PaletteGroup
 import me.rerere.rikkahub.ui.theme.PaletteRole
 import me.rerere.rikkahub.ui.theme.PaletteSetting
+import me.rerere.rikkahub.ui.theme.UiSlot
+import me.rerere.rikkahub.ui.theme.UiSlotColors
+import me.rerere.rikkahub.ui.theme.UiSlots
+import me.rerere.rikkahub.ui.theme.uiSlotsFrom
 import me.rerere.rikkahub.ui.theme.argbLong
 import me.rerere.rikkahub.ui.theme.findPalettePreset
 import me.rerere.rikkahub.ui.theme.formatHexColor
@@ -351,13 +356,16 @@ fun SettingPalettePage(vm: SettingVM = koinViewModel()) {
             darkMode = dark,
             initial = palette.effectiveColors(dark).full(dark),
             presetColors = (preset ?: findPalettePreset(DEFAULT_PALETTE_ID)).colors(dark).full(dark),
+            initialSlots = palette.slotColors(dark) ?: UiSlotColors(),
             onDismiss = { editingDarkMode = null },
-            onSave = { colors ->
+            onSave = { colors, slots ->
                 updatePalette {
                     it.copy(
                         presetId = it.presetId ?: DEFAULT_PALETTE_ID,
                         light = if (dark) it.light else colors,
                         dark = if (dark) colors else it.dark,
+                        lightSlots = if (dark) it.lightSlots else slots,
+                        darkSlots = if (dark) slots else it.darkSlots,
                     )
                 }
                 editingDarkMode = null
@@ -439,15 +447,23 @@ private fun PaletteEditSheet(
     darkMode: Boolean,
     initial: PaletteColors,
     presetColors: PaletteColors,
+    initialSlots: UiSlotColors,
     onDismiss: () -> Unit,
-    onSave: (PaletteColors) -> Unit,
+    onSave: (PaletteColors, UiSlotColors) -> Unit,
 ) {
     val sheetState = rememberBottomSheetState(
         initialValue = SheetValue.Hidden,
         enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
     )
     var colors by remember(initial) { mutableStateOf(initial) }
+    var slots by remember(initialSlots) { mutableStateOf(initialSlots) }
     var editingRole by remember { mutableStateOf<PaletteRole?>(null) }
+    var editingSlot by remember { mutableStateOf<UiSlot?>(null) }
+    // 0 = 按位置（22 个），1 = 按颜色角色（48 个）
+    var mode by rememberSaveable { mutableStateOf(0) }
+    val effectiveSlots = remember(colors, slots, darkMode) {
+        slots.overlay(uiSlotsFrom(colors.generateColorScheme(darkMode)))
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -471,35 +487,37 @@ private fun PaletteEditSheet(
                     style = MaterialTheme.typography.titleLarge,
                 )
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = { colors = presetColors }) {
+                TextButton(onClick = { colors = presetColors; slots = UiSlotColors() }) {
                     Text(stringResource(R.string.setting_palette_page_reset_side))
                 }
             }
 
             Spacer(Modifier.height(8.dp))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AssistChip(
-                    onClick = { colors = colors.probe() },
-                    label = { Text(stringResource(R.string.setting_palette_page_fill_probe)) },
-                )
-                AssistChip(
-                    onClick = { colors = colors.filledWith(0xFFFF00FFL) },
-                    label = { Text(stringResource(R.string.setting_palette_page_fill_magenta)) },
-                )
-                AssistChip(
-                    onClick = { colors = colors.filledWith(0xFF000000L) },
-                    label = { Text(stringResource(R.string.setting_palette_page_fill_black)) },
+            if (mode == 1) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AssistChip(
+                        onClick = { colors = colors.probe() },
+                        label = { Text(stringResource(R.string.setting_palette_page_fill_probe)) },
+                    )
+                    AssistChip(
+                        onClick = { colors = colors.filledWith(0xFFFF00FFL) },
+                        label = { Text(stringResource(R.string.setting_palette_page_fill_magenta)) },
+                    )
+                    AssistChip(
+                        onClick = { colors = colors.filledWith(0xFF000000L) },
+                        label = { Text(stringResource(R.string.setting_palette_page_fill_black)) },
+                    )
+                }
+
+                Spacer(Modifier.height(4.dp))
+
+                Text(
+                    text = stringResource(R.string.setting_palette_page_fill_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-
-            Spacer(Modifier.height(4.dp))
-
-            Text(
-                text = stringResource(R.string.setting_palette_page_fill_hint),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
 
             Spacer(Modifier.height(8.dp))
 
@@ -511,9 +529,22 @@ private fun PaletteEditSheet(
 
             Spacer(Modifier.height(12.dp))
 
-            PaletteScreenPreview(colors = colors, darkMode = darkMode)
+            PaletteScreenPreview(slots = effectiveSlots)
 
             Spacer(Modifier.height(12.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = mode == 0,
+                    onClick = { mode = 0 },
+                    label = { Text(stringResource(R.string.setting_palette_page_mode_slots)) },
+                )
+                FilterChip(
+                    selected = mode == 1,
+                    onClick = { mode = 1 },
+                    label = { Text(stringResource(R.string.setting_palette_page_mode_roles)) },
+                )
+            }
 
             var advancedOpen by rememberSaveable { mutableStateOf(false) }
             Column(
@@ -521,6 +552,16 @@ private fun PaletteEditSheet(
                     .weight(1f, fill = false)
                     .verticalScroll(rememberScrollState()),
             ) {
+                if (mode == 0) {
+                    UiSlot.entries.forEach { slot ->
+                        SlotColorRow(
+                            slot = slot,
+                            argb = effectiveSlots.get(slot).argbLong(),
+                            isCustom = slots.get(slot) != null,
+                            onClick = { editingSlot = slot },
+                        )
+                    }
+                } else {
                 PaletteGroup.entries.forEach { group ->
                     val roles = PaletteRole.entries.filter { it.group == group }
                     if (roles.isEmpty()) return@forEach
@@ -565,6 +606,7 @@ private fun PaletteEditSheet(
                         )
                     }
                 }
+                }
             }
 
             Spacer(Modifier.height(12.dp))
@@ -578,11 +620,23 @@ private fun PaletteEditSheet(
                     Text(stringResource(android.R.string.cancel))
                 }
                 Spacer(Modifier.width(8.dp))
-                Button(onClick = { onSave(colors) }) {
+                Button(onClick = { onSave(colors, slots) }) {
                     Text(stringResource(R.string.setting_theme_page_save))
                 }
             }
         }
+    }
+
+    editingSlot?.let { slot ->
+        SlotColorDialog(
+            slot = slot,
+            initial = effectiveSlots.get(slot).argbLong(),
+            onDismiss = { editingSlot = null },
+            onConfirm = { argb ->
+                slots = slots.with(slot, argb)
+                editingSlot = null
+            },
+        )
     }
 
     editingRole?.let { role ->
@@ -596,6 +650,103 @@ private fun PaletteEditSheet(
             },
         )
     }
+}
+
+@Composable
+private fun SlotColorRow(
+    slot: UiSlot,
+    argb: Long,
+    isCustom: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Canvas(modifier = Modifier.size(28.dp).clip(CircleShape)) {
+            drawCircle(color = Color(argb.toInt()))
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(slot.labelRes),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                if (isCustom) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(R.string.setting_palette_page_slot_custom),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+            Text(
+                text = stringResource(slot.usageRes),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            text = formatHexColor(argb),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun SlotColorDialog(
+    slot: UiSlot,
+    initial: Long,
+    onDismiss: () -> Unit,
+    onConfirm: (Long?) -> Unit,
+) {
+    var color by remember(initial) { mutableStateOf(Color(initial.toInt())) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column {
+                Text(stringResource(slot.labelRes))
+                Text(
+                    text = stringResource(slot.usageRes),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        text = {
+            Box(Modifier.heightIn(max = 400.dp)) {
+                ColorPickerRow(
+                    color = color,
+                    onColorChange = { color = it },
+                    showAlpha = true,
+                    scrollable = true,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(color.argbLong()) }) {
+                Text(stringResource(R.string.setting_theme_page_save))
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { onConfirm(null) }) {
+                    Text(stringResource(R.string.setting_palette_page_slot_follow_role))
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            }
+        },
+    )
 }
 
 @Composable
@@ -698,27 +849,25 @@ private fun PaletteGroup.labelRes(): Int = when (this) {
  * 改哪个，对应那块立刻变。
  */
 @Composable
-private fun PaletteScreenPreview(colors: PaletteColors, darkMode: Boolean) {
-    val scheme = remember(colors, darkMode) { colors.generateColorScheme(darkMode) }
-
+private fun PaletteScreenPreview(slots: UiSlots) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(scheme.background)
-            .border(1.dp, scheme.outlineVariant, RoundedCornerShape(20.dp)),
+            .background(slots.pageBackground)
+            .border(1.dp, slots.divider, RoundedCornerShape(20.dp)),
     ) {
         // 顶栏：surfaceContainer + onSurface
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(scheme.surfaceContainer)
+                .background(slots.topBar)
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("聊天", style = MaterialTheme.typography.titleSmall, color = scheme.onSurface)
+            Text("聊天", style = MaterialTheme.typography.titleSmall, color = slots.titleText)
             Spacer(Modifier.weight(1f))
-            Box(Modifier.size(10.dp).clip(CircleShape).background(scheme.primary))
+            Box(Modifier.size(10.dp).clip(CircleShape).background(slots.button))
         }
 
         Column(
@@ -729,21 +878,21 @@ private fun PaletteScreenPreview(colors: PaletteColors, darkMode: Boolean) {
             Text(
                 text = "好的，我看看",
                 style = MaterialTheme.typography.bodySmall,
-                color = scheme.onSurfaceVariant,
+                color = slots.bodyText,
                 modifier = Modifier
                     .clip(RoundedCornerShape(12.dp))
-                    .background(scheme.surfaceContainerHigh)
+                    .background(slots.aiBubble)
                     .padding(horizontal = 10.dp, vertical = 6.dp),
             )
             // 用户气泡：primaryContainer + onPrimaryContainer
             Text(
                 text = "把这段颜色调一下",
                 style = MaterialTheme.typography.bodySmall,
-                color = scheme.onPrimaryContainer,
+                color = slots.userBubbleText,
                 modifier = Modifier
                     .align(Alignment.End)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(scheme.primaryContainer)
+                    .background(slots.userBubble)
                     .padding(horizontal = 10.dp, vertical = 6.dp),
             )
             // 卡片：surface + outline
@@ -751,23 +900,23 @@ private fun PaletteScreenPreview(colors: PaletteColors, darkMode: Boolean) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
-                    .background(scheme.surface)
-                    .border(1.dp, scheme.outline, RoundedCornerShape(10.dp))
+                    .background(slots.card)
+                    .border(1.dp, slots.border, RoundedCornerShape(10.dp))
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("设置项", style = MaterialTheme.typography.bodySmall, color = scheme.onSurface)
+                Text("设置项", style = MaterialTheme.typography.bodySmall, color = slots.titleText)
                 Spacer(Modifier.weight(1f))
-                Text("次要说明", style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant)
+                Text("次要说明", style = MaterialTheme.typography.labelSmall, color = slots.bodyText)
             }
             // 报错条：errorContainer + onErrorContainer
             Text(
                 text = "请求失败",
                 style = MaterialTheme.typography.labelSmall,
-                color = scheme.onErrorContainer,
+                color = slots.onErrorBackground,
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .background(scheme.errorContainer)
+                    .background(slots.errorBackground)
                     .padding(horizontal = 8.dp, vertical = 4.dp),
             )
             // 输入框：surfaceContainerHigh + outlineVariant
@@ -775,14 +924,14 @@ private fun PaletteScreenPreview(colors: PaletteColors, darkMode: Boolean) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(scheme.surfaceContainerHigh)
-                    .border(1.dp, scheme.outlineVariant, RoundedCornerShape(14.dp))
+                    .background(slots.aiBubble)
+                    .border(1.dp, slots.divider, RoundedCornerShape(14.dp))
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("输入消息…", style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
+                Text("输入消息…", style = MaterialTheme.typography.bodySmall, color = slots.bodyText)
                 Spacer(Modifier.weight(1f))
-                Box(Modifier.size(18.dp).clip(CircleShape).background(scheme.primary))
+                Box(Modifier.size(18.dp).clip(CircleShape).background(slots.button))
             }
         }
     }

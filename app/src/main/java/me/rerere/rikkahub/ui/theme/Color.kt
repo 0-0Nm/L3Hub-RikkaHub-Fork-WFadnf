@@ -175,21 +175,19 @@ object CustomColors {
     var black = false
 
     val topBarColors: TopAppBarColors
-        @Composable get() {
-            return if (!LocalDarkMode.current) TopAppBarDefaults.topAppBarColors(
-                containerColor = colorScheme.surfaceContainer,
-                scrolledContainerColor = colorScheme.surfaceContainer
-            ) else TopAppBarDefaults.topAppBarColors()
-        }
+        @Composable get() = TopAppBarDefaults.topAppBarColors(
+            containerColor = LocalUiSlots.current.topBar,
+            scrolledContainerColor = LocalUiSlots.current.topBar
+        )
 
     val cardColors: CardColors
-        @Composable get() = CardDefaults.cardColors(containerColor = colorScheme.surfaceContainer)
+        @Composable get() = CardDefaults.cardColors(containerColor = LocalUiSlots.current.card)
 
     val cardColorsOnSurfaceContainer: CardColors
-        @Composable get() = CardDefaults.cardColors(containerColor = colorScheme.surfaceBright)
+        @Composable get() = CardDefaults.cardColors(containerColor = LocalUiSlots.current.listItem)
 
     val listItemColors: ListItemColors
-        @Composable get() = ListItemDefaults.colors(containerColor = colorScheme.surfaceBright)
+        @Composable get() = ListItemDefaults.colors(containerColor = LocalUiSlots.current.listItem)
 
     // 浅色模式下页面背景和悬浮工具栏默认的底色相同，用强调色的版本才分得开
     val floatingToolbarColors: FloatingToolbarColors
