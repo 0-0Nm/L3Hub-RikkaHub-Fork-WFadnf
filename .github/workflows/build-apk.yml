@@ -36,6 +36,15 @@ jobs:
             chmod 600 "$HOME/.android/debug.keystore"
           fi
 
+      # :terminal / :workspace 带 CMake，AGP 每次配置阶段都要 NDK 28.2.13676358（约 700MB）。
+      # 上一次「Error reading Zip content from a SeekableByteChannel」就是这份下载被截断，
+      # 还没走到底就红了。缓存住这个目录，之后不再依赖一次性下载。
+      - name: Cache NDK
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/android/sdk/ndk/28.2.13676358
+          key: ndk-28.2.13676358-ubuntu
+
       - uses: pnpm/action-setup@v4
         with:
           # web-ui/pnpm-workspace.yaml 只有 allowBuilds（pnpm 10.26+ 的字段），没有 packages:，
@@ -68,10 +77,23 @@ jobs:
           ls -l app/build/outputs/apk/github/debug/*.apk
           sha256sum app/build/outputs/apk/github/debug/*.apk
 
+      # Gradle 产出的名字是 app-github-arm64-v8a-debug.apk，下载下来分不清版本。
+      # 这里按 tag 重命名，并附一份 sha256 供校验。
+      - name: Collect APK
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          apk=$(ls app/build/outputs/apk/github/debug/*.apk | head -1)
+          cp "$apk" "dist/L3Hub-${TAG}-arm64-v8a.apk"
+          ( cd dist && sha256sum ./*.apk > "L3Hub-${TAG}-arm64-v8a.apk.sha256" )
+          ls -l dist
+
       - uses: actions/upload-artifact@v4
         with:
           name: L3Hub-debug
-          path: app/build/outputs/apk/github/debug/*.apk
+          path: dist/*.apk
           if-no-files-found: error
 
       - name: Publish release
@@ -80,11 +102,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          # 幂等：release 已存在（例如手动发过、或重跑）就覆盖 APK，不要整个 job 失败
+          # 幂等：release 已存在（例如手动发过、或重跑）就覆盖资产，不要整个 job 失败
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "release $TAG 已存在，覆盖 APK"
-            gh release upload "$TAG" app/build/outputs/apk/github/debug/*.apk --clobber
+            echo "release $TAG 已存在，覆盖资产"
+            gh release upload "$TAG" dist/*.apk dist/*.sha256 --clobber
           else
-            gh release create "$TAG" app/build/outputs/apk/github/debug/*.apk \
-              --prerelease --title "$TAG" --notes "" --target "$GITHUB_SHA"
+            gh release create "$TAG" dist/*.apk dist/*.sha256 \
+              --prerelease --title "$TAG" --generate-notes --target "$GITHUB_SHA"
           fi
