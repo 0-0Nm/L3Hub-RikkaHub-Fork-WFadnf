@@ -292,6 +292,62 @@ data class PaletteColors(
         onTertiaryFixedVariant = onTertiaryFixedVariant ?: base.onTertiaryFixedVariant,
     )
 
+    /**
+     * 把 48 个角色一次性刷成同一个颜色。
+     *
+     * 诊断用：整片界面刷成洋红之后，哪一块还是原来的颜色，就是那个角色没接到界面上。
+     */
+    fun filledWith(argb: Long): PaletteColors = PaletteColors(
+        primary = argb,
+        onPrimary = argb,
+        primaryContainer = argb,
+        onPrimaryContainer = argb,
+        inversePrimary = argb,
+        secondary = argb,
+        onSecondary = argb,
+        secondaryContainer = argb,
+        onSecondaryContainer = argb,
+        tertiary = argb,
+        onTertiary = argb,
+        tertiaryContainer = argb,
+        onTertiaryContainer = argb,
+        background = argb,
+        onBackground = argb,
+        surface = argb,
+        onSurface = argb,
+        surfaceVariant = argb,
+        onSurfaceVariant = argb,
+        surfaceDim = argb,
+        surfaceBright = argb,
+        surfaceContainerLowest = argb,
+        surfaceContainerLow = argb,
+        surfaceContainer = argb,
+        surfaceContainerHigh = argb,
+        surfaceContainerHighest = argb,
+        inverseSurface = argb,
+        inverseOnSurface = argb,
+        surfaceTint = argb,
+        error = argb,
+        onError = argb,
+        errorContainer = argb,
+        onErrorContainer = argb,
+        outline = argb,
+        outlineVariant = argb,
+        scrim = argb,
+        primaryFixed = argb,
+        primaryFixedDim = argb,
+        onPrimaryFixed = argb,
+        onPrimaryFixedVariant = argb,
+        secondaryFixed = argb,
+        secondaryFixedDim = argb,
+        onSecondaryFixed = argb,
+        onSecondaryFixedVariant = argb,
+        tertiaryFixed = argb,
+        tertiaryFixedDim = argb,
+        onTertiaryFixed = argb,
+        onTertiaryFixedVariant = argb,
+    )
+
     /** 展开成全部 48 个确定的色值，给编辑面板显示用。 */
     fun full(dark: Boolean): PaletteColors {
         val scheme = generateColorScheme(dark)

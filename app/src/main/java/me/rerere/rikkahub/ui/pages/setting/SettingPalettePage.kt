@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -505,7 +506,28 @@ private fun PaletteEditSheet(
                 }
             }
 
+            Spacer(Modifier.height(8.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AssistChip(
+                    onClick = { colors = colors.filledWith(0xFFFF00FFL) },
+                    label = { Text(stringResource(R.string.setting_palette_page_fill_probe)) },
+                )
+                AssistChip(
+                    onClick = { colors = colors.filledWith(0xFF000000L) },
+                    label = { Text(stringResource(R.string.setting_palette_page_fill_black)) },
+                )
+            }
+
             Spacer(Modifier.height(4.dp))
+
+            Text(
+                text = stringResource(R.string.setting_palette_page_fill_hint),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Spacer(Modifier.height(8.dp))
 
             Text(
                 text = stringResource(R.string.setting_palette_page_roles_hint),
