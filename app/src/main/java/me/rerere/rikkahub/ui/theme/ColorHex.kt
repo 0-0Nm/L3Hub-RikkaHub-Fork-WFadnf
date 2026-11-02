@@ -45,6 +45,12 @@ fun formatHexColor(argb: Long, forceAlpha: Boolean = false): String {
     }
 }
 
+/** 这段文本是否已经是完整色号（6 位或 8 位）。只看长度，不管有没有非法字符。 */
+fun isCompleteHexColor(input: String): Boolean {
+    val digits = input.trim().removePrefix("#").removePrefix("0x").removePrefix("0X").length
+    return digits == 6 || digits == 8
+}
+
 /** 取 alpha 通道，0..255。 */
 fun alphaComponent(argb: Long): Int = ((argb shr 24) and 0xFF).toInt()
 

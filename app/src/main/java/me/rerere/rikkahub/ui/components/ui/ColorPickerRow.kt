@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,6 +37,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.ui.theme.alphaComponent
 import me.rerere.rikkahub.ui.theme.formatHexColor
+import me.rerere.rikkahub.ui.theme.isCompleteHexColor
 import me.rerere.rikkahub.ui.theme.parseHexColor
 import me.rerere.rikkahub.ui.theme.withAlpha
 import kotlin.math.roundToInt
@@ -52,16 +54,19 @@ private const val SWATCHES_PER_ROW = 8
 /**
  * 取色行：色卡 + 色号输入 + HSV/RGB 双模式滑杆，可选 A 通道。
  *
- * 色号输入框只在失焦时回写规范格式——以前每敲一个字符就被 `remember(argb)` 重置，
- * 粘贴 `#466E7A` 会被立刻改写成 `rgb(70 110 122)`，很难继续修改。
+ * [scrollable] 由调用方决定：底部弹层里内容高度有限，要滚动；
+ * 放在已经有 `verticalScroll` 的容器里就不能再套一层——父级给的是无限高约束，
+ * 子级再滚动会直接抛 `IllegalArgumentException`。
  */
 @Composable
 fun ColorPickerRow(
     color: Color,
     onColorChange: (Color) -> Unit,
     showAlpha: Boolean = false,
+    scrollable: Boolean = false,
 ) {
     val argb = color.toArgb().toLong() and 0xFFFFFFFFL
+    val currentArgb by rememberUpdatedState(argb)
     val hsv = remember(argb) { FloatArray(3).also { android.graphics.Color.colorToHSV(argb.toInt(), it) } }
     val hue = hsv[0]
     val saturation = hsv[1] * 100f
@@ -84,8 +89,26 @@ fun ColorPickerRow(
         }
     }
 
+    // 失焦时才把文本落成颜色：中途停在三位的 "#466" 不该被当成 "#446666"
+    fun commitHex(text: String) {
+        val fromHex = parseHexColor(text)
+        val next = when {
+            fromHex != null -> Color(fromHex.toInt())
+            // rgb()/hsv() 里没有 alpha，沿用当前的
+            else -> parseChannelCode(text, mode)?.let { Color(it.toArgb()).copy(alpha = color.alpha) }
+        }
+        if (next == null) {
+            hexText = formatHexColor(currentArgb, forceAlpha = showAlpha)
+            hexError = false
+        } else {
+            onColorChange(next)
+            hexText = formatHexColor(next.toArgb().toLong() and 0xFFFFFFFFL, forceAlpha = showAlpha)
+            hexError = false
+        }
+    }
+
     Column(
-        modifier = Modifier.verticalScroll(rememberScrollState()),
+        modifier = if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -98,7 +121,8 @@ fun ColorPickerRow(
                         SwatchDot(
                             argb = swatch,
                             selected = (swatch and 0xFFFFFFL) == (argb and 0xFFFFFFL),
-                            onClick = { onColorChange(Color(swatch.toInt())) },
+                            // 点色卡只换 RGB，已经调好的透明度留着
+                            onClick = { onColorChange(Color(swatch.toInt()).copy(alpha = color.alpha)) },
                         )
                     }
                 }
@@ -114,10 +138,15 @@ fun ColorPickerRow(
                 value = hexText,
                 onValueChange = { input ->
                     hexText = input
-                    val parsed = parseHexColor(input)
-                        ?: parseChannelCode(input, mode)?.toArgb()?.toLong()?.and(0xFFFFFFFFL)
-                    hexError = parsed == null
-                    if (parsed != null) onColorChange(Color(parsed.toInt()))
+                    // 敲满 6/8 位就先落一次，好让预览跟着走；
+                    // 更短的写法（#ABC、rgb()）等失焦再落
+                    if (isCompleteHexColor(input)) {
+                        val parsed = parseHexColor(input)
+                        hexError = parsed == null
+                        if (parsed != null) onColorChange(Color(parsed.toInt()))
+                    } else {
+                        hexError = false
+                    }
                 },
                 label = { Text("HEX") },
                 placeholder = { Text(if (showAlpha) "#AARRGGBB" else "#RRGGBB") },
@@ -125,10 +154,7 @@ fun ColorPickerRow(
                     .weight(1f)
                     .onFocusChanged { state ->
                         hexEditing = state.isFocused
-                        if (!state.isFocused) {
-                            hexText = formatHexColor(argb, forceAlpha = showAlpha)
-                            hexError = false
-                        }
+                        if (!state.isFocused) commitHex(hexText)
                     },
                 singleLine = true,
                 isError = hexError,

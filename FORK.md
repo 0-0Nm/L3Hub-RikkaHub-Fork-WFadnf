@@ -312,9 +312,10 @@ L3Hub 自己的设置都在 `Settings` 里，随 `settings.json` 整份序列化
   按 HCT 音调展开，不手写二十个色值；`surfaceContainer*` 和 `surfaceBright/Dim` 由「表层色」单独接管，见下一条
 - 生成方式：`paletteColorScheme()` 用四个彩色种子加中性种子（surface / surfaceVariant）构造 `DynamicScheme`，
   `toColorScheme()` 之后再把这九个角色 `copy` 回去，所以选中的颜色所见即所得
-- 表面族由「表层色」接管：`withSurfaceFamily()` 取 surface 的 HCT 色相和彩度，
-  按 M3 固定音调（浅色 87/98/100/96/94/92/90，深色 6/24/4/10/12/17/22）重算
-  `surfaceDim`、`surfaceBright` 和 `surfaceContainerLowest…Highest`。
+- 表面族由「表层色」接管：`withSurfaceFamily()` 取 surface 的 HCT 色相和彩度（彩度上限 12，
+  保持 M3 中性色的观感），音调沿用 scheme 自己算出来的值——不另钉一份音调表，
+  免得上游从 SPEC_2025 再往前走时容器色和 `onSurface` / `outline` 不同源。
+  重算的是 `surfaceDim`、`surfaceBright` 和 `surfaceContainerLowest…Highest`。
   早先只覆盖 `surface` 一个字段，而应用里 118 处用的是 `surfaceContainer*`，
   它们由中性种子展开、音调钉死，所以浅色下改「表层色」几乎看不出变化。
   「背景色」从此只管自己（聊天页底、Markdown 底），不再偷偷带动整族容器色

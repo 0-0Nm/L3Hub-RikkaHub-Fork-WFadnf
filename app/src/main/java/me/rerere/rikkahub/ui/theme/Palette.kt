@@ -90,7 +90,7 @@ data class PaletteColors(
         surface = Color(surface.toInt()),
         surfaceVariant = Color(surfaceVariant.toInt()),
         onSurface = Color(onSurface.toInt()),
-    ).withSurfaceFamily(surface = surface, dark = dark)
+    ).withSurfaceFamily(surface)
 
     companion object {
         /** 展开用的默认错误色。种子里没有红，出错提示就会和正文混在一起。 */
@@ -103,10 +103,14 @@ data class PaletteColors(
          * 得到的是一张能直接用的色卡，而不是把同一个颜色刷九遍。
          */
         fun fromSeed(seed: Long, dark: Boolean): PaletteColors {
-            val opaque = seed and 0xFFFFFFFFL
+            // 色卡本身是不透明的一套，alpha 在这里丢掉：带透明度的 primary 会让
+            // 按钮、顶栏透出下层，而 onPrimary 是派生出来的不透明色，对比没保证
+            val opaque = (seed and 0x00FFFFFFL) or 0xFF000000L
             val hct = Hct.fromInt(opaque.toInt())
-            val neutral = Hct.from(hct.hue, 4.0, hct.tone)
-            val neutralVariant = Hct.from(hct.hue, 8.0, hct.tone)
+            // 中音调取色相/彩度：靠近 0 或 100 时色域只放得下很小的彩度，
+            // 种子是近白/近黑的话中性族会退化成纯灰，色相整个丢掉
+            val neutral = Hct.from(hct.hue, 4.0, 50.0)
+            val neutralVariant = Hct.from(hct.hue, 8.0, 50.0)
             val scheme = paletteColorScheme(
                 dark = dark,
                 primary = opaque,
@@ -193,64 +197,40 @@ internal fun paletteColorScheme(
 
 internal fun Color.argbLong(): Long = toArgb().toLong() and 0xFFFFFFFFL
 
+/**
+ * 表面族允许的最大彩度。
+ *
+ * M3 的 surfaceContainer* 来自中性色板（彩度一般不超过 6）。这里放到 12：
+ * 够看出用户选的是哪个色相，又不至于让输入框底、卡片底变成一块饱和色，
+ * 把 onSurface 的对比压垮。
+ */
+private const val SURFACE_CHROMA_MAX = 12.0
 
 /**
- * M3 表面族的音调（tone），深浅各一套。
+ * 把整族表面色换成「表层色」的色相和彩度。
  *
- * 数值取自 M3 规范：surfaceDim / surfaceBright / surfaceContainerLowest…Highest。
- * 音调是固定的，色相和彩度由「表层色」决定——这正是改 surface 能带动整族的原因。
- */
-internal data class SurfaceTones(
-    val dim: Double,
-    val bright: Double,
-    val lowest: Double,
-    val low: Double,
-    val container: Double,
-    val high: Double,
-    val highest: Double,
-)
-
-internal val LightSurfaceTones = SurfaceTones(
-    dim = 87.0,
-    bright = 98.0,
-    lowest = 100.0,
-    low = 96.0,
-    container = 94.0,
-    high = 92.0,
-    highest = 90.0,
-)
-
-internal val DarkSurfaceTones = SurfaceTones(
-    dim = 6.0,
-    bright = 24.0,
-    lowest = 4.0,
-    low = 10.0,
-    container = 12.0,
-    high = 17.0,
-    highest = 22.0,
-)
-
-/**
- * 把整族表面色按「表层色」的色相重算一遍。
+ * 音调不写死：paletteColorScheme 走的是 SPEC_2025，自己再钉一份 2021 的音调表，
+ * 会让 surfaceContainer* 和同一条 scheme 里的 onSurface / outline 不同源。
+ * 这里只取 scheme 自己算出来的音调，换 spec 版本时不用跟着改数字。
  *
- * 只覆盖 surface 一个字段是不够的：应用里绝大多数容器用的是 surfaceContainer*，
- * 它们原先由中性种子展开、音调钉死，所以改 surface 在浅色下几乎看不出来。
- * 重算之后改一次表层色，卡片、顶栏、列表项、弹层跟着一起走。
+ * 之前只覆盖 surface 一个字段：应用里绝大多数容器用的是 surfaceContainer*，
+ * 它们由中性种子展开、音调固定，所以改 surface 在浅色下几乎看不出来。
  */
-internal fun ColorScheme.withSurfaceFamily(surface: Long, dark: Boolean): ColorScheme {
+internal fun ColorScheme.withSurfaceFamily(surface: Long): ColorScheme {
     val seed = Hct.fromInt(surface.toInt())
-    val tones = if (dark) DarkSurfaceTones else LightSurfaceTones
+    val chroma = seed.chroma.coerceAtMost(SURFACE_CHROMA_MAX)
 
-    fun at(tone: Double): Color = Color(Hct.from(seed.hue, seed.chroma, tone).toInt())
+    fun rehue(color: Color): Color =
+        Color(Hct.from(seed.hue, chroma, Hct.fromInt(color.toArgb()).tone).toInt())
 
     return copy(
         surface = Color(surface.toInt()),
-        surfaceDim = at(tones.dim),
-        surfaceBright = at(tones.bright),
-        surfaceContainerLowest = at(tones.lowest),
-        surfaceContainerLow = at(tones.low),
-        surfaceContainer = at(tones.container),
-        surfaceContainerHigh = at(tones.high),
-        surfaceContainerHighest = at(tones.highest),
+        surfaceDim = rehue(surfaceDim),
+        surfaceBright = rehue(surfaceBright),
+        surfaceContainerLowest = rehue(surfaceContainerLowest),
+        surfaceContainerLow = rehue(surfaceContainerLow),
+        surfaceContainer = rehue(surfaceContainer),
+        surfaceContainerHigh = rehue(surfaceContainerHigh),
+        surfaceContainerHighest = rehue(surfaceContainerHighest),
     )
 }

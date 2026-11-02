@@ -66,6 +66,27 @@ class PaletteTest {
     }
 
     @Test
+    fun `surface lands verbatim`() {
+        val green = PaletteColors(surface = 0xFF1B5E20).generateColorScheme(dark = false)
+
+        // 重算表面族时不能把用户选的 surface 本身也改掉
+        assertEquals(Color(0xFF1B5E20).bits, green.surface.bits)
+    }
+
+    @Test
+    fun `seed drops alpha`() {
+        // 带透明度的 primary 会让按钮和顶栏透出下层，色卡一律不透明
+        assertEquals(0xFF112233L, PaletteColors.fromSeed(0x80112233, dark = false).primary)
+    }
+
+    @Test
+    fun `non palette json is rejected`() {
+        // PaletteSetting 字段全有默认值，没有这道闸门的话任意 JSON 都会被"成功"导入成空白
+        assertTrue(PaletteSerializer.importFromJson("{}").isFailure)
+        assertTrue(PaletteSerializer.importFromJson("""{"name":"x"}""").isFailure)
+    }
+
+    @Test
     fun `palette json round trips through the export envelope`() {
         val original = PaletteSetting(
             presetId = "ocean",

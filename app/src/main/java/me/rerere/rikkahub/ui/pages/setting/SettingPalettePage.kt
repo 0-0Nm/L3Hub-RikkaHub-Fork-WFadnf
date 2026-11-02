@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -31,13 +33,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -88,8 +90,10 @@ import me.rerere.rikkahub.ui.theme.PalettePresets
 import me.rerere.rikkahub.ui.theme.PaletteRole
 import me.rerere.rikkahub.ui.theme.PaletteSetting
 import me.rerere.rikkahub.ui.theme.argbLong
-import me.rerere.rikkahub.ui.theme.parseHexColor
 import me.rerere.rikkahub.ui.theme.findPalettePreset
+import me.rerere.rikkahub.ui.theme.formatHexColor
+import me.rerere.rikkahub.ui.theme.isCompleteHexColor
+import me.rerere.rikkahub.ui.theme.parseHexColor
 import me.rerere.rikkahub.utils.plus
 import me.rerere.ui.components.RikkaConfirmDialog
 import org.koin.androidx.compose.koinViewModel
@@ -222,6 +226,7 @@ fun SettingPalettePage(vm: SettingVM = koinViewModel()) {
 
             item("seedColor") {
                 SeedColorCard(
+                    enabled = !settings.dynamicColor,
                     onApply = { colors, dark ->
                         updatePalette {
                             it.copy(
@@ -289,7 +294,7 @@ fun SettingPalettePage(vm: SettingVM = koinViewModel()) {
             item("transfer") {
                 CardGroup {
                     item(
-                        onClick = { exportLauncher.launch("l3hub-palette.json") },
+                        onClick = { exportLauncher.launch(PaletteSerializer.getExportFileName(settings.palette)) },
                         leadingContent = { Icon(HugeIcons.Download04, contentDescription = null) },
                         headlineContent = { Text(stringResource(R.string.setting_palette_page_export)) },
                         supportingContent = { Text(stringResource(R.string.setting_palette_page_export_desc)) },
@@ -576,7 +581,7 @@ private fun PaletteColorRow(
             modifier = Modifier.weight(1f),
         )
         Text(
-            text = argb.toHexCode(),
+            text = formatHexColor(argb),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -596,11 +601,16 @@ private fun PaletteColorDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(role.labelRes())) },
         text = {
-            ColorPickerRow(
-                color = color,
-                onColorChange = { color = it },
-                showAlpha = true,
-            )
+            // 限高再让它自己滚：M3 的 AlertDialog 不会替内容滚动，
+            // 把可滚动内容直接丢进 text 槽会滚得乱七八糟
+            Box(Modifier.heightIn(max = 400.dp)) {
+                ColorPickerRow(
+                    color = color,
+                    onColorChange = { color = it },
+                    showAlpha = true,
+                    scrollable = true,
+                )
+            }
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(color.argbLong()) }) {
@@ -628,7 +638,6 @@ private fun PaletteRole.labelRes(): Int = when (this) {
     PaletteRole.ON_SURFACE -> R.string.palette_role_on_surface
 }
 
-private fun Long.toHexCode(): String = "#%06X".format(this and 0xFFFFFF)
 
 /**
  * 输入一个色号，当场展开成深浅两套色卡。
@@ -636,10 +645,12 @@ private fun Long.toHexCode(): String = "#%06X".format(this and 0xFFFFFF)
  * 「应用」只写其中一侧：既有的自定义色不会被顺手清掉，想只调浅色就只点浅色。
  */
 @Composable
-private fun SeedColorCard(onApply: (PaletteColors, Boolean) -> Unit) {
+private fun SeedColorCard(enabled: Boolean, onApply: (PaletteColors, Boolean) -> Unit) {
     var input by rememberSaveable { mutableStateOf("") }
-    val seed = remember(input) { parseHexColor(input) }
-    val invalid = input.isNotBlank() && seed == null
+    // 三位简写/半截色号都不展开：每敲一个字符重算四套配色，手机上会卡
+    val complete = isCompleteHexColor(input)
+    val seed = remember(input, complete) { if (complete) parseHexColor(input) else null }
+    val invalid = input.isNotBlank() && complete && seed == null
     val lightColors = remember(seed) { seed?.let { PaletteColors.fromSeed(it, dark = false) } }
     val darkColors = remember(seed) { seed?.let { PaletteColors.fromSeed(it, dark = true) } }
 
@@ -698,10 +709,10 @@ private fun SeedColorCard(onApply: (PaletteColors, Boolean) -> Unit) {
                     label = stringResource(R.string.setting_palette_page_dark_palette),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { onApply(lightColors, false) }) {
+                    TextButton(onClick = { onApply(lightColors, false) }, enabled = enabled) {
                         Text(stringResource(R.string.setting_palette_page_apply_light))
                     }
-                    TextButton(onClick = { onApply(darkColors, true) }) {
+                    TextButton(onClick = { onApply(darkColors, true) }, enabled = enabled) {
                         Text(stringResource(R.string.setting_palette_page_apply_dark))
                     }
                 }

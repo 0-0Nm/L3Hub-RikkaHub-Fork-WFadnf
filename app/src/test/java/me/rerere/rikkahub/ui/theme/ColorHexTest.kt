@@ -1,7 +1,9 @@
 package me.rerere.rikkahub.ui.theme
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -39,6 +41,14 @@ class ColorHexTest {
         assertEquals("#80466E7A", formatHexColor(0x80466E7A))
         // 强制八位时，不透明色也写全
         assertEquals("#FF466E7A", formatHexColor(0xFF466E7A, forceAlpha = true))
+    }
+
+    @Test
+    fun `complete hex detection ignores shorthand`() {
+        assertTrue(isCompleteHexColor("#466E7A"))
+        assertTrue(isCompleteHexColor("#80466E7A"))
+        assertFalse(isCompleteHexColor("#ABC"))
+        assertFalse(isCompleteHexColor("#466"))
     }
 
     @Test
