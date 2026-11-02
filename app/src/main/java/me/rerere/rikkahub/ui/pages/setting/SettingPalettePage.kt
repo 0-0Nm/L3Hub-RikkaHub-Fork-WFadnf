@@ -616,11 +616,17 @@ private fun PaletteColorRow(
         Canvas(modifier = Modifier.size(28.dp).clip(CircleShape)) {
             drawCircle(color = Color(argb.toInt()))
         }
-        Text(
-            text = stringResource(role.labelRes),
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(role.labelRes),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                text = stringResource(role.usageRes),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Text(
             text = formatHexColor(argb),
             style = MaterialTheme.typography.bodySmall,
@@ -640,7 +646,16 @@ private fun PaletteColorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(role.labelRes)) },
+        title = {
+            Column {
+                Text(stringResource(role.labelRes))
+                Text(
+                    text = stringResource(role.usageRes),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
         text = {
             // 限高再让它自己滚：M3 的 AlertDialog 不会替内容滚动，
             // 把可滚动内容直接丢进 text 槽会滚得乱七八糟
