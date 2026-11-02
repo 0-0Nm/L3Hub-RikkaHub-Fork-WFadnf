@@ -92,6 +92,7 @@ import me.rerere.rikkahub.ui.theme.PaletteSetting
 import me.rerere.rikkahub.ui.theme.argbLong
 import me.rerere.rikkahub.ui.theme.findPalettePreset
 import me.rerere.rikkahub.ui.theme.formatHexColor
+import me.rerere.rikkahub.ui.theme.hexDigitCount
 import me.rerere.rikkahub.ui.theme.isCompleteHexColor
 import me.rerere.rikkahub.ui.theme.parseHexColor
 import me.rerere.rikkahub.utils.plus
@@ -226,7 +227,6 @@ fun SettingPalettePage(vm: SettingVM = koinViewModel()) {
 
             item("seedColor") {
                 SeedColorCard(
-                    enabled = !settings.dynamicColor,
                     onApply = { colors, dark ->
                         updatePalette {
                             it.copy(
@@ -638,19 +638,19 @@ private fun PaletteRole.labelRes(): Int = when (this) {
     PaletteRole.ON_SURFACE -> R.string.palette_role_on_surface
 }
 
-
 /**
  * 输入一个色号，当场展开成深浅两套色卡。
  *
  * 「应用」只写其中一侧：既有的自定义色不会被顺手清掉，想只调浅色就只点浅色。
  */
 @Composable
-private fun SeedColorCard(enabled: Boolean, onApply: (PaletteColors, Boolean) -> Unit) {
+private fun SeedColorCard(onApply: (PaletteColors, Boolean) -> Unit) {
     var input by rememberSaveable { mutableStateOf("") }
-    // 三位简写/半截色号都不展开：每敲一个字符重算四套配色，手机上会卡
-    val complete = isCompleteHexColor(input)
-    val seed = remember(input, complete) { if (complete) parseHexColor(input) else null }
-    val invalid = input.isNotBlank() && complete && seed == null
+    // 只有能解释的写法才展开：半截色号每敲一位都重算四套配色，手机上会卡。
+    // 三位简写算能解释——parseHexColor 本来就吃它，不认的话用户会以为坏了。
+    val usable = hexDigitCount(input).let { it == 3 || it == 6 || it == 8 }
+    val seed = remember(input, usable) { if (usable) parseHexColor(input) else null }
+    val invalid = isCompleteHexColor(input) && seed == null
     val lightColors = remember(seed) { seed?.let { PaletteColors.fromSeed(it, dark = false) } }
     val darkColors = remember(seed) { seed?.let { PaletteColors.fromSeed(it, dark = true) } }
 
@@ -709,10 +709,10 @@ private fun SeedColorCard(enabled: Boolean, onApply: (PaletteColors, Boolean) ->
                     label = stringResource(R.string.setting_palette_page_dark_palette),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { onApply(lightColors, false) }, enabled = enabled) {
+                    TextButton(onClick = { onApply(lightColors, false) }) {
                         Text(stringResource(R.string.setting_palette_page_apply_light))
                     }
-                    TextButton(onClick = { onApply(darkColors, true) }, enabled = enabled) {
+                    TextButton(onClick = { onApply(darkColors, true) }) {
                         Text(stringResource(R.string.setting_palette_page_apply_dark))
                     }
                 }

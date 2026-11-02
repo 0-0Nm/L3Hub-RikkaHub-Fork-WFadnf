@@ -210,7 +210,7 @@ private const val SURFACE_CHROMA_MAX = 12.0
  * 把整族表面色换成「表层色」的色相和彩度。
  *
  * 音调不写死：paletteColorScheme 走的是 SPEC_2025，自己再钉一份 2021 的音调表，
- * 会让 surfaceContainer* 和同一条 scheme 里的 onSurface / outline 不同源。
+ * 会让 surfaceContainer* 和同一条 scheme 里的 onSurface 对不上。
  * 这里只取 scheme 自己算出来的音调，换 spec 版本时不用跟着改数字。
  *
  * 之前只覆盖 surface 一个字段：应用里绝大多数容器用的是 surfaceContainer*，
@@ -232,5 +232,9 @@ internal fun ColorScheme.withSurfaceFamily(surface: Long): ColorScheme {
         surfaceContainer = rehue(surfaceContainer),
         surfaceContainerHigh = rehue(surfaceContainerHigh),
         surfaceContainerHighest = rehue(surfaceContainerHighest),
+        // Snackbar、Tooltip 这类反色底也来自中性族，不一起换的话把 surface 设成红，
+        // 弹出来的提示条还是原来那块灰
+        inverseSurface = rehue(inverseSurface),
+        inverseOnSurface = rehue(inverseOnSurface),
     )
 }

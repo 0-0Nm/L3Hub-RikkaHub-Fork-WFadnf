@@ -315,14 +315,17 @@ L3Hub 自己的设置都在 `Settings` 里，随 `settings.json` 整份序列化
 - 表面族由「表层色」接管：`withSurfaceFamily()` 取 surface 的 HCT 色相和彩度（彩度上限 12，
   保持 M3 中性色的观感），音调沿用 scheme 自己算出来的值——不另钉一份音调表，
   免得上游从 SPEC_2025 再往前走时容器色和 `onSurface` / `outline` 不同源。
-  重算的是 `surfaceDim`、`surfaceBright` 和 `surfaceContainerLowest…Highest`。
+  重算的是 `surfaceDim`、`surfaceBright`、`surfaceContainerLowest…Highest`，
+  以及来自同一族中性色的 `inverseSurface` / `inverseOnSurface`（Snackbar 的反色底）。
   早先只覆盖 `surface` 一个字段，而应用里 118 处用的是 `surfaceContainer*`，
   它们由中性种子展开、音调钉死，所以浅色下改「表层色」几乎看不出变化。
   「背景色」从此只管自己（聊天页底、Markdown 底），不再偷偷带动整族容器色
 - 取色器：`ColorPickerRow`（HSV/RGB 双模式 + 色卡 + 色号输入 + 可选 A 通道滑杆），
   已从 `SettingThemePage.kt` 提到 `ui/components/ui/ColorPickerRow.kt`，两处共用，没有引入新依赖。
-  色号输入框只在失焦时回写规范格式——之前每敲一个字符就被 `remember(argb)` 重置，
-  粘贴 `#466E7A` 会被立刻改写成 `rgb(70 110 122)`
+  色号输入边输边生效，输入框不会中途被改写（之前每敲一个字符就被 `remember(argb)` 重置，
+  粘贴 `#466E7A` 会被立刻改写成 `rgb(70 110 122)`）；失焦只负责把文本规范成标准写法。
+  中途会闪一下中间态（`#466` → `#446666`），但保存时拿到的永远是当前输入——
+  「保存」按钮不抢焦点，把提交压在失焦上会丢输入
 - 色号：`#RRGGBB` / `#AARRGGBB` / `#RGB` 三种写法，解析和格式化在 `ui/theme/ColorHex.kt`，
   纯计算，JVM 单测直接跑。不带 alpha 按不透明处理
 - 从色号生成：调色板页顶部填一个色号，`PaletteColors.fromSeed()` 当场展开成深浅两套色卡，

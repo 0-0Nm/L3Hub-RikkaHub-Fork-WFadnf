@@ -5,6 +5,7 @@ import android.net.Uri
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.jsonObject
 import me.rerere.rikkahub.ui.theme.PaletteSetting
 
 /**
@@ -35,18 +36,26 @@ object PaletteSerializer : ExportSerializer<PaletteSetting> {
         }.getOrNull()
         if (packed != null) {
             require(packed.type == type) { "not a palette: ${packed.type}" }
+            // 信封对得上但 data 是空的，同样会解成默认值，一并拦掉
+            requirePaletteKeys(packed.data.jsonObject.keys)
             ExportSerializer.DefaultJson.decodeFromJsonElement<PaletteSetting>(packed.data)
         } else {
-            // PaletteSetting 三个字段全有默认值，加上 ignoreUnknownKeys，
-            // 任何一份别的 JSON 都能"成功"解析成默认值——那会把用户的调色板静默关掉。
-            // 先确认键里确实有调色板的字段，再解码。
-            val keys = ExportSerializer.DefaultJson
-                .decodeFromString<Map<String, JsonElement>>(text)
-                .keys
-            require(keys.any { it == "presetId" || it == "light" || it == "dark" }) {
-                "not a palette json, keys=$keys"
-            }
+            requirePaletteKeys(
+                ExportSerializer.DefaultJson.decodeFromString<Map<String, JsonElement>>(text).keys
+            )
             ExportSerializer.DefaultJson.decodeFromString<PaletteSetting>(text)
         }
+    }
+}
+
+/**
+ * 确认这份 JSON 里确实有调色板的字段。
+ *
+ * [PaletteSetting] 三个字段全有默认值，加上 `ignoreUnknownKeys`，任何一份别的 JSON
+ * 都能"成功"解析成默认值——那会把用户的调色板静默关掉。
+ */
+private fun requirePaletteKeys(keys: Set<String>) {
+    require(keys.any { it == "presetId" || it == "light" || it == "dark" }) {
+        "not a palette json, keys=$keys"
     }
 }

@@ -24,7 +24,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,6 +36,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.ui.theme.alphaComponent
 import me.rerere.rikkahub.ui.theme.formatHexColor
+import me.rerere.rikkahub.ui.theme.hexDigitCount
 import me.rerere.rikkahub.ui.theme.isCompleteHexColor
 import me.rerere.rikkahub.ui.theme.parseHexColor
 import me.rerere.rikkahub.ui.theme.withAlpha
@@ -54,9 +54,9 @@ private const val SWATCHES_PER_ROW = 8
 /**
  * 取色行：色卡 + 色号输入 + HSV/RGB 双模式滑杆，可选 A 通道。
  *
- * [scrollable] 由调用方决定：底部弹层里内容高度有限，要滚动；
- * 放在已经有 `verticalScroll` 的容器里就不能再套一层——父级给的是无限高约束，
- * 子级再滚动会直接抛 `IllegalArgumentException`。
+ * [scrollable] 由调用方决定：色号弹窗里限高之后要能滚；放在已经有 `verticalScroll`
+ * 的容器里就不能再套一层——父级给的是无限高约束，子级再滚动会直接抛
+ * `IllegalArgumentException`。
  */
 @Composable
 fun ColorPickerRow(
@@ -66,7 +66,6 @@ fun ColorPickerRow(
     scrollable: Boolean = false,
 ) {
     val argb = color.toArgb().toLong() and 0xFFFFFFFFL
-    val currentArgb by rememberUpdatedState(argb)
     val hsv = remember(argb) { FloatArray(3).also { android.graphics.Color.colorToHSV(argb.toInt(), it) } }
     val hue = hsv[0]
     val saturation = hsv[1] * 100f
@@ -89,22 +88,23 @@ fun ColorPickerRow(
         }
     }
 
-    // 失焦时才把文本落成颜色：中途停在三位的 "#466" 不该被当成 "#446666"
-    fun commitHex(text: String) {
+    /**
+     * 把输入框里的文本解释成颜色，解不出来返回 null。
+     *
+     * 没写 alpha 的写法（三位、六位）沿用已经调好的透明度，八位就按写进来的算。
+     */
+    fun parseInput(text: String): Color? {
         val fromHex = parseHexColor(text)
-        val next = when {
-            fromHex != null -> Color(fromHex.toInt())
-            // rgb()/hsv() 里没有 alpha，沿用当前的
-            else -> parseChannelCode(text, mode)?.let { Color(it.toArgb()).copy(alpha = color.alpha) }
+        if (fromHex != null) {
+            val next = Color(fromHex.toInt())
+            return if (showAlpha && hexDigitCount(text) != 8) {
+                next.copy(alpha = color.alpha)
+            } else {
+                next
+            }
         }
-        if (next == null) {
-            hexText = formatHexColor(currentArgb, forceAlpha = showAlpha)
-            hexError = false
-        } else {
-            onColorChange(next)
-            hexText = formatHexColor(next.toArgb().toLong() and 0xFFFFFFFFL, forceAlpha = showAlpha)
-            hexError = false
-        }
+        // rgb()/hsv() 里没有 alpha，同样沿用当前的
+        return parseChannelCode(text, mode)?.let { Color(it.toArgb()).copy(alpha = color.alpha) }
     }
 
     Column(
@@ -138,14 +138,17 @@ fun ColorPickerRow(
                 value = hexText,
                 onValueChange = { input ->
                     hexText = input
-                    // 敲满 6/8 位就先落一次，好让预览跟着走；
-                    // 更短的写法（#ABC、rgb()）等失焦再落
-                    if (isCompleteHexColor(input)) {
-                        val parsed = parseHexColor(input)
-                        hexError = parsed == null
-                        if (parsed != null) onColorChange(Color(parsed.toInt()))
-                    } else {
+                    // 边输边落，不等失焦：保存按钮不抢焦点，只写在失焦里的话，
+                    // 打到 "#ABC" 直接点保存，输入就被悄悄丢了。
+                    // 代价是敲 "#466E7A" 时中途会闪一下 "#446666"，
+                    // 但输入框本身不会被改写，敲满即纠正。
+                    val next = parseInput(input)
+                    if (next != null) {
+                        onColorChange(next)
                         hexError = false
+                    } else {
+                        // 只在整个色号都写完还解不出来时标红，别在 "#46" 这种半截上闪
+                        hexError = isCompleteHexColor(input)
                     }
                 },
                 label = { Text("HEX") },
@@ -154,7 +157,12 @@ fun ColorPickerRow(
                     .weight(1f)
                     .onFocusChanged { state ->
                         hexEditing = state.isFocused
-                        if (!state.isFocused) commitHex(hexText)
+                        if (!state.isFocused) {
+                            // 失焦只把文本规范成标准写法（rgb() → #RRGGBB、#abc → #AABBCC）；
+                            // 颜色在输入时已经落过了，这里不碰
+                            hexText = formatHexColor(argb, forceAlpha = showAlpha)
+                            hexError = false
+                        }
                     },
                 singleLine = true,
                 isError = hexError,

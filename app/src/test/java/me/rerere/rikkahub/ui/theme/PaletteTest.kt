@@ -84,6 +84,10 @@ class PaletteTest {
         // PaletteSetting 字段全有默认值，没有这道闸门的话任意 JSON 都会被"成功"导入成空白
         assertTrue(PaletteSerializer.importFromJson("{}").isFailure)
         assertTrue(PaletteSerializer.importFromJson("""{"name":"x"}""").isFailure)
+        // 信封对得上、data 是空的，同样不该被当成一份有效配置
+        assertTrue(
+            PaletteSerializer.importFromJson("""{"version":1,"type":"palette","data":{}}""").isFailure
+        )
     }
 
     @Test
