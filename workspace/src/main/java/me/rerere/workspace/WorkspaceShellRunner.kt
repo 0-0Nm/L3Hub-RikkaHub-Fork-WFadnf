@@ -58,6 +58,14 @@ class HostShellRunner : WorkspaceShellRunner {
 // 单个流保留的最大字符数, 防止命令疯狂输出导致 OOM 或撑爆 LLM 上下文
 const val MAX_OUTPUT_CHARS = 128 * 1024
 
+// 进程退出后等采集线程读完管道的时间。父进程退出但管道还被孙进程持有时读不到 EOF,
+// 这里不能无限等; 但也不能等不到就当读完了——没读完时把 truncated 置上, 让调用方知道
+// 这份输出可能是不完整的。
+private const val OUTPUT_DRAIN_TIMEOUT_MS = 5_000L
+
+// 超时被强杀时孙进程可能还攥着管道, 这时只短暂收一下残留输出, 不为它多等
+private const val KILLED_DRAIN_TIMEOUT_MS = 500L
+
 fun Process.readResult(timeoutMillis: Long, stdin: ByteArray? = null): WorkspaceCommandResult {
     val stdout = StreamCollector(inputStream)
     val stderr = StreamCollector(errorStream)
@@ -77,14 +85,15 @@ fun Process.readResult(timeoutMillis: Long, stdin: ByteArray? = null): Workspace
             destroyForcibly()
         }
         stdinWriter?.join(1_000)
-        stdout.join(1_000)
-        stderr.join(1_000)
+        val drainMillis = if (finished) OUTPUT_DRAIN_TIMEOUT_MS else KILLED_DRAIN_TIMEOUT_MS
+        val stdoutDrained = stdout.awaitEnd(drainMillis)
+        val stderrDrained = stderr.awaitEnd(drainMillis)
         return WorkspaceCommandResult(
             exitCode = if (finished) exitValue() else -1,
             stdout = stdout.text(),
             stderr = stderr.text(),
             timedOut = !finished,
-            truncated = stdout.truncated || stderr.truncated,
+            truncated = stdout.truncated || stderr.truncated || !stdoutDrained || !stderrDrained,
         )
     } catch (e: InterruptedException) {
         // 调用方线程被中断（如协程取消时的 runInterruptible），杀掉进程避免命令继续执行
@@ -160,6 +169,12 @@ internal class StreamCollector(
     fun join(millis: Long) = thread.join(millis)
 
     fun text(): String = synchronized(builder) { builder.toString() }
+
+    /** 等采集线程结束; 返回 false 表示超时, 输出可能还没读完 */
+    fun awaitEnd(millis: Long): Boolean {
+        thread.join(millis)
+        return !thread.isAlive
+    }
 }
 
 /** POSIX shell 单引号转义 */
