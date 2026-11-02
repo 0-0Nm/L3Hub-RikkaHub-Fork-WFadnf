@@ -1020,9 +1020,10 @@
   <string name="setting_palette_page_seed_title">Build a palette from a hex</string>
   <string name="setting_palette_page_seed_desc">Type one color and preview it as a full card, light and dark. Apply to either side.</string>
   <string name="setting_palette_page_apply_light">Apply to light</string>
-  <string name="setting_palette_page_fill_probe">Magenta probe</string>
+  <string name="setting_palette_page_fill_probe">48 colors</string>
+  <string name="setting_palette_page_fill_magenta">Magenta</string>
   <string name="setting_palette_page_fill_black">All black</string>
-  <string name="setting_palette_page_fill_hint">Fill everything with one color: whatever does not change is not wired to that role.</string>
+  <string name="setting_palette_page_fill_hint">Tap "48 colors": every role gets its own hue, so each colored area maps to one row in the list. Anything that keeps its old color is not wired to its role.</string>
   <string name="setting_palette_page_applied">Currently applied</string>
   <string name="setting_palette_page_apply_dark">Apply to dark</string>
   <string name="setting_palette_page_export">Export palette</string>

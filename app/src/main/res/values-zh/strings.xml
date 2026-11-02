@@ -976,9 +976,10 @@
   <string name="setting_palette_page_seed_title">从色号生成调色板</string>
   <string name="setting_palette_page_seed_desc">填一个十六进制色号，当场展开成深浅两套色卡，可以只应用其中一侧。</string>
   <string name="setting_palette_page_apply_light">应用到浅色</string>
-  <string name="setting_palette_page_fill_probe">洋红探针</string>
+  <string name="setting_palette_page_fill_probe">48 色</string>
+  <string name="setting_palette_page_fill_magenta">洋红</string>
   <string name="setting_palette_page_fill_black">全黑</string>
-  <string name="setting_palette_page_fill_hint">刷成一个颜色再看：哪块没跟着变，就是那个角色没接到界面上。</string>
+  <string name="setting_palette_page_fill_hint">点「48 色」：整片界面会变成 48 种颜色，每块对应列表里的一格；哪块没变色，就是那个角色没接线。</string>
   <string name="setting_palette_page_applied">当前生效</string>
   <string name="setting_palette_page_apply_dark">应用到深色</string>
   <string name="setting_palette_page_export">导出调色板</string>

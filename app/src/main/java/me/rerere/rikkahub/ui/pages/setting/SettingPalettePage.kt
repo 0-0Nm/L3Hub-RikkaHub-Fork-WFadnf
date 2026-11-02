@@ -510,8 +510,12 @@ private fun PaletteEditSheet(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AssistChip(
-                    onClick = { colors = colors.filledWith(0xFFFF00FFL) },
+                    onClick = { colors = colors.probe() },
                     label = { Text(stringResource(R.string.setting_palette_page_fill_probe)) },
+                )
+                AssistChip(
+                    onClick = { colors = colors.filledWith(0xFFFF00FFL) },
+                    label = { Text(stringResource(R.string.setting_palette_page_fill_magenta)) },
                 )
                 AssistChip(
                     onClick = { colors = colors.filledWith(0xFF000000L) },

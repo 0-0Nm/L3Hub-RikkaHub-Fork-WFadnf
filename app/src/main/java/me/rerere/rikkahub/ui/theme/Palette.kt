@@ -348,6 +348,23 @@ data class PaletteColors(
         onTertiaryFixedVariant = argb,
     )
 
+    /**
+     * 48 个角色各给一个专属颜色，把界面刷成一张「着色地图」。
+     *
+     * 色相每隔 7.5° 一个、明度在 62/38 交替，相邻两块一定能分开：
+     * 界面上看到一块颜色，回列表里一比就知道是哪个角色；
+     * 哪块颜色没变，就是那个角色还没接到界面上。
+     */
+    fun probe(): PaletteColors {
+        val roles = PaletteRole.entries
+        return roles.fold(PaletteColors()) { acc, role ->
+            val i = role.ordinal
+            val hue = i * 360.0 / roles.size
+            val tone = if (i % 2 == 0) 62.0 else 38.0
+            acc.with(role, Hct.from(hue, 85.0, tone).toInt().toLong() and 0xFFFFFFFFL)
+        }
+    }
+
     /** 展开成全部 48 个确定的色值，给编辑面板显示用。 */
     fun full(dark: Boolean): PaletteColors {
         val scheme = generateColorScheme(dark)

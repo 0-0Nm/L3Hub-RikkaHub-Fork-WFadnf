@@ -114,6 +114,13 @@ class PaletteTest {
     }
 
     @Test
+    fun `probe gives every role its own color`() {
+        // 探针图的用处是「看颜色认角色」，48 个颜色里有两个撞色就白做了
+        val probe = PaletteColors().probe()
+        assertEquals(PaletteRole.entries.size, PaletteRole.entries.map { probe[it] }.toSet().size)
+    }
+
+    @Test
     fun `advanced roles override the derived family`() {
         // 高级区直接指定容器色时，必须盖过 withSurfaceFamily 算出来的值，
         // 否则那几十个格子全是摆设
