@@ -33,6 +33,7 @@ fun rememberChatFontFamily(displaySetting: DisplaySetting): FontFamily {
     return remember(
         displaySetting.chatFontFamily,
         displaySetting.chatCustomFontPath,
+        displaySetting.chatCustomFontPaths,
     ) {
         displaySetting.resolveChatFontFamily(context)
     }
@@ -42,16 +43,32 @@ fun DisplaySetting.resolveChatFontFamily(context: Context): FontFamily = when (c
     ChatFontFamily.DEFAULT -> FontFamily.Default
     ChatFontFamily.SERIF -> FontFamily.Serif
     ChatFontFamily.MONOSPACE -> FontFamily.Monospace
-    ChatFontFamily.CUSTOM -> loadCustomFontFamily(context, chatCustomFontPath) ?: FontFamily.Default
+    ChatFontFamily.CUSTOM -> loadCustomFontFamilyChain(context) ?: FontFamily.Default
 }
 
-private fun loadCustomFontFamily(context: Context, relativePath: String): FontFamily? {
-    val file = resolveFilesDirFile(context, relativePath) ?: return null
-    if (!file.isFile) return null
-    return runCatching {
-        Typeface.createFromFile(file)
-        FontFamily(Font(file))
-    }.getOrNull()
+/**
+ * 加载自定义字体回退链：优先用 [chatCustomFontPaths]（多字体，有序）；
+ * 旧配置只有 [chatCustomFontPath] 时退化为单字体。返回的 FontFamily 按顺序
+ * 组成字形回退链——缺失的字形自动顺延到下一款，实现中/英/俄等多脚本混用。
+ */
+private fun DisplaySetting.loadCustomFontFamilyChain(context: Context): FontFamily? {
+    val paths = if (chatCustomFontPaths.isNotEmpty()) {
+        chatCustomFontPaths
+    } else {
+        listOf(chatCustomFontPath).filter { it.isNotBlank() }
+    }
+    val files = paths.mapNotNull { resolveFilesDirFile(context, it)?.takeIf(File::isFile) }
+    if (files.isEmpty()) return null
+    // 逐款校验可加载（createFromFile 对无效文件抛异常）：一款坏字体只丢弃自己，不拖垮整条链
+    val fonts = files.mapNotNull { file ->
+        runCatching {
+            Typeface.createFromFile(file)
+            Font(file)
+        }.getOrNull()
+    }
+    if (fonts.isEmpty()) return null
+    // 用 vararg 构造（List<Font> 重载在不同 Compose 版本可用性不一，vararg 更稳）
+    return FontFamily(*fonts.toTypedArray())
 }
 
 private fun resolveFilesDirFile(context: Context, relativePath: String): File? {

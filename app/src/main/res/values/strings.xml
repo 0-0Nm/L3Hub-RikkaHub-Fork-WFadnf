@@ -694,6 +694,10 @@
   <string name="setting_display_page_custom_font_import_failed">Failed to import font: %1$s</string>
   <string name="setting_display_page_custom_font_import_success">Custom font imported</string>
   <string name="setting_display_page_custom_font_not_imported">No custom font imported. Supports .ttf, .otf, and .ttc files.</string>
+  <string name="setting_display_page_custom_font_chain_desc">%1$d fonts imported, forming a fallback chain in import order: earlier fonts win for shared glyphs, missing glyphs automatically use the next font</string>
+  <string name="setting_display_page_custom_font_chain_position">Fallback #%1$d</string>
+  <string name="setting_display_page_custom_font_fallback_name">Font %1$d</string>
+  <string name="setting_display_page_custom_font_move_up">Move up</string>
   <string name="setting_display_page_custom_font_remove">Remove custom font</string>
   <string name="setting_display_page_custom_font_title">Custom Font</string>
   <string name="setting_display_page_enable_auto_scroll_desc">Automatically scroll to the bottom when AI is generating content</string>

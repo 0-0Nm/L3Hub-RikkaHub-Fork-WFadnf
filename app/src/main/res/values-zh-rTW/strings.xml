@@ -1088,6 +1088,10 @@
   <string name="setting_display_page_custom_font_import_failed">匯入字型失敗：%1$s</string>
   <string name="setting_display_page_custom_font_import_success">自訂字型已匯入</string>
   <string name="setting_display_page_custom_font_not_imported">尚未匯入自訂字型。支援 .ttf、.otf 與 .ttc 檔案。</string>
+  <string name="setting_display_page_custom_font_chain_desc">已匯入 %1$d 款字型，依匯入順序組成回退鏈：同一字元靠前的優先，缺失的自動用下一款</string>
+  <string name="setting_display_page_custom_font_chain_position">回退鏈第 %1$d 款</string>
+  <string name="setting_display_page_custom_font_fallback_name">字型 %1$d</string>
+  <string name="setting_display_page_custom_font_move_up">上移</string>
   <string name="setting_display_page_custom_font_remove">移除自訂字型</string>
   <string name="setting_display_page_custom_font_title">自訂字型</string>
   <string name="setting_page_preferences">偏好設定</string>

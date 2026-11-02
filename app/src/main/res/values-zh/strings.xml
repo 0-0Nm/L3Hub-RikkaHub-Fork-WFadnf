@@ -687,6 +687,10 @@
   <string name="setting_display_page_custom_font_import_failed">导入字体失败：%1$s</string>
   <string name="setting_display_page_custom_font_import_success">自定义字体已导入</string>
   <string name="setting_display_page_custom_font_not_imported">未导入自定义字体。支持 .ttf、.otf 和 .ttc 文件。</string>
+  <string name="setting_display_page_custom_font_chain_desc">已导入 %1$d 款字体，按导入顺序组成回退链：同一字形靠前的优先，缺失的自动用下一款</string>
+  <string name="setting_display_page_custom_font_chain_position">回退链第 %1$d 款</string>
+  <string name="setting_display_page_custom_font_fallback_name">字体 %1$d</string>
+  <string name="setting_display_page_custom_font_move_up">上移</string>
   <string name="setting_display_page_custom_font_remove">移除自定义字体</string>
   <string name="setting_display_page_custom_font_title">自定义字体</string>
   <string name="setting_display_page_enable_auto_scroll_desc">AI生成内容时自动滚动到底部</string>

@@ -254,6 +254,9 @@ data class DisplaySetting(
     val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
     val chatCustomFontPath: String = "",
     val chatCustomFontName: String = "",
+    // 多字体回退链（有序）：同一字形靠前的字体优先，缺失的字形自动顺延到下一款（如英文款→中文款→俄文款）
+    val chatCustomFontPaths: List<String> = emptyList(),
+    val chatCustomFontNames: List<String> = emptyList(),
     // 聊天字体是否应用到整个应用（不限于聊天界面）；终端风格始终等宽，不受影响
     val fontApplyGlobal: Boolean = false,
     val enableVolumeKeyScroll: Boolean = false,

@@ -637,7 +637,9 @@
   <string name="setting_display_page_enable_message_generation_haptic_effect_desc">Включить виброотклик при генерации сообщений</string>
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">Тактильный эффект при генерации сообщения</string>
   <string name="setting_display_page_font_size_preview">Это **пример** текста чата</string>
-  <string name="setting_display_page_font_size_title">Размер шрифта чата</string>
+  <string name="setting_display_page_font_size_title">
+  <string name="setting_display_page_font_global_title">Применять ко всему приложению</string>
+  <string name="setting_display_page_font_global_desc">Когда включено, выбранный шрифт используется во всём приложении (настройки, списки и т. д.), а не только в чате</string>Размер шрифта чата</string>
   <string name="setting_display_page_live_update_notification">Уведомление об обновлении в реальном времени</string>
   <string name="setting_display_page_live_update_notification_desc">Показывать уведомления об обновлениях в реальном времени во время генерации сообщений (Android 15+)</string>
   <string name="setting_display_page_message_jumper_position_desc">Переместить переходчик сообщений влево</string>
@@ -1072,6 +1074,10 @@
   <string name="setting_display_page_custom_font_import_failed">Не удалось импортировать шрифт: %1$s</string>
   <string name="setting_display_page_custom_font_import_success">Пользовательский шрифт импортирован</string>
   <string name="setting_display_page_custom_font_not_imported">Пользовательский шрифт не импортирован. Поддерживаются файлы .ttf, .otf и .ttc.</string>
+  <string name="setting_display_page_custom_font_chain_desc">Импортировано шрифтов: %1$d. Они образуют цепочку подстановки в порядке импорта: для совпадающих глифов приоритет у более ранних, недостающие глифы автоматически берутся из следующего шрифта</string>
+  <string name="setting_display_page_custom_font_chain_position">Подстановка #%1$d</string>
+  <string name="setting_display_page_custom_font_fallback_name">Шрифт %1$d</string>
+  <string name="setting_display_page_custom_font_move_up">Выше</string>
   <string name="setting_display_page_custom_font_remove">Удалить пользовательский шрифт</string>
   <string name="setting_display_page_custom_font_title">Пользовательский шрифт</string>
   <string name="setting_page_preferences">Настройки</string>

@@ -46,6 +46,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.hugeicons.stroke.Delete02
 import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.rikkahub.R
@@ -70,6 +71,7 @@ import me.rerere.rikkahub.utils.plus
 import me.rerere.ui.toast.ToastType
 import org.koin.androidx.compose.koinViewModel
 import java.io.File
+import java.util.UUID
 import kotlin.math.roundToInt
 
 @Composable
@@ -86,6 +88,18 @@ fun SettingPreferencesUIPage(embedded: Boolean = false, vm: SettingVM = koinView
         vm.updateSettings { it.copy(displaySetting = setting) }
     }
 
+    // 自定义字体回退链：优先用列表；旧配置只有单字体时退化为单元素列表
+    val customFontPaths = if (displaySetting.chatCustomFontPaths.isNotEmpty()) {
+        displaySetting.chatCustomFontPaths
+    } else {
+        listOf(displaySetting.chatCustomFontPath).filter { it.isNotBlank() }
+    }
+    val customFontNames = if (displaySetting.chatCustomFontPaths.isNotEmpty()) {
+        displaySetting.chatCustomFontNames
+    } else {
+        listOf(displaySetting.chatCustomFontName).filter { it.isNotBlank() }
+    }
+
     val importSuccessMsg = stringResource(R.string.setting_display_page_custom_font_import_success)
     val importFailedMsg = stringResource(R.string.setting_display_page_custom_font_import_failed)
     val fontPickerLauncher = rememberLauncherForActivityResult(
@@ -98,11 +112,20 @@ fun SettingPreferencesUIPage(embedded: Boolean = false, vm: SettingVM = koinView
                     importCustomChatFontInternal(context, uri)
                 }
             }.onSuccess { importedFont ->
+                // 追加到回退链尾部：旧配置单字体迁移到列表首位；names 与 paths 按索引对齐（缺失补空串，UI 有兜底显示）
+                val basePaths = if (displaySetting.chatCustomFontPaths.isNotEmpty()) displaySetting.chatCustomFontPaths
+                    else listOf(displaySetting.chatCustomFontPath).filter { it.isNotBlank() }
+                val baseNames = basePaths.mapIndexed { i, _ -> displaySetting.chatCustomFontNames.getOrNull(i) ?: "" }
+                val newPaths = basePaths + importedFont.relativePath
+                val newNames = baseNames + importedFont.displayName
                 updateDisplaySetting(
                     displaySetting.copy(
                         chatFontFamily = ChatFontFamily.CUSTOM,
-                        chatCustomFontPath = importedFont.relativePath,
-                        chatCustomFontName = importedFont.displayName,
+                        chatCustomFontPaths = newPaths,
+                        chatCustomFontNames = newNames,
+                        // 单字段同步为新首位，避免导入/删除后悬挂引用
+                        chatCustomFontPath = newPaths.first(),
+                        chatCustomFontName = newNames.first(),
                     )
                 )
                 toaster.show(importSuccessMsg, type = ToastType.Success)
@@ -314,7 +337,10 @@ fun SettingPreferencesUIPage(embedded: Boolean = false, vm: SettingVM = koinView
                         options = ChatFontFamily.entries,
                         selected = displaySetting.chatFontFamily,
                         onSelect = { family ->
-                            if (family == ChatFontFamily.CUSTOM && displaySetting.chatCustomFontPath.isBlank()) {
+                            if (family == ChatFontFamily.CUSTOM &&
+                                displaySetting.chatCustomFontPaths.isEmpty() &&
+                                displaySetting.chatCustomFontPath.isBlank()
+                            ) {
                                 fontPickerLauncher.launch(CustomFontMimeTypesUI)
                             } else {
                                 updateDisplaySetting(displaySetting.copy(chatFontFamily = family))
@@ -353,49 +379,71 @@ fun SettingPreferencesUIPage(embedded: Boolean = false, vm: SettingVM = koinView
                     headlineContent = { Text(stringResource(R.string.setting_display_page_custom_font_title)) },
                     supportingContent = {
                         Text(
-                            if (displaySetting.chatCustomFontName.isNotBlank()) {
-                                displaySetting.chatCustomFontName
-                            } else {
+                            if (customFontPaths.isEmpty()) {
                                 stringResource(R.string.setting_display_page_custom_font_not_imported)
+                            } else {
+                                stringResource(R.string.setting_display_page_custom_font_chain_desc, customFontPaths.size)
                             }
                         )
                     },
                     trailingContent = {
-                        Row {
-                            IconButton(
-                                onClick = { fontPickerLauncher.launch(CustomFontMimeTypesUI) }
-                            ) {
-                                Icon(
-                                    HugeIcons.FileImport,
-                                    contentDescription = stringResource(
-                                        R.string.setting_display_page_custom_font_import
-                                    )
+                        IconButton(
+                            onClick = { fontPickerLauncher.launch(CustomFontMimeTypesUI) }
+                        ) {
+                            Icon(
+                                HugeIcons.FileImport,
+                                contentDescription = stringResource(
+                                    R.string.setting_display_page_custom_font_import
                                 )
-                            }
-                            if (displaySetting.chatCustomFontPath.isNotBlank()) {
-                                IconButton(
-                                    onClick = {
-                                        deleteCustomChatFontInternal(context, displaySetting.chatCustomFontPath)
-                                        updateDisplaySetting(
-                                            displaySetting.copy(
-                                                chatFontFamily = ChatFontFamily.DEFAULT,
-                                                chatCustomFontPath = "",
-                                                chatCustomFontName = "",
-                                            )
-                                        )
-                                    }
-                                ) {
-                                    Icon(
-                                        HugeIcons.Delete02,
-                                        contentDescription = stringResource(
-                                            R.string.setting_display_page_custom_font_remove
-                                        )
-                                    )
-                                }
-                            }
+                            )
                         }
                     }
                 )
+                // 已导入字体回退链：每款一行，可上移调整优先级、单独删除（删除后链自动收拢）
+                if (customFontPaths.isNotEmpty()) {
+                    customFontPaths.forEachIndexed { index, path ->
+                        item(
+                            headlineContent = {
+                                Text(
+                                    customFontNames.getOrNull(index)?.takeIf { it.isNotBlank() }
+                                        ?: stringResource(R.string.setting_display_page_custom_font_fallback_name, index + 1)
+                                )
+                            },
+                            supportingContent = {
+                                Text(stringResource(R.string.setting_display_page_custom_font_chain_position, index + 1))
+                            },
+                            trailingContent = {
+                                Row {
+                                    if (index > 0) {
+                                        IconButton(
+                                            onClick = { updateDisplaySetting(moveChatFontUp(displaySetting, index)) }
+                                        ) {
+                                            Icon(
+                                                HugeIcons.ArrowUp02,
+                                                contentDescription = stringResource(
+                                                    R.string.setting_display_page_custom_font_move_up
+                                                )
+                                            )
+                                        }
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            deleteCustomChatFontInternal(context, path)
+                                            updateDisplaySetting(removeCustomChatFontAt(displaySetting, index))
+                                        }
+                                    ) {
+                                        Icon(
+                                            HugeIcons.Delete02,
+                                            contentDescription = stringResource(
+                                                R.string.setting_display_page_custom_font_remove
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
                 formItem(
                     headlineContent = { Text(stringResource(R.string.setting_display_page_font_size_title)) },
                     trailingContent = { CardGroupValue("${(displaySetting.fontSizeRatio * 100).toInt()}%") },
@@ -523,7 +571,7 @@ private fun importCustomChatFontInternal(context: Context, uri: Uri): ImportedCh
         .takeIf { it in CustomFontExtensionsUI }
         ?: "ttf"
     val fontDir = File(context.filesDir, FileFolders.FONTS).apply { mkdirs() }
-    val targetFile = File(fontDir, "chat_font.${System.currentTimeMillis()}.$extension")
+    val targetFile = File(fontDir, "chat_font.${UUID.randomUUID()}.$extension")
     val tempFile = File(fontDir, "chat_font_import.tmp")
 
     try {
@@ -540,7 +588,8 @@ private fun importCustomChatFontInternal(context: Context, uri: Uri): ImportedCh
             throw IllegalArgumentException(error.message ?: "Invalid font file", error)
         }
 
-        replaceCustomChatFontInternal(fontDir, tempFile, targetFile)
+        // 多字体回退链：文件名带时间戳天然唯一，直接落盘，不清理已有字体
+        check(tempFile.renameTo(targetFile)) { "Unable to save selected font" }
     } catch (error: Throwable) {
         tempFile.delete()
         throw error
@@ -551,29 +600,61 @@ private fun importCustomChatFontInternal(context: Context, uri: Uri): ImportedCh
     return ImportedChatFontUI(relativePath = relativePath, displayName = displayName)
 }
 
-private fun replaceCustomChatFontInternal(fontDir: File, tempFile: File, targetFile: File) {
-    val existingFiles = fontDir.listFiles { file ->
-        file.isFile && file.name.startsWith("chat_font.") && file != tempFile
-    }?.toList().orEmpty()
-    val backups = existingFiles.map { file ->
-        file to File(fontDir, "previous_${file.name}").also { it.delete() }
+/** 从回退链中移除第 index 款字体；删光后回到默认字体并清空所有字体字段 */
+private fun removeCustomChatFontAt(displaySetting: DisplaySetting, index: Int): DisplaySetting {
+    // 旧配置单字体（列表为空）：删除即清空单字体字段并回到默认
+    if (displaySetting.chatCustomFontPaths.isEmpty()) {
+        return displaySetting.copy(
+            chatFontFamily = ChatFontFamily.DEFAULT,
+            chatCustomFontPath = "",
+            chatCustomFontName = "",
+        )
     }
+    val newPaths = displaySetting.chatCustomFontPaths.filterIndexed { i, _ -> i != index }
+    if (newPaths.isEmpty()) {
+        return displaySetting.copy(
+            chatFontFamily = ChatFontFamily.DEFAULT,
+            chatCustomFontPaths = emptyList(),
+            chatCustomFontNames = emptyList(),
+            chatCustomFontPath = "",
+            chatCustomFontName = "",
+        )
+    }
+    // names 按原索引重映射（删除位置之后的项索引前移一位），与 paths 保持对齐
+    val newNames = newPaths.mapIndexed { newIndex, _ ->
+        val origIndex = if (newIndex < index) newIndex else newIndex + 1
+        displaySetting.chatCustomFontNames.getOrNull(origIndex) ?: ""
+    }
+    return displaySetting.copy(
+        chatCustomFontPaths = newPaths,
+        chatCustomFontNames = newNames,
+        // 单字段同步为新首位，避免悬挂引用
+        chatCustomFontPath = newPaths.first(),
+        chatCustomFontName = newNames.first(),
+    )
+}
 
-    try {
-        backups.forEach { (file, backup) ->
-            check(file.renameTo(backup)) { "Unable to prepare existing font for replacement" }
-        }
-        check(tempFile.renameTo(targetFile)) { "Unable to save selected font" }
-        backups.forEach { (_, backup) -> backup.delete() }
-    } catch (error: Throwable) {
-        tempFile.delete()
-        backups.forEach { (file, backup) ->
-            if (!file.exists() && backup.exists()) {
-                backup.renameTo(file)
-            }
-        }
-        throw error
+/** 把第 index 款字体上移一位（越靠前优先级越高）；首行或非法索引时原样返回 */
+private fun moveChatFontUp(displaySetting: DisplaySetting, index: Int): DisplaySetting {
+    val paths = displaySetting.chatCustomFontPaths
+    if (index <= 0 || index >= paths.size) return displaySetting
+    val newPaths = paths.toMutableList().also { list ->
+        val item = list.removeAt(index)
+        list.add(index - 1, item)
     }
+    val newNames = displaySetting.chatCustomFontNames.toMutableList().also { list ->
+        if (index < list.size) {
+            val item = list.removeAt(index)
+            list.add(index - 1, item)
+        }
+    }
+    return displaySetting.copy(
+        chatCustomFontPaths = newPaths,
+        chatCustomFontNames = newNames,
+        // 首位变了，单字段同步
+        chatCustomFontPath = newPaths.first(),
+        chatCustomFontName = newNames.firstOrNull() ?: "",
+    )
 }
 
 private fun deleteCustomChatFontInternal(context: Context, relativePath: String) {
