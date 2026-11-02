@@ -69,6 +69,7 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -198,6 +199,17 @@ fun ChatInput(
     } else {
         // 全宽模式下输入框也和屏幕两边齐平，圆角收成直角
         adaptiveShape(settings.displaySetting.uiCornerRadius.dp)
+    }
+    // 内层圆角按固定的 8dp 内缩算，左右内边距怎么调都不会影响上下观感
+    val innerShape = if (terminalStyle) {
+        RoundedCornerShape(2.dp)
+    } else {
+        adaptiveShape((settings.displaySetting.uiCornerRadius - 8).coerceAtLeast(2).dp)
+    }
+    var isEditingReasoning by remember { mutableStateOf(false) }
+    // 退出编辑态时收起思考编辑器，否则下次编辑另一条带思考的消息会自己弹出来
+    LaunchedEffect(state.isEditing()) {
+        if (!state.isEditing()) isEditingReasoning = false
     }
     val modelListState = rememberModelListState(
         modelId = chatModel?.id,
@@ -430,6 +442,15 @@ fun ChatInput(
                     if (state.messageContent.isNotEmpty()) {
                         MediaFileInputRow(state = state)
                     }
+                    // 必须在 TextInputRow 外面：单行布局的按钮以 TextInputRow 整体高度居中，
+                    // 提示条排在 TextField 之前会把按钮顶到输入框上部
+                    if (state.isEditing()) {
+                        EditingBanner(
+                            state = state,
+                            shape = innerShape,
+                            onEditReasoning = { isEditingReasoning = true },
+                        )
+                    }
 
                     val singleLine = settings.displaySetting.inputLayoutStyle == InputLayoutStyle.SINGLE
                     val quickMessages = remember(settings.quickMessages, assistant.quickMessageIds) {
@@ -657,6 +678,16 @@ fun ChatInput(
         }
     }
 
+    val editingReasoning = state.editingReasoning
+    if (isEditingReasoning && editingReasoning != null) {
+        FullScreenEditor(
+            textState = editingReasoning,
+            placeholder = stringResource(R.string.chat_input_reasoning_placeholder),
+        ) {
+            isEditingReasoning = false
+        }
+    }
+
     ModelListSheet(
         state = modelListState,
         onSelect = onUpdateChatModel,
@@ -745,6 +776,44 @@ private fun ActionIconButton(
     }
 }
 
+/**
+ * 编辑旧消息时的提示条。
+ *
+ * 单独放在 [TextInputRow] 外面：单行布局的两组按钮是相对整个 [TextInputRow] 居中的，
+ * 提示条一旦排在 TextField 之前就会被算进高度，输入内容被删空、按钮切回居中时就会偏到输入框上方。
+ */
+@Composable
+private fun EditingBanner(
+    state: ChatInputState,
+    shape: Shape,
+    onEditReasoning: () -> Unit,
+) {
+    Surface(
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = stringResource(R.string.editing))
+            Spacer(Modifier.weight(1f))
+            if (state.editingReasoning != null) {
+                TextButton(onClick = onEditReasoning) {
+                    Text(stringResource(R.string.chat_input_edit_reasoning))
+                }
+            }
+            Icon(
+                imageVector = HugeIcons.Cancel01,
+                contentDescription = stringResource(R.string.cancel_edit),
+                modifier = Modifier.clickable { state.clearInput() }
+            )
+        }
+    }
+}
+
 @Composable
 private fun TextInputRow(
     state: ChatInputState,
@@ -765,45 +834,10 @@ private fun TextInputRow(
         settings.getQuickMessagesOfAssistant(assistant)
     }
 
-    var isEditingReasoning by remember { mutableStateOf(false) }
-    // 内层圆角按固定的 8dp 内缩算，左右内边距怎么调都不会影响上下观感
-    val innerShape = if (terminalStyle) {
-        RoundedCornerShape(2.dp)
-    } else {
-        adaptiveShape((settings.displaySetting.uiCornerRadius - 8).coerceAtLeast(2).dp)
-    }
-
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        if (state.isEditing()) {
-            Surface(
-                shape = innerShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = stringResource(R.string.editing))
-                    Spacer(Modifier.weight(1f))
-                    if (state.editingReasoning != null) {
-                        TextButton(onClick = { isEditingReasoning = true }) {
-                            Text(stringResource(R.string.chat_input_edit_reasoning))
-                        }
-                    }
-                    Icon(
-                        imageVector = HugeIcons.Cancel01,
-                        contentDescription = stringResource(R.string.cancel_edit),
-                        modifier = Modifier.clickable { state.clearInput() }
-                    )
-                }
-            }
-        }
-
         var isFocused by remember { mutableStateOf(false) }
         var isFullScreen by remember { mutableStateOf(false) }
         var fieldHeight by remember { mutableIntStateOf(0) }
@@ -995,12 +1029,6 @@ private fun TextInputRow(
                 placeholder = stringResource(R.string.chat_input_placeholder),
             ) {
                 isFullScreen = false
-            }
-        }
-        val reasoningState = state.editingReasoning
-        if (isEditingReasoning && reasoningState != null) {
-            FullScreenEditor(textState = reasoningState, placeholder = stringResource(R.string.chat_input_reasoning_placeholder)) {
-                isEditingReasoning = false
             }
         }
     }
