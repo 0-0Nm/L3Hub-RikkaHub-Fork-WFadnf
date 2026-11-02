@@ -1605,6 +1605,8 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_page_compress_nothing_to_compress">前回の要約以降、圧縮する新しいメッセージはありません</string>
   <string name="chat_page_compress_handle_pending_tools">圧縮する前に、保留中のツール呼び出しを処理してください</string>
   <string name="chat_page_compress_tool_call_response">モデルが要約を作成する代わりにツールを呼び出そうとしました。もう一度お試しください。</string>
+  <string name="chat_page_compress_truncated">要約の生成が途中で打ち切られました。もう一度お試しください。</string>
+  <string name="chat_page_compress_malformed">モデルが使用可能な要約を返しませんでした。もう一度お試しください。</string>
   <string name="assistant_page_memory_auto_dream">自動で夢を見る</string>
   <string name="assistant_page_memory_auto_dream_desc">チャットが停止すると、バックグラウンドで記憶に変換されます。オフの場合、これは「今すぐ夢を見る」をタップしたときにのみ実行されます。</string>
   <string name="chat_message_usage_title">使用量</string>
@@ -1814,11 +1816,12 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_memory_auto_compress">自動圧縮</string>
   <string name="assistant_page_memory_auto_compress_desc">コンテキスト使用量がしきい値に達すると、返信の前に履歴を圧縮します。結果は手動圧縮と同じです</string>
   <string name="assistant_page_memory_auto_compress_loop">ループ圧縮</string>
-  <string name="assistant_page_memory_auto_compress_loop_desc">モデルのループ中にリクエストがコンテキスト上限を超えた場合、自動で圧縮して現在の生成を継続します</string>
+  <string name="assistant_page_memory_auto_compress_loop_desc">モデルのループ中にリクエストがコンテキスト上限を超えた場合、自動で圧縮して現在の生成を継続します。このとき最後の返信だけを残し、それ以前は要約にまとめます</string>
   <string name="assistant_page_memory_auto_compress_messages">%1$d 件のメッセージ</string>
   <string name="assistant_page_memory_auto_compress_mode_messages">メッセージ数で指定</string>
   <string name="assistant_page_memory_auto_compress_mode_tokens">Token 数で指定</string>
   <string name="assistant_page_memory_auto_compress_target">圧縮後に保持</string>
+  <string name="assistant_page_memory_auto_compress_target_range">範囲: %1$d–%2$d</string>
   <string name="assistant_page_memory_auto_compress_target_desc">圧縮の対象外とする直近のコンテキスト量を指定します。Token で計算する場合、分割点は思考・本文・ツール呼び出しの境界になります</string>
   <string name="assistant_page_memory_auto_compress_target_label">直近を保持</string>
   <string name="assistant_page_memory_auto_compress_threshold">トリガーしきい値</string>

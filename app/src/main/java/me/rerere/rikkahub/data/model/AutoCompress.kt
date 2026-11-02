@@ -93,9 +93,14 @@ fun Conversation.keepRecentContextForTokens(targetTokens: Int): ContextTrim {
     return ContextTrim(index + 1)
 }
 
-/** 实际会发给模型的上下文 token 估算；压缩前的老消息和 part 边界之前的内容都不计入 */
-fun Conversation.estimateContextTokens(): Int =
-    currentMessages.limitContext(0).sumOf(::estimateMessageTokens)
+/**
+ * 实际会发给模型的上下文 token 估算；压缩前的老消息和 part 边界之前的内容都不计入。
+ *
+ * [messageLimit] 必须和组装请求时的 `assistant.contextMessageLimit` 一致：判定用的尺子比发送用的
+ * 尺子长，就会为一堆根本不会发出去的尾部消息反复触发压缩，每次还都是一次全量摘要请求。
+ */
+fun Conversation.estimateContextTokens(messageLimit: Int = 0): Int =
+    currentMessages.limitContext(messageLimit).sumOf(::estimateMessageTokens)
 
 /** 单条消息的 token 估算，工具调用的输入输出也算在内 */
 internal fun estimateMessageTokens(message: UIMessage): Int =

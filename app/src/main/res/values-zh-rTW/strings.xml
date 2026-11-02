@@ -1641,6 +1641,8 @@
   <string name="chat_page_compress_nothing_to_compress">自上次摘要以來沒有可壓縮的新訊息</string>
   <string name="chat_page_compress_handle_pending_tools">請先處理待完成的工具呼叫，再進行壓縮</string>
   <string name="chat_page_compress_tool_call_response">模型嘗試呼叫工具，而非撰寫摘要。請再試一次。</string>
+  <string name="chat_page_compress_truncated">摘要產生到一半被截斷，請重試</string>
+  <string name="chat_page_compress_malformed">模型沒有傳回可用的摘要，請重試</string>
   <string name="assistant_page_memory_auto_dream">自動做夢</string>
   <string name="assistant_page_memory_auto_dream_desc">對話暫停後，在背景將對話轉為記憶。關閉時，只有在你點選「立即做夢」時才會執行此操作</string>
   <string name="chat_message_usage_title">用量</string>
@@ -1922,11 +1924,12 @@
   <string name="assistant_page_memory_auto_compress">自動壓縮</string>
   <string name="assistant_page_memory_auto_compress_desc">上下文佔用達到閾值時，先壓縮歷史再回復，效果與手動壓縮一致</string>
   <string name="assistant_page_memory_auto_compress_loop">迴圈壓縮</string>
-  <string name="assistant_page_memory_auto_compress_loop_desc">模型迴圈中請求超出上下文上限時，自動壓縮並繼續當前生成</string>
+  <string name="assistant_page_memory_auto_compress_loop_desc">模型迴圈中請求超出上下文上限時，自動壓縮並繼續當前生成。此時只保留最後一則回覆，更早的訊息都壓進摘要</string>
   <string name="assistant_page_memory_auto_compress_messages">%1$d 條訊息</string>
   <string name="assistant_page_memory_auto_compress_mode_messages">按訊息數</string>
   <string name="assistant_page_memory_auto_compress_mode_tokens">按 Token 數</string>
   <string name="assistant_page_memory_auto_compress_target">壓縮後保留</string>
+  <string name="assistant_page_memory_auto_compress_target_range">取值範圍 %1$d–%2$d</string>
   <string name="assistant_page_memory_auto_compress_target_desc">指定不參與壓縮的最近上下文量；按 Token 計算時，切割點落在思考、正文與工具呼叫的邊界</string>
   <string name="assistant_page_memory_auto_compress_target_label">保留最近</string>
   <string name="assistant_page_memory_auto_compress_threshold">觸發閾值</string>

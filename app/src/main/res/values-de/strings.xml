@@ -1561,6 +1561,8 @@
   <string name="chat_page_compress_not_enough_messages">Nicht genug Nachrichten zum Komprimieren. Verringere die Anzahl der beizubehaltenden Nachrichten.</string>
   <string name="chat_page_compress_handle_pending_tools">Bearbeite die ausstehenden Tool-Aufrufe vor dem Komprimieren</string>
   <string name="chat_page_compress_tool_call_response">Das Modell hat versucht, ein Tool aufzurufen, statt die Zusammenfassung zu schreiben. Bitte versuche es erneut.</string>
+  <string name="chat_page_compress_truncated">Die Zusammenfassung wurde vorzeitig abgeschnitten. Bitte erneut versuchen.</string>
+  <string name="chat_page_compress_malformed">Das Modell hat keine brauchbare Zusammenfassung geliefert. Bitte erneut versuchen.</string>
   <string name="chat_page_compress_conversation_changed">Die Unterhaltung hat sich während der Komprimierung geändert. Bitte versuche es erneut.</string>
   <string name="sketch">Skizze</string>
   <string name="sketch_draw_on_image">Auf dem Bild zeichnen</string>
@@ -1815,11 +1817,12 @@
   <string name="assistant_page_memory_auto_compress">Automatisch komprimieren</string>
   <string name="assistant_page_memory_auto_compress_desc">Sobald die Kontextnutzung den Schwellenwert erreicht, wird der Verlauf vor der Antwort komprimiert; das Ergebnis entspricht der manuellen Komprimierung</string>
   <string name="assistant_page_memory_auto_compress_loop">Zyklische Komprimierung</string>
-  <string name="assistant_page_memory_auto_compress_loop_desc">Wenn eine Anfrage während der Modellschleife das Kontextlimit überschreitet, wird automatisch komprimiert und die laufende Generierung fortgesetzt</string>
+  <string name="assistant_page_memory_auto_compress_loop_desc">Wenn eine Anfrage während der Modellschleife das Kontextlimit überschreitet, wird automatisch komprimiert und die laufende Generierung fortgesetzt. Dabei bleibt nur die letzte Antwort erhalten, alles Frühere wandert in die Zusammenfassung</string>
   <string name="assistant_page_memory_auto_compress_messages">%1$d Nachrichten</string>
   <string name="assistant_page_memory_auto_compress_mode_messages">Nach Nachrichtenzahl</string>
   <string name="assistant_page_memory_auto_compress_mode_tokens">Nach Token-Anzahl</string>
   <string name="assistant_page_memory_auto_compress_target">Nach Komprimierung behalten</string>
+  <string name="assistant_page_memory_auto_compress_target_range">Bereich: %1$d–%2$d</string>
   <string name="assistant_page_memory_auto_compress_target_desc">Legt fest, wie viel des jüngsten Kontexts nicht komprimiert wird; im Token-Modus liegt der Schnitt auf den Grenzen von Denken, Text und Tool-Aufrufen</string>
   <string name="assistant_page_memory_auto_compress_target_label">Jüngsten Kontext behalten</string>
   <string name="assistant_page_memory_auto_compress_threshold">Auslöseschwelle</string>

@@ -1605,6 +1605,8 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="chat_page_compress_nothing_to_compress">마지막 요약 이후로 압축할 새 메시지가 없습니다</string>
   <string name="chat_page_compress_handle_pending_tools">압축하기 전에 대기 중인 도구 호출을 처리하세요</string>
   <string name="chat_page_compress_tool_call_response">모델이 요약을 작성하는 대신 도구를 호출하려고 했습니다. 다시 시도해 주세요.</string>
+  <string name="chat_page_compress_truncated">요약이 중간에 잘렸습니다. 다시 시도하세요.</string>
+  <string name="chat_page_compress_malformed">모델이 사용할 수 있는 요약을 반환하지 않았습니다. 다시 시도하세요.</string>
   <string name="assistant_page_memory_auto_dream">자동 꿈꾸기</string>
   <string name="assistant_page_memory_auto_dream_desc">대화가 멈추면 백그라운드에서 대화를 기억으로 전환합니다. 이 기능이 꺼져 있으면 \'지금 꿈꾸기\'를 탭할 때만 전환됩니다.</string>
   <string name="chat_message_usage_title">사용량</string>
@@ -1814,11 +1816,12 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_page_memory_auto_compress">자동 압축</string>
   <string name="assistant_page_memory_auto_compress_desc">컨텍스트 사용량이 임계값에 도달하면 기록을 먼저 압축한 뒤 응답하며, 결과는 수동 압축과 같습니다</string>
   <string name="assistant_page_memory_auto_compress_loop">반복 압축</string>
-  <string name="assistant_page_memory_auto_compress_loop_desc">모델 루프 중 요청이 컨텍스트 한도를 넘으면 자동으로 압축하고 현재 생성을 계속합니다</string>
+  <string name="assistant_page_memory_auto_compress_loop_desc">모델 루프 중 요청이 컨텍스트 한도를 넘으면 자동으로 압축하고 현재 생성을 계속합니다. 이때 마지막 응답만 남기고 이전 내용은 요약에 넣습니다</string>
   <string name="assistant_page_memory_auto_compress_messages">%1$d개 메시지</string>
   <string name="assistant_page_memory_auto_compress_mode_messages">메시지 수 기준</string>
   <string name="assistant_page_memory_auto_compress_mode_tokens">Token 수 기준</string>
   <string name="assistant_page_memory_auto_compress_target">압축 후 유지</string>
+  <string name="assistant_page_memory_auto_compress_target_range">범위: %1$d–%2$d</string>
   <string name="assistant_page_memory_auto_compress_target_desc">압축 대상에서 제외할 최근 컨텍스트 양입니다. Token 기준일 때 절단 지점은 사고, 본문, 도구 호출의 경계에 맞춥니다</string>
   <string name="assistant_page_memory_auto_compress_target_label">최근 유지</string>
   <string name="assistant_page_memory_auto_compress_threshold">발동 임계값</string>

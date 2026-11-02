@@ -1896,6 +1896,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chat_page_compress_not_enough_messages">可压缩的消息不足，请减少保留的消息数</string>
   <string name="chat_page_compress_handle_pending_tools">压缩前请先处理待处理的工具调用</string>
   <string name="chat_page_compress_tool_call_response">模型试图调用工具，而不是编写摘要。请重试。</string>
+  <string name="chat_page_compress_truncated">摘要生成到一半被截断，请重试</string>
+  <string name="chat_page_compress_malformed">模型没有返回可用的摘要，请重试</string>
   <string name="assistant_page_memory_auto_dream">自动做梦</string>
   <string name="assistant_page_memory_auto_dream_desc">聊天暂停后，在后台将聊天内容转为记忆。关闭后，仅在点击“立即做梦”时执行此操作</string>
   <string name="chat_message_usage_title">用量</string>
@@ -2116,10 +2118,11 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_memory_auto_compress">自动压缩</string>
   <string name="assistant_page_memory_auto_compress_desc">上下文占用达到阈值时，先压缩历史再回复，效果与手动压缩一致</string>
   <string name="assistant_page_memory_auto_compress_loop">循环压缩</string>
-  <string name="assistant_page_memory_auto_compress_loop_desc">模型循环中请求超出上下文上限时，自动压缩并继续当前生成</string>
+  <string name="assistant_page_memory_auto_compress_loop_desc">模型循环中请求超出上下文上限时，自动压缩并继续当前生成。此时只保留最后一条回复，更早的消息都压进摘要</string>
   <string name="assistant_page_memory_auto_compress_threshold">触发阈值</string>
   <string name="assistant_page_memory_auto_compress_threshold_desc">WARN 为预警线，MAX 为硬上限</string>
   <string name="assistant_page_memory_auto_compress_target">压缩后保留</string>
+  <string name="assistant_page_memory_auto_compress_target_range">取值范围 %1$d–%2$d</string>
   <string name="assistant_page_memory_auto_compress_target_desc">指定不参与压缩的最近上下文量；按 Token 计算时，切割点落在思考、正文与工具调用的边界</string>
   <string name="assistant_page_memory_auto_compress_messages">%1$d 条消息</string>
   <string name="assistant_page_memory_auto_compress_tokens">%1$d 个 Token</string>

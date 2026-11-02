@@ -740,7 +740,7 @@ class ChatService(
             try {
                 ensureInitialized(session)
                 finishInterruptedPendingTools(session)
-                val compressedBeforeAppend = autoCompressIfNeeded(session)
+                val compressAttempt = autoCompressIfNeeded(session)
 
                 val assistant = settingsStore.awaitLoaded().getStoredAssistantOf(session.state.value)
                 val processedContent = queued.parts.replaceUserRegexes(assistant)
@@ -762,8 +762,9 @@ class ChatService(
                 session.submittingMessage = null
 
                 // 用户消息可能刚好把上下文推过门限，加入后再检查一次；
-                // 但这一轮已经压过就不再压，否则同一段历史会被总结两遍（两次压缩/两份相同摘要的来源）
-                if (!compressedBeforeAppend) autoCompressIfNeeded(session)
+                // 但这一轮已经尝试过就不再试：成功会总结两遍，失败时摘要请求已经付过钱，
+                // 再跑一遍只是再付一次
+                if (compressAttempt == CompressAttempt.SKIPPED) autoCompressIfNeeded(session)
 
                 // 开始补全
                 val result = if (queued.answer) runTurn(session) else null
@@ -1212,7 +1213,7 @@ class ChatService(
         val real = message.contextTokens()?.takeIf { it > 0 }
         val used = resolveContextUsage(
             realTokens = real,
-            visibleTokens = session.state.value.estimateContextTokens(),
+            visibleTokens = session.state.value.estimateContextTokens(turn.assistant.contextMessageLimit),
             fixedTokens = estimateTokens(systemPrompt),
         )
         if (used < limit) return
@@ -1227,8 +1228,17 @@ class ChatService(
         val assistant = settingsStore.awaitLoaded().getAssistantOf(session.state.value)
         if (!assistant.autoCompress || !assistant.autoCompressLoop) return false
         Log.i(TAG, "runTurn: context overflow, compress and retry")
-        return autoCompressIfNeeded(session, force = true, keepTailNodes = 1)
+        return autoCompressIfNeeded(session, force = true, keepTailNodes = 1) ==
+            CompressAttempt.COMPRESSED
     }
+
+    /**
+     * 一次自动压缩的结果。
+     *
+     * [SKIPPED] 是「没压」——门限没到、被别的压缩占用、没有可压范围；[FAILED] 是「试过但失败」，
+     * 这时摘要请求可能已经付过钱。调用方据此决定要不要在同一轮再试一次。
+     */
+    private enum class CompressAttempt { SKIPPED, COMPRESSED, FAILED }
 
     /**
      * 自动压缩：上下文占用到 WARN/MAX 门限时，在生成本轮回复之前先压缩一次。
@@ -1243,16 +1253,16 @@ class ChatService(
         session: ConversationSession,
         force: Boolean = false,
         keepTailNodes: Int? = null,
-    ): Boolean {
+    ): CompressAttempt {
         // 同一份上下文只压一次：并发/连续触发时后面的直接放弃，避免把同一段历史总结两遍
         if (!session.compressMutex.tryLock()) {
             Log.d(TAG, "autoCompress: another compression is running, skip")
-            return false
+            return CompressAttempt.SKIPPED
         }
         return try {
             if (!force && session.state.value.messageNodes.size == session.compressedNodeCount) {
                 Log.d(TAG, "autoCompress: context unchanged since last compression, skip")
-                false
+                CompressAttempt.SKIPPED
             } else {
                 autoCompressLocked(session, force, keepTailNodes)
             }
@@ -1265,13 +1275,13 @@ class ChatService(
         session: ConversationSession,
         force: Boolean,
         keepTailNodes: Int?,
-    ): Boolean {
+    ): CompressAttempt {
         val settings = settingsStore.awaitLoaded()
         val conversation = session.state.value
         val assistant = settings.getAssistantOf(conversation)
-        if (!assistant.autoCompress) return false
+        if (!assistant.autoCompress) return CompressAttempt.SKIPPED
 
-        val model = settings.getChatModelOf(conversation) ?: return false
+        val model = settings.getChatModelOf(conversation) ?: return CompressAttempt.SKIPPED
         val limit = model.autoCompressLimit(assistant.autoCompressThreshold)
 
         // 真实用量偶尔缺失（回复没写入 usage、压缩后还没开始下一轮），退回按字符估算。
@@ -1287,7 +1297,7 @@ class ChatService(
         val systemTokens = estimateTokens(systemPrompt)
         val used = resolveContextUsage(
             realTokens = real,
-            visibleTokens = conversation.estimateContextTokens(),
+            visibleTokens = conversation.estimateContextTokens(assistant.contextMessageLimit),
             fixedTokens = systemTokens,
         )
         // 摘要和 systemPrompt 压缩之后仍然占着上下文：截断目标先扣掉这块固定开销
@@ -1298,7 +1308,7 @@ class ChatService(
             (checkpointMessage?.let { estimateMessageTokens(it) } ?: 0)
         if (!force && (limit == null || used < limit)) {
             Log.d(TAG, "autoCompress: skip used=$used real=$real limit=$limit")
-            return false
+            return CompressAttempt.SKIPPED
         }
 
         val trim = conversation.resolveAutoCompressTrim(
@@ -1311,7 +1321,7 @@ class ChatService(
             limitTokens = used,
         ) ?: run {
             Log.d(TAG, "autoCompress: no compressible range")
-            return false
+            return CompressAttempt.SKIPPED
         }
 
         Log.i(
@@ -1326,7 +1336,7 @@ class ChatService(
             compressSession(session, additionalPrompt = "", trim = trim, requireIdle = false)
             session.compressedNodeCount = session.state.value.messageNodes.size
             Log.i(TAG, "autoCompress: compressed conversation=${session.id}")
-            true
+            CompressAttempt.COMPRESSED
         } catch (e: Exception) {
             Log.w(TAG, "autoCompress: failed", e)
             addError(
@@ -1334,7 +1344,7 @@ class ChatService(
                 conversationId = session.id,
                 title = context.getString(R.string.chat_page_auto_compress_failed),
             )
-            false
+            CompressAttempt.FAILED
         } finally {
             session.processingStatus.value = null
             appEventBus.tryEmit(AppEvent.ChatGenerationStatus(session.id, statusSender, null))
@@ -1400,8 +1410,12 @@ class ChatService(
 
         // 必须和对话用同一个模型、同一套请求组装，才能命中提示词缓存
         val turn = requestFactory.createContext(settingsStore.awaitLoaded(), conversation)
+        // 上一个检查点本身要进摘要输入，否则上次压缩之前的信息全丢；
+        // 但它之前的原文已经由它替代，再发一遍既重复付费，也可能把压缩请求顶出模型窗口
+        val checkpointMessage = nodes.getOrNull(checkpointIndex)?.currentMessage
         val summaryMessages = buildList {
-            addAll(conversation.currentMessages.take(endIndex))
+            checkpointMessage?.let { add(it) }
+            addAll(conversation.currentMessages.subList(checkpointIndex + 1, endIndex))
             // 被截掉的前半段仍要参与摘要，否则这部分内容会凭空消失
             if (splitNode != null) {
                 add(splitNode.currentMessage.copy(parts = summarizedParts))

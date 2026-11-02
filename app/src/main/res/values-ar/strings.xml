@@ -1603,6 +1603,8 @@
   <string name="chat_page_compress_nothing_to_compress">لا توجد رسائل جديدة لضغطها منذ آخر ملخّص</string>
   <string name="chat_page_compress_handle_pending_tools">عالج استدعاءات الأدوات المعلّقة قبل الضغط</string>
   <string name="chat_page_compress_tool_call_response">حاول النموذج استدعاء أداة بدلاً من كتابة الملخّص. يُرجى المحاولة مرة أخرى.</string>
+  <string name="chat_page_compress_truncated">تم قطع الملخص قبل اكتماله. يرجى المحاولة مرة أخرى.</string>
+  <string name="chat_page_compress_malformed">لم يُرجع النموذج ملخصًا صالحًا. يرجى المحاولة مرة أخرى.</string>
   <string name="assistant_page_memory_auto_dream">حلم تلقائي</string>
   <string name="assistant_page_memory_auto_dream_desc">حوّل المحادثات إلى ذكريات في الخلفية بمجرد توقفها. عند إيقاف هذا الخيار، لا يحدث ذلك إلا عند النقر على «احلم الآن».</string>
   <string name="chat_message_usage_title">الاستخدام</string>
@@ -1812,11 +1814,12 @@
   <string name="assistant_page_memory_auto_compress">الضغط التلقائي</string>
   <string name="assistant_page_memory_auto_compress_desc">عند بلوغ استخدام السياق العتبة، يُضغط السجل قبل الرد؛ والنتيجة مطابقة للضغط اليدوي</string>
   <string name="assistant_page_memory_auto_compress_loop">الضغط الدوري</string>
-  <string name="assistant_page_memory_auto_compress_loop_desc">عندما يتجاوز الطلب حد السياق أثناء حلقة أدوات النموذج، يُضغط تلقائيًا ويستمر التوليد الحالي</string>
+  <string name="assistant_page_memory_auto_compress_loop_desc">عندما يتجاوز الطلب حد السياق أثناء حلقة أدوات النموذج، يُضغط تلقائيًا ويستمر التوليد الحالي. في هذه الحالة يبقى الرد الأخير فقط، وما قبله يُضم إلى الملخص</string>
   <string name="assistant_page_memory_auto_compress_messages">%1$d رسالة</string>
   <string name="assistant_page_memory_auto_compress_mode_messages">بحسب عدد الرسائل</string>
   <string name="assistant_page_memory_auto_compress_mode_tokens">بحسب عدد Token</string>
   <string name="assistant_page_memory_auto_compress_target">الاحتفاظ بعد الضغط</string>
+  <string name="assistant_page_memory_auto_compress_target_range">النطاق: %1$d–%2$d</string>
   <string name="assistant_page_memory_auto_compress_target_desc">حجم السياق الأخير المستثنى من الضغط؛ وفي وضع الرموز يقع نقطة القطع عند حدود التفكير والنص واستدعاء الأدوات</string>
   <string name="assistant_page_memory_auto_compress_target_label">الاحتفاظ بالأحدث</string>
   <string name="assistant_page_memory_auto_compress_threshold">عتبة التفعيل</string>

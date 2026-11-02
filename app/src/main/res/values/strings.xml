@@ -1821,6 +1821,8 @@
   <string name="chat_page_compress_not_enough_messages">Not enough messages to compress. Reduce the number of messages to keep.</string>
   <string name="chat_page_compress_handle_pending_tools">Handle the pending tool calls before compressing</string>
   <string name="chat_page_compress_tool_call_response">The model tried to call a tool instead of writing the summary. Please try again.</string>
+  <string name="chat_page_compress_truncated">The summary was cut off before it finished. Please try again.</string>
+  <string name="chat_page_compress_malformed">The model did not return a usable summary. Please try again.</string>
   <string name="chat_page_compress_conversation_changed">The conversation changed during compression. Please try again.</string>
   <string name="sketch">Sketch</string>
   <string name="sketch_draw_on_image">Draw on image</string>
@@ -2114,10 +2116,11 @@
   <string name="assistant_page_memory_auto_compress">Auto-compress</string>
   <string name="assistant_page_memory_auto_compress_desc">Compress the history before replying once context usage reaches the threshold; the result matches manual compression</string>
   <string name="assistant_page_memory_auto_compress_loop">Loop compression</string>
-  <string name="assistant_page_memory_auto_compress_loop_desc">When a request exceeds the context limit during the model tool loop, compress automatically and continue the current turn</string>
+  <string name="assistant_page_memory_auto_compress_loop_desc">When a request exceeds the context limit during the model tool loop, compress automatically and continue the current turn. Only the last reply is kept; earlier messages go into the summary.</string>
   <string name="assistant_page_memory_auto_compress_threshold">Trigger threshold</string>
   <string name="assistant_page_memory_auto_compress_threshold_desc">WARN is the soft warning line, MAX is the hard limit</string>
   <string name="assistant_page_memory_auto_compress_target">Keep after compressing</string>
+  <string name="assistant_page_memory_auto_compress_target_range">Value range: %1$d–%2$d</string>
   <string name="assistant_page_memory_auto_compress_target_desc">How much recent context stays outside the compression range; token mode cuts at thinking, text and tool-call boundaries</string>
   <string name="assistant_page_memory_auto_compress_messages">%1$d messages</string>
   <string name="assistant_page_memory_auto_compress_tokens">%1$d tokens</string>

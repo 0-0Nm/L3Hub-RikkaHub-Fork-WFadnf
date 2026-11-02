@@ -376,7 +376,10 @@ private fun MemorySettingsTab(
     if (showAutoCompressTargetDialog) {
         val parsed = autoCompressTargetInput.toIntOrNull()
         val minValue = if (autoCompressTargetMode == AutoCompressTarget.MESSAGES) 1 else 100
-        val valid = parsed != null && parsed >= minValue
+        // 上限防手滑：条数填得比现存消息还多，压缩永远找不到可压范围；token 填得比模型窗口还大，
+        // 保留区会撑到门限之上。两种情况界面都照旧显示「已开启」，用户只会觉得压缩坏了
+        val maxValue = if (autoCompressTargetMode == AutoCompressTarget.MESSAGES) 500 else 1_000_000
+        val valid = parsed != null && parsed in minValue..maxValue
         AlertDialog(
             onDismissRequest = { showAutoCompressTargetDialog = false },
             title = { Text(stringResource(R.string.assistant_page_memory_auto_compress_target)) },
@@ -418,6 +421,15 @@ private fun MemorySettingsTab(
                         isError = !valid,
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        supportingText = {
+                            Text(
+                                stringResource(
+                                    R.string.assistant_page_memory_auto_compress_target_range,
+                                    minValue,
+                                    maxValue,
+                                )
+                            )
+                        },
                     )
                 }
             },

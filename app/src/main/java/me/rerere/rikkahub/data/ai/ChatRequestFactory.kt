@@ -210,7 +210,15 @@ class ChatRequestFactory(
         }
         val summary = result.message.compressionSummaryOrNull()
             ?: error(context.getString(R.string.chat_page_compress_tool_call_response))
-        return summary.ifBlank { error("Failed to generate compressed summary") }
+        // 输出被截断时摘要只写到一半：当成完整摘要保存，后半段历史就对模型永久消失了
+        if (result.finishReason.isTruncatedOutput()) {
+            error(context.getString(R.string.chat_page_compress_truncated))
+        }
+        // 模型拒绝或答非所问时不满足七段结构，宁可压缩失败也别拿无效文本替换历史
+        if (!summary.isUsableCompressionSummary()) {
+            error(context.getString(R.string.chat_page_compress_malformed))
+        }
+        return summary
     }
 
     /** 一步请求实际发出的消息和参数；正常对话和压缩共用，二者的请求前缀必须一致才能命中提示词缓存 */
@@ -316,6 +324,30 @@ internal fun UIMessage.compressionSummaryOrNull(): String? {
         .toText()
         .trim()
 }
+
+/** 各家表示「输出没写完」的 finishReason：OpenAI length、Claude max_tokens、Gemini MAX_TOKENS、Responses incomplete */
+private val TRUNCATED_FINISH_REASONS = setOf(
+    "length",
+    "max_tokens",
+    "max_output_tokens",
+    "incomplete",
+    "content_filter",
+)
+
+private fun String?.isTruncatedOutput(): Boolean {
+    val reason = this?.lowercase() ?: return false
+    return reason in TRUNCATED_FINISH_REASONS
+}
+
+/**
+ * 摘要的最低门槛：至少两个二级标题、正文长度够。
+ * 指令要求七段结构；模型拒绝或答非所问时这两条都不满足。
+ */
+private const val MIN_SUMMARY_CHARS = 80
+private val SUMMARY_HEADING = Regex("""(?m)^##\s+\S""")
+
+internal fun String.isUsableCompressionSummary(): Boolean =
+    length >= MIN_SUMMARY_CHARS && SUMMARY_HEADING.findAll(this).count() >= 2
 
 /**
  * 输出转换只处理这一步新生成的 part：之前步骤的内容已经处理过，再处理一遍会让正则这类改写叠加，
