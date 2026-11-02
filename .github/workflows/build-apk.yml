@@ -47,6 +47,17 @@ jobs:
           path: /usr/local/lib/android/sdk/ndk/28.2.13676358
           key: ndk-28.2.13676358-ubuntu
 
+      # 缓存是固定 key，一次下载截断被存进去就会一直命中坏副本。
+      # 每次跑之前验一下，不全就删掉让 AGP 重下（重下约 16 秒，比修一个坏缓存便宜）。
+      - name: Validate NDK
+        run: |
+          ndk=/usr/local/lib/android/sdk/ndk/28.2.13676358
+          if [ -e "$ndk" ] && { [ ! -f "$ndk/source.properties" ] || \
+             [ ! -x "$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" ]; }; then
+            echo "缓存里的 NDK 不完整，删掉重新下载"
+            rm -rf "$ndk"
+          fi
+
       - uses: pnpm/action-setup@v4
         with:
           # web-ui/pnpm-workspace.yaml 只有 allowBuilds（pnpm 10.26+ 的字段），没有 packages:，
@@ -83,13 +94,36 @@ jobs:
       # 这里按 tag 重命名，并附一份 sha256 供校验。
       - name: Collect APK
         env:
-          TAG: ${{ inputs.tag || github.ref_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
+          # tag 事件直接用 tag 名；手动触发没填 tag 时退回 build.gradle.kts 的 versionName，
+          # 否则产物会叫 L3Hub-master-arm64-v8a.apk
+          tag="${INPUT_TAG:-}"
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            tag="$REF_NAME"
+          fi
+          if [ -z "$tag" ]; then
+            tag="$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts | head -1)"
+          fi
+          # 首字符 - 会被 gh 当 flag；/ 和空格会让 cp 写进不存在的目录
+          case "$tag" in
+            ''|-*|*[!A-Za-z0-9._-]*)
+              echo "非法 tag：[${tag}]" >&2
+              exit 1 ;;
+          esac
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+          echo "产物 tag：$tag"
+
           mkdir -p dist
-          apk=$(ls app/build/outputs/apk/github/debug/*.apk | head -1)
-          cp "$apk" "dist/L3Hub-${TAG}-arm64-v8a.apk"
-          ( cd dist && sha256sum ./*.apk > "L3Hub-${TAG}-arm64-v8a.apk.sha256" )
+          mapfile -t apks < <(ls app/build/outputs/apk/github/debug/*.apk)
+          if [ "${#apks[@]}" -ne 1 ]; then
+            echo "期望恰好 1 个 APK，实际 ${#apks[@]} 个：${apks[*]:-无}" >&2
+            exit 1
+          fi
+          cp "${apks[0]}" "dist/L3Hub-${tag}-arm64-v8a.apk"
+          ( cd dist && sha256sum "L3Hub-${tag}-arm64-v8a.apk" > "L3Hub-${tag}-arm64-v8a.apk.sha256" )
           ls -l dist
 
       - uses: actions/upload-artifact@v4
@@ -102,7 +136,6 @@ jobs:
         if: github.event_name == 'push' || inputs.tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
           # 本仓库不走 PR，GitHub 的 --generate-notes 只会给一行 Full Changelog。
