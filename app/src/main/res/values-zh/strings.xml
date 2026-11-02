@@ -923,6 +923,7 @@
   <string name="palette_role_error">错误色</string>
   <string name="palette_role_background">背景色</string>
   <string name="palette_role_surface">表面色</string>
+  <string name="setting_palette_page_roles_hint">表面色会带动卡片、顶栏和列表项的底色；背景色只管页面根底色。</string>
   <string name="palette_role_surface_variant">表面变体色</string>
   <string name="palette_role_on_surface">表面上的文字</string>
   <string name="setting_palette_page_seed_title">从色号生成调色板</string>

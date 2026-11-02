@@ -967,6 +967,7 @@
   <string name="palette_role_error">Error</string>
   <string name="palette_role_background">Background</string>
   <string name="palette_role_surface">Surface</string>
+  <string name="setting_palette_page_roles_hint">Surface drives cards, top bars and list items. Background only affects the page root.</string>
   <string name="palette_role_surface_variant">Surface variant</string>
   <string name="palette_role_on_surface">On surface</string>
   <string name="setting_palette_page_seed_title">Build a palette from a hex</string>

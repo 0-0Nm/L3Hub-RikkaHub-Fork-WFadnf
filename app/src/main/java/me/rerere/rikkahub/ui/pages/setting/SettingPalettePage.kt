@@ -493,6 +493,14 @@ private fun PaletteEditSheet(
                 }
             }
 
+            Spacer(Modifier.height(4.dp))
+
+            Text(
+                text = stringResource(R.string.setting_palette_page_roles_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
             Spacer(Modifier.height(12.dp))
 
             PalettePreview(colors = colors, darkMode = darkMode)
