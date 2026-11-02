@@ -132,6 +132,17 @@ fun RikkahubTheme(
         // 终端模式自带配色，不参与 AMOLED 压黑
         if (!terminal && darkTheme && amoledDarkMode) base.amoledSlots() else base
     }
+    // 全局字体：聊天字体可选应用到整个应用；终端风格始终等宽，不参与。
+    // 注意：这里/下面的 Typography 是同包顶层 val（Type.kt），不是类，
+    // 勿在此文件加 import androidx.compose.material3.Typography（会改为解析成类导致编译错误）。
+    val chatFontFamily = rememberChatFontFamily(settings.displaySetting)
+    val typography = remember(terminal, settings.displaySetting.fontApplyGlobal, chatFontFamily) {
+        when {
+            terminal -> terminalTypography(Typography)
+            settings.displaySetting.fontApplyGlobal -> Typography.withFontFamily(chatFontFamily)
+            else -> Typography
+        }
+    }
     val extendColors = if (darkTheme || terminal) ExtendDarkColors else ExtendLightColors
     val effectiveDark = darkTheme || terminal
 
@@ -167,7 +178,7 @@ fun RikkahubTheme(
     ) {
         MaterialExpressiveTheme(
             colorScheme = colorSchemeConverted,
-            typography = if (terminal) terminalTypography(Typography) else Typography,
+            typography = typography,
             shapes = when {
                 terminal -> TerminalShapes
                 fullWidthComponents -> SquareShapes

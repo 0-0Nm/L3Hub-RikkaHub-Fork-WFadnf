@@ -340,6 +340,14 @@ fun SettingPreferencesUIPage(embedded: Boolean = false, vm: SettingVM = koinView
                         }
                     }
                 }
+                switchItem(
+                    checked = displaySetting.fontApplyGlobal,
+                    onCheckedChange = { updateDisplaySetting(displaySetting.copy(fontApplyGlobal = it)) },
+                    // 终端风格强制等宽、默认字体本就全局生效，这两种情况开关没有意义
+                    enabled = !displaySetting.terminalStyle && displaySetting.chatFontFamily != ChatFontFamily.DEFAULT,
+                    supportingContent = { Text(stringResource(R.string.setting_display_page_font_global_desc)) },
+                    headlineContent = { Text(stringResource(R.string.setting_display_page_font_global_title)) },
+                )
                 item(
                     onClick = { fontPickerLauncher.launch(CustomFontMimeTypesUI) },
                     headlineContent = { Text(stringResource(R.string.setting_display_page_custom_font_title)) },

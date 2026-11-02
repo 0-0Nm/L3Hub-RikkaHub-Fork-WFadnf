@@ -673,6 +673,8 @@
   <string name="setting_display_page_chat_font_family_monospace">等宽字体</string>
   <string name="setting_display_page_chat_font_family_serif">衬线体</string>
   <string name="setting_display_page_chat_font_family_title">聊天字体</string>
+  <string name="setting_display_page_font_global_title">应用到全局</string>
+  <string name="setting_display_page_font_global_desc">开启后所选字体用于整个应用（设置、列表等全部界面），不限于聊天</string>
   <string name="setting_display_page_chat_list_model_icon_desc">是否在聊天列表消息中显示模型图标</string>
   <string name="setting_display_page_chat_list_model_icon_title">聊天列表模型图标</string>
   <string name="setting_display_page_code_block_auto_collapse_desc">默认自动折叠代码块</string>

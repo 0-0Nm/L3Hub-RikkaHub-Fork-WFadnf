@@ -254,6 +254,8 @@ data class DisplaySetting(
     val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
     val chatCustomFontPath: String = "",
     val chatCustomFontName: String = "",
+    // 聊天字体是否应用到整个应用（不限于聊天界面）；终端风格始终等宽，不受影响
+    val fontApplyGlobal: Boolean = false,
     val enableVolumeKeyScroll: Boolean = false,
     val volumeKeyScrollRatio: Float = 1.0f,
     val conversationSortOrder: ConversationSortOrder = ConversationSortOrder.UPDATE_TIME,
