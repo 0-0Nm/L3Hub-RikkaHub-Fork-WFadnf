@@ -1070,6 +1070,8 @@
   <string name="palette_style_complement">互补</string>
   <string name="palette_style_vivid">浓郁</string>
   <string name="palette_style_muted">柔和</string>
+  <string name="setting_palette_page_probe">编辑模式</string>
+  <string name="setting_palette_page_probe_desc">点界面上任意一处，看它是哪个颜色，当场改</string>
   <string name="palette_role_on_primary">主色上的文字</string>
   <string name="palette_role_error">错误色</string>
   <string name="palette_role_background">背景色</string>

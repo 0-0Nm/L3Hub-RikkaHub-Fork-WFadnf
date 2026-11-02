@@ -87,6 +87,7 @@ import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.CardGroupScope
 import me.rerere.rikkahub.ui.components.ui.ColorPickerRow
 import me.rerere.rikkahub.ui.components.ui.switchItem
+import me.rerere.rikkahub.ui.theme.ColorProbeState
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.DEFAULT_PALETTE_ID
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
@@ -335,6 +336,17 @@ fun SettingPalettePage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.Upload02, contentDescription = null) },
                         headlineContent = { Text(stringResource(R.string.setting_palette_page_import)) },
                         supportingContent = { Text(stringResource(R.string.setting_palette_page_import_desc)) },
+                    )
+                }
+            }
+
+            item("probe") {
+                CardGroup {
+                    item(
+                        onClick = { ColorProbeState.enabled = true },
+                        leadingContent = { Icon(HugeIcons.PaintBoard, contentDescription = null) },
+                        headlineContent = { Text(stringResource(R.string.setting_palette_page_probe)) },
+                        supportingContent = { Text(stringResource(R.string.setting_palette_page_probe_desc)) },
                     )
                 }
             }

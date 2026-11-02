@@ -144,7 +144,15 @@ fun RikkahubTheme(
                 fullWidthComponents -> SquareShapes
                 else -> MaterialTheme.shapes
             },
-            content = content,
+            content = {
+                // 编辑模式：全屏盖一层取色器，点哪算哪
+                androidx.compose.foundation.layout.Box(
+                    modifier = androidx.compose.ui.Modifier.fillMaxSize()
+                ) {
+                    content()
+                    ColorProbeOverlay()
+                }
+            },
             motionScheme = if (settings.displaySetting.disableAnimations) {
                 SnapMotionScheme
             } else {

@@ -1114,6 +1114,8 @@
   <string name="palette_style_complement">Complement</string>
   <string name="palette_style_vivid">Vivid</string>
   <string name="palette_style_muted">Muted</string>
+  <string name="setting_palette_page_probe">Edit mode</string>
+  <string name="setting_palette_page_probe_desc">Tap anywhere on screen to see which colour it is, and change it on the spot</string>
   <string name="palette_role_on_primary">On primary</string>
   <string name="palette_role_error">Error</string>
   <string name="palette_role_background">Background</string>
