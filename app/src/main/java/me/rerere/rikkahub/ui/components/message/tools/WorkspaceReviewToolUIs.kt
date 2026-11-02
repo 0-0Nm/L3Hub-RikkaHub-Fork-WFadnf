@@ -61,8 +61,8 @@ object ApplyPatchToolUI : ToolUIRenderer {
         val count = files(context).size
         val conflicts = conflicts(context).size
         return when {
-            conflicts > 0 -> "补丁冲突：$conflicts 处，未写入"
-            count > 0 -> "补丁已应用：$count 个文件"
+            conflicts > 0 -> "补丁冲突 $conflicts 处，未写入"
+            count > 0 -> "已应用补丁：$count 个文件"
             else -> "应用补丁"
         }
     }

@@ -69,7 +69,7 @@ private fun colorDistance(a: Color, b: Color): Double {
     return dr * dr * 2.0 + dg * dg * 4.0 + db * db * 3.0 + da * da * 10.0
 }
 
-/** 超出这个距离就认为对不上任何色值——多半是图片、渐变或者半透明叠出来的。 */
+/** 超出这个距离就认为未匹配到任何颜色——多半是图片、渐变或者半透明叠出来的。 */
 private const val MATCH_THRESHOLD = 0.0035
 
 private fun ColorScheme.roleColors(): Map<PaletteRole, Color> = mapOf(
@@ -207,12 +207,12 @@ fun ColorProbeOverlay() {
                 detectTapGestures { offset ->
                     val act = activity
                     if (act == null) {
-                        hint = "找不到 Activity，没法截图"
+                        hint = "找不到 Activity，无法截图"
                         return@detectTapGestures
                     }
                     capturePixel(act.window, offset + origin) { sampled ->
                         if (sampled == null) {
-                            hint = "截不到屏幕"
+                            hint = "无法截取屏幕"
                         } else {
                             hint = null
                             match = resolveMatch(sampled, slots, scheme)
@@ -235,7 +235,7 @@ fun ColorProbeOverlay() {
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
-                    text = "点任意一处看颜色",
+                    text = "点击任意位置查看颜色",
                     style = MaterialTheme.typography.labelLarge,
                     color = scheme.inverseOnSurface,
                 )
@@ -288,9 +288,9 @@ fun ColorProbeOverlay() {
                         )
                         Column(Modifier.weight(1f)) {
                             val name = when {
-                                result.distance > MATCH_THRESHOLD -> "对不上任何色值"
-                                slot != null -> "位置 · ${slotLabel(slot)}"
-                                result.role != null -> "角色 · ${slotRoleLabel(result.role)}"
+                                result.distance > MATCH_THRESHOLD -> "未匹配到任何颜色"
+                                slot != null -> "位置：${slotLabel(slot)}"
+                                result.role != null -> "角色：${slotRoleLabel(result.role)}"
                                 else -> "未知"
                             }
                             Text(
@@ -308,7 +308,7 @@ fun ColorProbeOverlay() {
 
                     when {
                         result.distance > MATCH_THRESHOLD -> Text(
-                            text = "这块是图片、渐变或者半透明叠出来的，不来自某个色值。",
+                            text = "该区域由图片、渐变或半透明叠加而成，不来自单一色值。",
                             style = MaterialTheme.typography.bodySmall,
                             color = scheme.onSurfaceVariant,
                         )
@@ -320,7 +320,7 @@ fun ColorProbeOverlay() {
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("调这个颜色")
+                            Text("编辑此颜色")
                         }
 
                         slot != null && editing -> {
@@ -340,12 +340,12 @@ fun ColorProbeOverlay() {
                                         editing = false
                                         match = null
                                     }
-                                ) { Text("写进去") }
+                                ) { Text("应用") }
                             }
                         }
 
                         else -> Text(
-                            text = "这一格在「按颜色」里能找到，位置列表暂时没有它。",
+                            text = "此颜色可在「按颜色」列表中找到，位置列表暂未收录。",
                             style = MaterialTheme.typography.bodySmall,
                             color = scheme.onSurfaceVariant,
                         )
@@ -358,14 +358,14 @@ fun ColorProbeOverlay() {
 
 /** 位置名。不能在这里用 stringResource（在 pointerInput 之外但仍是 composable 作用域），直接给中文表。 */
 private fun slotLabel(slot: UiSlot): String = when (slot) {
-    UiSlot.PAGE_BACKGROUND -> "页面底色"
+    UiSlot.PAGE_BACKGROUND -> "页面背景"
     UiSlot.TOP_BAR -> "顶栏"
     UiSlot.CARD -> "卡片"
     UiSlot.LIST_ITEM -> "列表项"
     UiSlot.PANEL -> "弹窗面板"
     UiSlot.INPUT_BAR -> "输入框"
-    UiSlot.AI_BUBBLE -> "AI 气泡"
-    UiSlot.USER_BUBBLE -> "我的气泡"
+    UiSlot.AI_BUBBLE -> "AI 消息气泡"
+    UiSlot.USER_BUBBLE -> "用户消息气泡"
     UiSlot.USER_BUBBLE_TEXT -> "我的气泡文字"
     UiSlot.TITLE_TEXT -> "标题文字"
     UiSlot.BODY_TEXT -> "正文"
@@ -377,7 +377,7 @@ private fun slotLabel(slot: UiSlot): String = when (slot) {
     UiSlot.DIVIDER -> "分隔线"
     UiSlot.BORDER -> "边框"
     UiSlot.ERROR_TEXT -> "错误文字"
-    UiSlot.ERROR_BACKGROUND -> "错误提示底"
+    UiSlot.ERROR_BACKGROUND -> "错误提示背景"
     UiSlot.ERROR_ON_BACKGROUND -> "错误提示文字"
     UiSlot.SCRIM -> "遮罩"
 }

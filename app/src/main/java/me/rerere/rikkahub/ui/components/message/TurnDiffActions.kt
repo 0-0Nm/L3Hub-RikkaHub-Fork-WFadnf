@@ -220,7 +220,7 @@ internal fun TurnDiffActions(
                                 if (diff == null) {
                                     Text("读取 diff…", style = MaterialTheme.typography.bodySmall)
                                 } else if (diff.isBlank()) {
-                                    Text("没有 diff（可能是新文件）", style = MaterialTheme.typography.bodySmall)
+                                    Text("无 diff（可能为新文件）", style = MaterialTheme.typography.bodySmall)
                                 } else {
                                     val fileDiff = remember(diff) { UnifiedDiff.parse(diff).firstOrNull() }
                                     val hunks = fileDiff?.hunks.orEmpty()
@@ -242,7 +242,7 @@ internal fun TurnDiffActions(
                                             }
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Text(
-                                                    text = "Hunk ${index + 1} · 第 ${hunk.oldStart} 行起",
+                                                    text = "Hunk ${index + 1} · 自第 ${hunk.oldStart} 行起",
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     modifier = Modifier.weight(1f),
@@ -257,7 +257,7 @@ internal fun TurnDiffActions(
                                                             }
                                                             Toast.makeText(
                                                                 context,
-                                                                if (result?.ok == true) "已回退该 hunk" else "回退失败：${result?.output.orEmpty().take(100)}",
+                                                                if (result?.ok == true) "已回退该 Hunk" else "回退失败：${result?.output.orEmpty().take(100)}",
                                                                 Toast.LENGTH_SHORT,
                                                             ).show()
                                                             expandedDiff = withContext(Dispatchers.IO) {
@@ -291,7 +291,7 @@ internal fun TurnDiffActions(
         AlertDialog(
             onDismissRequest = { pendingDiscard = null },
             title = { Text("丢弃改动") },
-            text = { Text("把 ${path.substringAfterLast('/')} 恢复到 HEAD？未跟踪的新文件会被删除。") },
+            text = { Text("将 ${path.substringAfterLast('/')} 恢复到 HEAD？未跟踪的新文件将被删除。") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -323,7 +323,7 @@ internal fun TurnDiffActions(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "会先 git add -A，再用下面的信息提交。",
+                        text = "将先执行 git add -A，再使用以下信息提交。",
                         style = MaterialTheme.typography.bodySmall,
                     )
                     OutlinedTextField(
