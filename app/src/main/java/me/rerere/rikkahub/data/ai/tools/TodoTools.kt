@@ -53,6 +53,11 @@ fun createTodoTools(
                                     put("type", "string")
                                     put("description", "One-line task description")
                                 })
+                                // 已存在的项把 id 原样带回来, 后续才能用 todo_update 单条更新
+                                put("id", buildJsonObject {
+                                    put("type", "string")
+                                    put("description", "Omit for a new item; pass back the id shown in the current list to keep it")
+                                })
                                 put("status", buildJsonObject {
                                     put("type", "string")
                                     put("enum", buildJsonArray {
@@ -87,7 +92,7 @@ fun createTodoTools(
                     return@mapNotNull null
                 }
                 // 已经带 id 的原样保留，没有的补一个：后续 todo_update 靠它定位单条
-                val id = obj?.get("id")?.jsonPrimitive?.contentOrNull
+                val id = obj.get("id")?.jsonPrimitive?.contentOrNull
                     ?.trim()
                     ?.takeIf { it.isNotEmpty() }
                     ?: Uuid.random().toString().take(8)

@@ -174,7 +174,8 @@ class WorkspaceDetailVM(
                     area = state.value.area,
                     path = state.value.path,
                 )
-                _state.update { it.copy(entries = entries, loading = false) }
+                // 后端为了判断截断会一次给到 2000 条，界面只渲染前 500 条
+                _state.update { it.copy(entries = entries.take(UI_MAX_LIST_ENTRIES), loading = false) }
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
@@ -398,3 +399,5 @@ sealed interface WorkspaceTerminalEntry {
     data class Result(val result: WorkspaceCommandResult) : WorkspaceTerminalEntry
     data class Error(val message: String) : WorkspaceTerminalEntry
 }
+
+private const val UI_MAX_LIST_ENTRIES = 500

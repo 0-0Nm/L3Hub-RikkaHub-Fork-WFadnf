@@ -99,13 +99,22 @@ class LocalWorkspaceBackend(
         val root = manager.layout.writableRoots
             .filter { path == it || path.startsWith("$it/") }
             .maxByOrNull { it.length } ?: return
+        // 可写根本身映射不出来时说明这条路径不归我们管，跳过校验
         val hostRoot = runCatching { manager.resolveRootfsFile(root, root).canonicalFile }
             .getOrNull() ?: return
-        val target = runCatching {
+        // 目标解析失败必须当成拒绝：resolveRootfsFile 内部带 jail 校验，路径经软链落到工作区
+        // 之外时它抛的正是 IllegalArgumentException——那恰恰是要拦的情况。这里若按「解析不出来
+        // 就放行」处理，守卫在唯一该生效的场景下会失效（软链逃逸正是这么漏过去的）。
+        val target = try {
             val file = manager.resolveRootfsFile(root, path)
-            val parent = file.parentFile?.canonicalFile ?: return@runCatching null
+            val parent = file.parentFile?.canonicalFile ?: return
             parent.resolve(file.name).canonicalFile
-        }.getOrNull() ?: return
+        } catch (e: IllegalArgumentException) {
+            throw IllegalArgumentException(
+                "Refusing to write through a symlink that leaves the writable area: $path",
+                e,
+            )
+        }
         val inside = target.path == hostRoot.path || target.path.startsWith(hostRoot.path + File.separator)
         require(inside) {
             "Refusing to write through a symlink that leaves the writable area: $path"

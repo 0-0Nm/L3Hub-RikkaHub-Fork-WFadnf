@@ -27,8 +27,10 @@ class RootfsInstaller(
         val tempDir = manager.tempDir(root)
         val archive = File(tempDir, "rootfs.${format.extension}")
         val stagingDir = File(tempDir, "rootfs-staging")
-        // 旧 rootfs 在替换期间先挪到这里, patch 失败时原样挪回去
-        val previousDir = File(tempDir, "rootfs-previous")
+        // 旧 rootfs 在替换期间先挪到这里, patch 失败时原样挪回去。
+        // 放在工作区根下而不是 tempDir: 启动时的 cleanupAllTempDirs 会把 tempDir 整棵删掉,
+        // 进程若在「旧根已挪走、新根未就位」之间被杀, 备份就没了。
+        val previousDir = File(manager.workspaceDir(root), "rootfs-previous")
         val linuxDir = manager.linuxDir(root)
 
         try {
@@ -45,15 +47,23 @@ class RootfsInstaller(
                 }
             }
             if (!stagingDir.renameTo(linuxDir)) {
-                if (hadPrevious) previousDir.renameTo(linuxDir)
-                error("Failed to move rootfs into workspace")
+                val restored = !hadPrevious || previousDir.renameTo(linuxDir)
+                error(
+                    if (restored) "Failed to move rootfs into workspace"
+                    else "Failed to move rootfs into workspace; the previous rootfs is still at ${previousDir.absolutePath}"
+                )
             }
             try {
                 patcher.patch(linuxDir)
             } catch (e: Throwable) {
                 // 新根装不成就要能退回去, 否则用户从一个能用的工作区变成 BROKEN
                 linuxDir.deleteRecursively()
-                previousDir.renameTo(linuxDir)
+                if (hadPrevious && !previousDir.renameTo(linuxDir)) {
+                    throw IllegalStateException(
+                        "Rootfs patch failed and the previous rootfs could not be restored; it is still at ${previousDir.absolutePath}",
+                        e,
+                    )
+                }
                 throw e
             }
             previousDir.deleteRecursively()

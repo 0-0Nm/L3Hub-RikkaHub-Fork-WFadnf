@@ -65,7 +65,10 @@ fun WorkspaceCwdPickerSheet(
             val result = withContext(Dispatchers.IO) {
                 workspaceRepository.listFiles(workspaceId, WorkspaceStorageArea.FILES, browsePath)
             }
-            entries = result.sortedWith(compareByDescending<WorkspaceFileEntry> { it.isDirectory }.thenBy { it.name })
+            // 后端为了判断截断会一次给到 2000 条，下拉只铺前 500 条
+            entries = result
+                .sortedWith(compareByDescending<WorkspaceFileEntry> { it.isDirectory }.thenBy { it.name })
+                .take(500)
             loading = false
         } catch (e: CancellationException) {
             throw e

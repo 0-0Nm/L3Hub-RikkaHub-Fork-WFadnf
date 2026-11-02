@@ -85,9 +85,12 @@ fun Process.readResult(timeoutMillis: Long, stdin: ByteArray? = null): Workspace
             destroyForcibly()
         }
         stdinWriter?.join(1_000)
+        // 两个流共用一个总预算: 分别各等 5s 的话, 孙进程攥着管道时每条命令要多花 10s
         val drainMillis = if (finished) OUTPUT_DRAIN_TIMEOUT_MS else KILLED_DRAIN_TIMEOUT_MS
-        val stdoutDrained = stdout.awaitEnd(drainMillis)
-        val stderrDrained = stderr.awaitEnd(drainMillis)
+        val deadline = System.nanoTime() + drainMillis * 1_000_000
+        fun remainingMs(): Long = ((deadline - System.nanoTime()) / 1_000_000).coerceAtLeast(0)
+        val stdoutDrained = stdout.awaitEnd(remainingMs())
+        val stderrDrained = stderr.awaitEnd(remainingMs())
         return WorkspaceCommandResult(
             exitCode = if (finished) exitValue() else -1,
             stdout = stdout.text(),

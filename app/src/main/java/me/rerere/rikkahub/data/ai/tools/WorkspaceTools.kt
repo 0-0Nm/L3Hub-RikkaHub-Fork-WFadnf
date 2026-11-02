@@ -862,23 +862,32 @@ private fun createShellTool(
             val quoted = command.replace("'", "'\\''")
             // 有 setsid 就脱离会话，没有就退回 nohup；整段放子 shell 里后台执行，$! 就是实际进程号
             val wrapped = "mkdir -p \"\$(dirname \"$log\")\" 2>/dev/null || true; " +
+                // 先探一下日志路径可不可写: 起没起来要能判出来, 不能等子进程去开重定向
+                "if ! : > \"$log\" 2>/dev/null; then echo no-log; exit 1; fi; " +
                 "if command -v setsid >/dev/null 2>&1; then " +
                 "exec setsid nohup sh -c '$quoted' > \"$log\" 2>&1; " +
-                "else exec nohup sh -c '$quoted' > \"$log\" 2>&1; fi & echo \$!"
+                "else exec nohup sh -c '$quoted' > \"$log\" 2>&1; fi & " +
+                // 第一行是 pid，第二行是 shell 展开后的真实日志路径（模板里的 $TMPDIR 只有
+                // shell 才知道），模型拿到的是可以直接 tail 的绝对路径
+                "echo \$!; printf '%s\\n' \"$log\""
             val started = workspaceRepository.executeCommand(target.id, wrapped, cwd, 15_000)
-            val pid = started.stdout.lineSequence().map { it.trim() }.lastOrNull { it.isNotEmpty() }.orEmpty()
+            val lines = started.stdout.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
+            val pid = lines.firstOrNull().orEmpty()
+            val reportedLog = lines.getOrNull(1).orEmpty()
+            val logReady = reportedLog.startsWith("/")
+            val pidReady = pid.isNotEmpty() && pid.all { it.isDigit() }
             listOf(
                 UIMessagePart.Text(
                     buildJsonObject {
                         put("background", true)
-                        put("log", log)
+                        put("log", if (logReady) reportedLog else log)
                         put("workspace", target.name)
-                        if (pid.isNotEmpty() && pid.all { it.isDigit() }) {
+                        if (pidReady && logReady) {
                             put("pid", pid)
-                            put("hint", "Read output with workspace_shell + `tail -n 100 $log`; stop with `kill -- -$pid`.")
+                            put("hint", "Read output with workspace_shell + `tail -n 100 $reportedLog`; stop with `kill -- -$pid`.")
                         } else {
                             // 起不来时不能只回一个看起来正常的 pid，把 shell 的说法原样带回去
-                            put("error", "Failed to start the background job: no pid was returned")
+                            put("error", "Failed to start the background job: the log file was not created")
                             if (started.exitCode != 0) put("exitCode", started.exitCode)
                             if (started.stderr.isNotBlank()) put("stderr", started.stderr)
                         }
@@ -940,7 +949,12 @@ private suspend fun WorkspaceRepository.readRootfsBuffer(
     require(size <= MAX_READ_FILE_BYTES) {
         "File is too large to read: $path (${size / 1024 / 1024}MB, max ${MAX_READ_FILE_BYTES / 1024 / 1024}MB). Use shell commands like head, tail, or grep to read parts of it."
     }
-    return ByteArrayOutputStream(size.toInt()).also { exportAbsoluteFile(workspaceId, path, it) }
+    val buffer = ByteArrayOutputStream(size.toInt()).also { exportAbsoluteFile(workspaceId, path, it) }
+    // 目录枚举给的大小可能已经过时（文件在读之前被追加），拷完之后再按上限确认一次
+    require(buffer.size() <= MAX_READ_FILE_BYTES) {
+        "File is too large to read: $path (${buffer.size() / 1024 / 1024}MB, max ${MAX_READ_FILE_BYTES / 1024 / 1024}MB). Use shell commands like head, tail, or grep to read parts of it."
+    }
+    return buffer
 }
 
 private suspend fun WorkspaceRepository.readImageInRootfs(
