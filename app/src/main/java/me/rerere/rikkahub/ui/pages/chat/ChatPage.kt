@@ -144,6 +144,7 @@ import me.rerere.rikkahub.ui.pages.chat.terminal.terminalHelpText
 import me.rerere.rikkahub.ui.terminal.IconButton
 import me.rerere.rikkahub.ui.terminal.TextButton
 import me.rerere.rikkahub.ui.terminal.TopAppBar
+import me.rerere.rikkahub.ui.theme.LocalUiSlots
 import me.rerere.rikkahub.ui.theme.LocalFullWidthComponents
 import me.rerere.rikkahub.ui.theme.TerminalPalette
 import me.rerere.rikkahub.ui.theme.TerminalTheme
@@ -849,7 +850,7 @@ private fun ChatPageContent(
         color = if (setting.displaySetting.terminalStyle) {
             TerminalPalette.Background
         } else {
-            MaterialTheme.colorScheme.background
+            LocalUiSlots.current.pageBackground
         },
         modifier = Modifier.fillMaxSize()
     ) {

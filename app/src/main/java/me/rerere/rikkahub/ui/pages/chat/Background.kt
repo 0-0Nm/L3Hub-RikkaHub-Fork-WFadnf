@@ -15,6 +15,7 @@ import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+import me.rerere.rikkahub.ui.theme.LocalUiSlots
 
 @Composable
 fun AssistantBackground(setting: Settings, modifier: Modifier, animate: Boolean = true) {
@@ -24,7 +25,7 @@ fun AssistantBackground(setting: Settings, modifier: Modifier, animate: Boolean 
         return
     }
     if (assistant.background != null) {
-        val backgroundColor = MaterialTheme.colorScheme.background
+        val backgroundColor = LocalUiSlots.current.pageBackground
         val backgroundOpacity = assistant.backgroundOpacity.coerceIn(0f, 1f)
         Box(modifier = modifier) {
             val blurRadius = (assistant.backgroundBlur.coerceIn(0f, 1f) * 24f).dp

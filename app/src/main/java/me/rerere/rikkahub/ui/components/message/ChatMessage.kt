@@ -125,6 +125,7 @@ import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.modifier.shimmer
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalWorkspaceId
+import me.rerere.rikkahub.ui.theme.LocalUiSlots
 import me.rerere.rikkahub.ui.theme.LocalChatFontFamily
 import me.rerere.rikkahub.ui.theme.LocalFullWidthComponents
 import me.rerere.rikkahub.ui.theme.TerminalPalette
@@ -778,7 +779,7 @@ private fun MessagePartsBlock(
                                 } else {
                                     ChatMessageBubble(
                                         role = role,
-                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = settings.displaySetting.bubbleOpacity),
+                                        color = LocalUiSlots.current.userBubble.copy(alpha = settings.displaySetting.bubbleOpacity),
                                         hazeState = hazeState,
                                         joinedToPrevious = joinedToPrevious,
                                         joinedToNext = joinedToNext,
@@ -1310,7 +1311,7 @@ private fun UserMessageContent(
 
     ChatMessageBubble(
         role = MessageRole.USER,
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = settings.bubbleOpacity),
+        color = LocalUiSlots.current.userBubble.copy(alpha = settings.bubbleOpacity),
         hazeState = hazeState,
         joinedToPrevious = joinedToPrevious,
         joinedToNext = joinedToNext,
