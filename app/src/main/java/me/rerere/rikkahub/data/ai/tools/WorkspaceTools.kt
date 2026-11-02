@@ -855,21 +855,32 @@ private fun createShellTool(
             )
         }
         if (background) {
-            val log = "/tmp/l3hub-job-${System.currentTimeMillis()}.log"
+            // 日志目录与 ShellChangeScan 用同一套展开规则：Termux 上 /tmp 属于 shell 用户且被
+            // SELinux 挡住，应用硬写会让整条命令在重定向那一步就失败，而且失败是静默的。
+            val log = "\${TMPDIR:-\$HOME/tmp}/l3hub-job-${System.currentTimeMillis()}.log"
             val quoted = command.replace("'", "'\\''")
             // 有 setsid 就脱离会话，没有就退回 nohup；整段放子 shell 里后台执行，$! 就是实际进程号
-            val wrapped = "if command -v setsid >/dev/null 2>&1; then " +
-                "exec setsid nohup sh -c '$quoted' > '$log' 2>&1; " +
-                "else exec nohup sh -c '$quoted' > '$log' 2>&1; fi & echo \$!"
+            val wrapped = "mkdir -p \"\$(dirname \"$log\")\" 2>/dev/null || true; " +
+                "if command -v setsid >/dev/null 2>&1; then " +
+                "exec setsid nohup sh -c '$quoted' > \"$log\" 2>&1; " +
+                "else exec nohup sh -c '$quoted' > \"$log\" 2>&1; fi & echo \$!"
             val started = workspaceRepository.executeCommand(target.id, wrapped, cwd, 15_000)
+            val pid = started.stdout.lineSequence().map { it.trim() }.lastOrNull { it.isNotEmpty() }.orEmpty()
             listOf(
                 UIMessagePart.Text(
                     buildJsonObject {
                         put("background", true)
-                        put("pid", started.stdout.trim())
                         put("log", log)
                         put("workspace", target.name)
-                        put("hint", "Read output with workspace_shell + `tail -n 100 $log`; stop with `kill -- -<pid>`.")
+                        if (pid.isNotEmpty() && pid.all { it.isDigit() }) {
+                            put("pid", pid)
+                            put("hint", "Read output with workspace_shell + `tail -n 100 $log`; stop with `kill -- -$pid`.")
+                        } else {
+                            // 起不来时不能只回一个看起来正常的 pid，把 shell 的说法原样带回去
+                            put("error", "Failed to start the background job: no pid was returned")
+                            if (started.exitCode != 0) put("exitCode", started.exitCode)
+                            if (started.stderr.isNotBlank()) put("stderr", started.stderr)
+                        }
                     }.toString()
                 )
             )
