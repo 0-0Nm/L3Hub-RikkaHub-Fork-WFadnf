@@ -94,7 +94,7 @@ data class PaletteColors(
         // 改「表面上的文字颜色」只在标题那 40 处生效，看着就像没生效。
         // 音调按 M3 的关系错开一档，默认值下几乎看不出差别。
         onSurfaceVariant = Color(onSurface.toInt()).shiftTone(if (dark) -10.0 else 20.0),
-    ).withSurfaceFamily(surface)
+    ).withSurfaceFamily(surface, dark)
 
     companion object {
         /** 展开用的默认错误色。种子里没有红，出错提示就会和正文混在一起。 */
@@ -217,34 +217,44 @@ private fun Color.shiftTone(delta: Double): Color {
 private const val SURFACE_CHROMA_MAX = 12.0
 
 /**
- * 把整族表面色换成「表层色」的色相和彩度。
- *
- * 音调不写死：paletteColorScheme 走的是 SPEC_2025，自己再钉一份 2021 的音调表，
- * 会让 surfaceContainer* 和同一条 scheme 里的 onSurface 对不上。
- * 这里只取 scheme 自己算出来的音调，换 spec 版本时不用跟着改数字。
- *
- * 之前只覆盖 surface 一个字段：应用里绝大多数容器用的是 surfaceContainer*，
- * 它们由中性种子展开、音调固定，所以改 surface 在浅色下几乎看不出来。
+ * M3 里「默认表面」的音调：容器阶梯 94/96/98/100（深色 12/17/22/24）都是相对它定的。
+ * 拿它当基准，才能把整条阶梯按用户选的表面色平移。
  */
-internal fun ColorScheme.withSurfaceFamily(surface: Long): ColorScheme {
+private const val LIGHT_SURFACE_BASE_TONE = 98.0
+private const val DARK_SURFACE_BASE_TONE = 6.0
+
+/**
+ * 把整族表面色换成「表层色」的色相、彩度，并把深浅按它的音调整体平移。
+ *
+ * 音调不能只换不改：M3 的容器阶梯 94/96/98/100（深色 12/17/22/24）是相对默认表面
+ * （浅色 tone 98、深色 tone 6）定的。只换色相的话，把表面色设成 #000000，
+ * 容器算出来仍是 tone 94 的近白——而界面上绝大多数容器用的就是 surfaceContainer*，
+ * 看上去就是「改了没反应」。平移之后，选的表面色越深，整片界面越深。
+ *
+ * 反色那两个（Snackbar 底）要往反方向平移：表面变黑时它们得变亮，否则一坨黑叠黑。
+ */
+internal fun ColorScheme.withSurfaceFamily(surface: Long, dark: Boolean): ColorScheme {
     val seed = Hct.fromInt(surface.toInt())
     val chroma = seed.chroma.coerceAtMost(SURFACE_CHROMA_MAX)
+    val delta = seed.tone - if (dark) DARK_SURFACE_BASE_TONE else LIGHT_SURFACE_BASE_TONE
 
-    fun rehue(color: Color): Color =
-        Color(Hct.from(seed.hue, chroma, Hct.fromInt(color.toArgb()).tone).toInt())
+    fun shade(color: Color, offset: Double): Color {
+        val tone = (Hct.fromInt(color.toArgb()).tone + offset).coerceIn(0.0, 100.0)
+        return Color(Hct.from(seed.hue, chroma, tone).toInt())
+    }
 
     return copy(
         surface = Color(surface.toInt()),
-        surfaceDim = rehue(surfaceDim),
-        surfaceBright = rehue(surfaceBright),
-        surfaceContainerLowest = rehue(surfaceContainerLowest),
-        surfaceContainerLow = rehue(surfaceContainerLow),
-        surfaceContainer = rehue(surfaceContainer),
-        surfaceContainerHigh = rehue(surfaceContainerHigh),
-        surfaceContainerHighest = rehue(surfaceContainerHighest),
+        surfaceDim = shade(surfaceDim, delta),
+        surfaceBright = shade(surfaceBright, delta),
+        surfaceContainerLowest = shade(surfaceContainerLowest, delta),
+        surfaceContainerLow = shade(surfaceContainerLow, delta),
+        surfaceContainer = shade(surfaceContainer, delta),
+        surfaceContainerHigh = shade(surfaceContainerHigh, delta),
+        surfaceContainerHighest = shade(surfaceContainerHighest, delta),
         // Snackbar、Tooltip 这类反色底也来自中性族，不一起换的话把 surface 设成红，
         // 弹出来的提示条还是原来那块灰
-        inverseSurface = rehue(inverseSurface),
-        inverseOnSurface = rehue(inverseOnSurface),
+        inverseSurface = shade(inverseSurface, -delta),
+        inverseOnSurface = shade(inverseOnSurface, -delta),
     )
 }

@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import me.rerere.rikkahub.data.export.PaletteSerializer
 import org.junit.Assert.assertEquals
@@ -63,6 +64,20 @@ class PaletteTest {
         assertEquals(colors.error, PaletteColors.fromSeed(0xFF8B5000, dark = false).error)
         // 表面族由 surface 展开，不该还是九个默认值里的白
         assertTrue(colors.surface != 0xFFFEF7FFL)
+    }
+
+    @Test
+    fun `dark surface darkens the whole family`() {
+        val plain = PaletteColors().generateColorScheme(dark = false)
+        val black = PaletteColors(surface = 0xFF000000).generateColorScheme(dark = false)
+
+        // 表面色设成黑，容器族必须跟着变暗：界面上绝大多数容器用的是 surfaceContainer*，
+        // 只换色相不换音调的话它们还是近白，看着就是「改了没反应」
+        assertTrue("light container should stay light", plain.surfaceContainer.luminance() > 0.8f)
+        assertTrue("black container should be dark", black.surfaceContainer.luminance() < 0.1f)
+        assertTrue("black highest should be dark", black.surfaceContainerHighest.luminance() < 0.1f)
+        // 反色底要往反方向走，否则 Snackbar 黑底黑字
+        assertTrue("inverse surface should stay bright", black.inverseSurface.luminance() > 0.5f)
     }
 
     @Test

@@ -313,10 +313,11 @@ L3Hub 自己的设置都在 `Settings` 里，随 `settings.json` 整份序列化
 - 生成方式：`paletteColorScheme()` 用四个彩色种子加中性种子（surface / surfaceVariant）构造 `DynamicScheme`，
   `toColorScheme()` 之后再把这九个角色 `copy` 回去，所以选中的颜色所见即所得
 - 表面族由「表层色」接管：`withSurfaceFamily()` 取 surface 的 HCT 色相和彩度（彩度上限 12，
-  保持 M3 中性色的观感），音调沿用 scheme 自己算出来的值——不另钉一份音调表，
-  免得上游从 SPEC_2025 再往前走时容器色和 `onSurface` / `outline` 不同源。
-  重算的是 `surfaceDim`、`surfaceBright`、`surfaceContainerLowest…Highest`，
-  以及来自同一族中性色的 `inverseSurface` / `inverseOnSurface`（Snackbar 的反色底）。
+  保持 M3 中性色的观感），并在 scheme 自己算出的音调上**按表面色的深浅整体平移**——
+  基准是 M3 的默认表面（浅色 tone 98、深色 tone 6），容器阶梯 94/96/98/100 相对它定。
+  只换色相不平移的话，把表面色设成 `#000000`，容器仍是 tone 94 的近白（黑色彩度为 0，
+  连色相都没有），而界面上绝大多数容器用的就是 `surfaceContainer*`，看上去就是「改了没反应」。
+  `inverseSurface` / `inverseOnSurface`（Snackbar 的反色底）反向平移，避免黑底黑字。
   早先只覆盖 `surface` 一个字段，而应用里 118 处用的是 `surfaceContainer*`，
   它们由中性种子展开、音调钉死，所以浅色下改「表层色」几乎看不出变化。
   「背景色」从此只管自己（聊天页底、Markdown 底），不再偷偷带动整族容器色
