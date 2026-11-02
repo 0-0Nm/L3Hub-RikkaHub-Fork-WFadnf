@@ -265,11 +265,10 @@ class WorkspaceManager(
         for (dir in roots) {
             val root = dir.name
             if (!root.matches(ROOT_NAME_REGEX)) continue
-            // PRoot temp files
+            // 只清应用自己产生的临时文件（rootfs 安装包、解包暂存）。Rootfs 里的 /tmp 与
+            // /var/tmp 归用户态程序所有, 后台任务、终端会话、包管理器都可能在用, 启动时整棵删掉
+            // 会连活动文件一起清掉, 这里不再碰它们。
             tempDir(root).let { if (it.exists()) it.deleteRecursively() }
-            // Rootfs /tmp and /var/tmp
-            File(linuxDir(root), "tmp").let { if (it.exists()) it.deleteRecursively() }
-            File(linuxDir(root), "var/tmp").let { if (it.exists()) it.deleteRecursively() }
         }
     }
 

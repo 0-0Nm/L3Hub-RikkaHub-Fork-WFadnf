@@ -27,22 +27,42 @@ class RootfsInstaller(
         val tempDir = manager.tempDir(root)
         val archive = File(tempDir, "rootfs.${format.extension}")
         val stagingDir = File(tempDir, "rootfs-staging")
+        // 旧 rootfs 在替换期间先挪到这里, patch 失败时原样挪回去
+        val previousDir = File(tempDir, "rootfs-previous")
         val linuxDir = manager.linuxDir(root)
 
         try {
             stagingDir.deleteRecursively()
             stagingDir.mkdirs()
+            previousDir.deleteRecursively()
             download(url, archive, onProgress)
             extractTar(archive, stagingDir, format, onProgress)
-            linuxDir.deleteRecursively()
-            require(stagingDir.renameTo(linuxDir)) {
-                "Failed to move rootfs into workspace"
+
+            val hadPrevious = linuxDir.exists()
+            if (hadPrevious) {
+                require(linuxDir.renameTo(previousDir)) {
+                    "Failed to move the previous rootfs aside"
+                }
             }
-            patcher.patch(linuxDir)
+            if (!stagingDir.renameTo(linuxDir)) {
+                if (hadPrevious) previousDir.renameTo(linuxDir)
+                error("Failed to move rootfs into workspace")
+            }
+            try {
+                patcher.patch(linuxDir)
+            } catch (e: Throwable) {
+                // 新根装不成就要能退回去, 否则用户从一个能用的工作区变成 BROKEN
+                linuxDir.deleteRecursively()
+                previousDir.renameTo(linuxDir)
+                throw e
+            }
+            previousDir.deleteRecursively()
             onProgress(RootfsInstallProgress(stage = RootfsInstallStage.INSTALLED))
         } finally {
             archive.delete()
             stagingDir.deleteRecursively()
+            // previousDir 不在这里删: 只有确认新根可用之后才清掉, 回滚失败时留着还能手动救
+            if (WorkspaceManager.isUsableRootfs(linuxDir)) previousDir.deleteRecursively()
         }
     }
 
