@@ -221,7 +221,11 @@ internal fun Conversation.resolveAutoCompressTrim(
                 } else {
                     reservedTokens + estimateRetainedTokens(byCount.nodeIndex.coerceAtLeast(checkpointIndex + 1))
                 }
-                if (budget != null && retained > budget) {
+                // 保留条数比现有消息还多时，byCount 落到检查点之前，范围校验会直接返回 null——
+                // 等于「设了保留 20 条，于是永远不压缩」，而门限已经判定超限，请求照发只会被拒。
+                // 这时退回 token 预算，至少还能按占用的一半压一次
+                val byCountUnusable = byCount.nodeIndex < checkpointIndex + 1
+                if (budget != null && (byCountUnusable || retained > budget)) {
                     trimToTokenBudget(budget, reservedTokens)
                 } else {
                     byCount

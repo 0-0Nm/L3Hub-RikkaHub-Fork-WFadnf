@@ -201,9 +201,13 @@ internal fun Conversation.insertContextCheckpoint(
     splitMessageId: Uuid? = null,
     keepPartsFrom: Int = 0,
 ): Conversation? {
-    val index = messageNodes.indexOfFirst { it.id == afterNodeId }
+    // 旧检查点已经被新摘要吸收——它的文本就在这次压缩的输入里——留着只会在聊天页堆出一串
+    // 摘要块，导出和 WebDto 也跟着带上全部旧摘要。请求侧本来只用最后一个，删掉不改变行为
+    val nodes = messageNodes
+        .filterNot { node -> node.messages.getOrNull(node.selectIndex)?.isContextCheckpoint == true }
+        .toMutableList()
+    val index = nodes.indexOfFirst { it.id == afterNodeId }
     if (index == -1) return null
-    val nodes = messageNodes.toMutableList()
     val checkpoint = UIMessage.user(summary).copy(
         isContextCheckpoint = true,
         contextStartMessageId = splitMessageId?.takeIf { keepPartsFrom > 0 },
