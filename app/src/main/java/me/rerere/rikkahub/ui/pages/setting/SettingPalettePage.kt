@@ -913,7 +913,7 @@ private fun PaletteScreenPreview(slots: UiSlots) {
             Text(
                 text = "请求失败",
                 style = MaterialTheme.typography.labelSmall,
-                color = slots.onErrorBackground,
+                color = slots.errorOnBackground,
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .background(slots.errorBackground)
