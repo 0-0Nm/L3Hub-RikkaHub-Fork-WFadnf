@@ -8,6 +8,7 @@ import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.snap
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
@@ -37,6 +38,31 @@ val LocalExtendColors = compositionLocalOf { ExtendLightColors }
 val LocalDarkMode = compositionLocalOf { false }
 
 private val AMOLED_DARK_BACKGROUND = Color(0xFF000000)
+
+/** AMOLED：把整套配色里的大面积表面角色压成纯黑。文字与强调色不动，保证对比度。 */
+private fun ColorScheme.amoledSurface(): ColorScheme = copy(
+    background = AMOLED_DARK_BACKGROUND,
+    surface = AMOLED_DARK_BACKGROUND,
+    surfaceDim = AMOLED_DARK_BACKGROUND,
+    surfaceBright = AMOLED_DARK_BACKGROUND,
+    surfaceContainerLowest = AMOLED_DARK_BACKGROUND,
+    surfaceContainerLow = AMOLED_DARK_BACKGROUND,
+    surfaceContainer = AMOLED_DARK_BACKGROUND,
+    surfaceContainerHigh = AMOLED_DARK_BACKGROUND,
+    surfaceContainerHighest = AMOLED_DARK_BACKGROUND,
+    surfaceVariant = AMOLED_DARK_BACKGROUND,
+)
+
+/** AMOLED：位置层里的大面积底色槽压纯黑。用户气泡、文字、边框保留，维持可读性与功能性区分。 */
+private fun UiSlots.amoledSlots(): UiSlots = copy(
+    pageBackground = AMOLED_DARK_BACKGROUND,
+    topBar = AMOLED_DARK_BACKGROUND,
+    card = AMOLED_DARK_BACKGROUND,
+    listItem = AMOLED_DARK_BACKGROUND,
+    panel = AMOLED_DARK_BACKGROUND,
+    inputBar = AMOLED_DARK_BACKGROUND,
+    aiBubble = AMOLED_DARK_BACKGROUND,
+)
 
 /** 关闭动效时用的 MotionScheme：所有 spec 都是 snap，动画一帧到位 */
 private val SnapMotionScheme = object : MotionScheme {
@@ -93,18 +119,18 @@ fun RikkahubTheme(
         if (terminal) {
             TerminalColorScheme
         } else if (darkTheme && amoledDarkMode) {
-            colorScheme.copy(
-                background = AMOLED_DARK_BACKGROUND,
-                surface = AMOLED_DARK_BACKGROUND,
-            )
+            colorScheme.amoledSurface()
         } else {
             colorScheme
         }
     }
     // 位置层：终端模式下整体走终端配色，调色板的位置覆盖不参与
-    val uiSlots = remember(settings.palette, terminal, darkTheme, colorSchemeConverted) {
-        if (terminal) uiSlotsFrom(colorSchemeConverted)
+    val uiSlots = remember(settings.palette, terminal, darkTheme, amoledDarkMode, colorSchemeConverted) {
+        val base = if (terminal) uiSlotsFrom(colorSchemeConverted)
         else settings.palette.uiSlots(darkTheme, colorSchemeConverted)
+        // AMOLED 是显示级偏好，压黑优先级高于调色板的位置覆盖（底色槽）；
+        // 终端模式自带配色，不参与 AMOLED 压黑
+        if (!terminal && darkTheme && amoledDarkMode) base.amoledSlots() else base
     }
     val extendColors = if (darkTheme || terminal) ExtendDarkColors else ExtendLightColors
     val effectiveDark = darkTheme || terminal

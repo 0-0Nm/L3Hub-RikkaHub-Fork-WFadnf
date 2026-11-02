@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.theme
 
 import android.graphics.Bitmap
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.view.PixelCopy
@@ -44,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.ui.components.ui.ColorPickerRow
+import me.rerere.rikkahub.ui.hooks.rememberAmoledDarkMode
 import me.rerere.rikkahub.ui.hooks.rememberUserSettingsState
 import me.rerere.rikkahub.utils.getActivity
 import org.koin.compose.koinInject
@@ -52,6 +54,12 @@ import org.koin.compose.koinInject
 object ColorProbeState {
     var enabled by mutableStateOf(false)
 }
+
+/** AMOLED 下被 Theme.kt 强制压成纯黑、取色修改不生效的底色槽。与 Theme.amoledSlots() 保持一致。 */
+private val AMOLED_SLOTS = setOf(
+    UiSlot.PAGE_BACKGROUND, UiSlot.TOP_BAR, UiSlot.CARD, UiSlot.LIST_ITEM,
+    UiSlot.PANEL, UiSlot.INPUT_BAR, UiSlot.AI_BUBBLE,
+)
 
 private data class ProbeMatch(
     val slot: UiSlot?,
@@ -170,6 +178,7 @@ fun ColorProbeOverlay() {
     val store = koinInject<SettingsStore>()
     val scope = rememberCoroutineScope()
     val dark = LocalDarkMode.current
+    val amoledDarkMode by rememberAmoledDarkMode()
     val slots = LocalUiSlots.current
     val scheme = MaterialTheme.colorScheme
     val context = LocalContext.current
@@ -181,22 +190,49 @@ fun ColorProbeOverlay() {
     var editing by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf(Color.White) }
     var hint by remember { mutableStateOf<String?>(null) }
+    var saveError by remember { mutableStateOf<String?>(null) }
 
-    fun save(slot: UiSlot, argb: Long) {
+    fun save(slot: UiSlot, argb: Long): Boolean {
+        // 终端风格：位置层整体走终端配色，调色板的位置覆盖不参与（见 Theme.kt），改了看不见
+        if (settings.displaySetting.terminalStyle) {
+            saveError = "终端风格下位置颜色不生效；请先关闭终端风格"
+            return false
+        }
+        // 动态取色优先级高于调色板（见 Theme.kt），开了改了也看不见，先拦下说明
+        if (settings.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            saveError = "已开启「跟随系统动态取色」，此修改不会生效；请先关闭动态取色"
+            return false
+        }
+        // 没启用调色板时，位置色是「跟着角色走」的；直接落盘会悄悄把基座切成默认调色板
+        if (!settings.palette.enabled) {
+            saveError = "尚未启用调色板，此修改不会生效；请先在「调色板」设置中启用"
+            return false
+        }
+        // AMOLED 深色下底色槽被固定为纯黑（见 Theme.amoledSlots），改了界面也不变
+        if (dark && amoledDarkMode && slot in AMOLED_SLOTS) {
+            saveError = "AMOLED 模式下底色槽固定为纯黑；请改其他位置或先关闭 AMOLED"
+            return false
+        }
+        saveError = null
         scope.launch {
-            store.update { s ->
-                val p = s.palette
-                val current = if (dark) p.darkSlots else p.lightSlots
-                val next = (current ?: UiSlotColors()).with(slot, argb)
-                s.copy(
-                    palette = p.copy(
-                        presetId = p.presetId ?: DEFAULT_PALETTE_ID,
-                        lightSlots = if (dark) p.lightSlots else next,
-                        darkSlots = if (dark) next else p.darkSlots,
+            try {
+                store.update { s ->
+                    val p = s.palette
+                    val current = if (dark) p.darkSlots else p.lightSlots
+                    val next = (current ?: UiSlotColors()).with(slot, argb)
+                    s.copy(
+                        palette = p.copy(
+                            presetId = p.presetId ?: DEFAULT_PALETTE_ID,
+                            lightSlots = if (dark) p.lightSlots else next,
+                            darkSlots = if (dark) next else p.darkSlots,
+                        )
                     )
-                )
+                }
+            } catch (e: Exception) {
+                hint = "保存失败：${e.message ?: "未知错误"}"
             }
         }
+        return true
     }
 
     Box(
@@ -215,6 +251,7 @@ fun ColorProbeOverlay() {
                             hint = "无法截取屏幕"
                         } else {
                             hint = null
+                            saveError = null
                             match = resolveMatch(sampled, slots, scheme)
                             editing = false
                         }
@@ -316,6 +353,7 @@ fun ColorProbeOverlay() {
                         slot != null && !editing -> Button(
                             onClick = {
                                 draft = slots.get(slot)
+                                saveError = null
                                 editing = true
                             },
                             modifier = Modifier.fillMaxWidth(),
@@ -324,6 +362,14 @@ fun ColorProbeOverlay() {
                         }
 
                         slot != null && editing -> {
+                            saveError?.let {
+                                Text(
+                                    text = it,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = scheme.error,
+                                    modifier = Modifier.padding(bottom = 4.dp),
+                                )
+                            }
                             Box(Modifier.heightIn(max = 320.dp)) {
                                 ColorPickerRow(
                                     color = draft,
@@ -333,12 +379,13 @@ fun ColorProbeOverlay() {
                                 )
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                TextButton(onClick = { editing = false }) { Text("取消") }
+                                TextButton(onClick = { editing = false; saveError = null }) { Text("取消") }
                                 Button(
                                     onClick = {
-                                        save(slot, draft.argbLong())
-                                        editing = false
-                                        match = null
+                                        if (save(slot, draft.argbLong())) {
+                                            editing = false
+                                            match = null
+                                        }
                                     }
                                 ) { Text("应用") }
                             }
