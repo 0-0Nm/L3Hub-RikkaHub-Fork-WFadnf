@@ -1,4 +1,4 @@
-<?xml version='1.0' encoding='UTF-8'?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
   <string name="about_page_github">Github</string>
   <string name="about_page_license">License</string>
@@ -2026,8 +2026,8 @@
   <string name="workspace_ssh_editor_credentials_lost_desc">These credentials were encrypted with keys from another device or app (e.g. after restoring a backup) and cannot be decrypted now. Please re-enter and save them</string>
   <string name="workspace_ssh_editor_dir_denied">%1$s (no access; choose a directory the SSH user can access)</string>
   <string name="workspace_ssh_editor_dir_not_directory">%1$s (not a directory)</string>
-  <string name="workspace_ssh_editor_auth_failed_key">The server rejected this key. Make sure the matching public key is in the server's ~/.ssh/authorized_keys, and that ~/.ssh is 700 and authorized_keys is 600</string>
-  <string name="workspace_ssh_editor_auth_failed_key_fingerprint">The server rejected this key. Make sure the public key below is in the server's ~/.ssh/authorized_keys, and that ~/.ssh is 700 and authorized_keys is 600.\n\n%1$s</string>
+  <string name="workspace_ssh_editor_auth_failed_key">The server rejected this key. Make sure the matching public key is in the server\'s ~/.ssh/authorized_keys, and that ~/.ssh is 700 and authorized_keys is 600</string>
+  <string name="workspace_ssh_editor_auth_failed_key_fingerprint">The server rejected this key. Make sure the public key below is in the server\'s ~/.ssh/authorized_keys, and that ~/.ssh is 700 and authorized_keys is 600.\n\n%1$s</string>
   <string name="workspace_ssh_editor_auth_failed_password">The server rejected this username and password combination</string>
   <string name="workspace_ssh_editor_key_not_private">This does not look like a private key. Private keys start with -----BEGIN ... PRIVATE KEY-----</string>
   <string name="workspace_ssh_editor_use_home">Home directory</string>
@@ -2091,7 +2091,7 @@
   <string name="assistant_page_local_tools_sub_agent_desc">Allow the AI to hand self-contained tasks to assistants marked as sub-agents and wait for their results</string>
   <string name="chat_task_tree_button">Task tree</string>
   <string name="task_tree_title">Task tree</string>
-  <string name="task_tree_empty">No sub-agent tasks yet. Enable "Dispatch sub-agents" in the assistant's local tools and mark another assistant as a sub-agent</string>
+  <string name="task_tree_empty">No sub-agent tasks yet. Enable "Dispatch sub-agents" in the assistant\'s local tools and mark another assistant as a sub-agent</string>
   <string name="task_tree_open">Open conversation</string>
   <string name="task_tree_tools">Tool calls</string>
   <string name="task_tree_tools_count">%1$d tools · %2$d sub-agents</string>
@@ -2177,9 +2177,9 @@
   <string name="setting_provider_group_new">New group</string>
   <string name="setting_provider_group_create">Create and move here</string>
   <string name="setting_provider_proxy_title">Network proxy</string>
-  <string name="setting_provider_proxy_desc">Set a proxy for this provider's API domain only; supports http://, https:// and socks5://. Fill in username and password when authentication is required; leave empty to use the global proxy</string>
+  <string name="setting_provider_proxy_desc">Set a proxy for this provider\'s API domain only; supports http://, https:// and socks5://. Fill in username and password when authentication is required; leave empty to use the global proxy</string>
   <string name="setting_provider_proxy_desc_short">Follow global proxy</string>
-  <string name="setting_provider_proxy_clear">Clear this provider's proxy</string>
+  <string name="setting_provider_proxy_clear">Clear this provider\'s proxy</string>
   <string name="assistant_page_background_blur">Background blur</string>
   <string name="assistant_page_background_blur_desc">Apply a blur effect to the chat background image without affecting UI elements</string>
   <string name="chat_message_translation_show_translation">Swipe left for the translation</string>
@@ -2190,10 +2190,10 @@
   <string name="chat_message_translation_swipe">Swipe left to translate</string>
   <string name="chat_message_translation_translating">Translating…</string>
   <string name="app_lock_locked_title">App locked</string>
-  <string name="app_lock_locked_desc">Verify your phone's lock screen password to continue</string>
+  <string name="app_lock_locked_desc">Verify your phone\'s lock screen password to continue</string>
   <string name="app_lock_unlock">Unlock</string>
   <string name="app_lock_confirm_title">Unlock L3Hub</string>
-  <string name="app_lock_confirm_desc">Verify your phone's lock screen password to continue</string>
+  <string name="app_lock_confirm_desc">Verify your phone\'s lock screen password to continue</string>
   <string name="setting_app_lock_title">Privacy</string>
   <string name="setting_app_lock_switch">App lock</string>
   <string name="setting_app_lock_desc">After the app has been away for longer than the set time, the phone lock screen password is required to enter</string>
@@ -2242,7 +2242,7 @@
   <string name="about_page_original_project">Original project</string>
   <string name="about_page_sponsor">Sponsor the original author</string>
   <string name="about_page_sponsor_desc">Open the sponsor page to support the original author re-ovo (RE)</string>
-  <string name="about_page_attribution">This app is a modified version of RikkaHub. The original author's attribution and copyright belong to re-ovo (RE); modifications are maintained by this fork's maintainer. If you like it, please support the original author.</string>
+  <string name="about_page_attribution">This app is a modified version of RikkaHub. The original author\'s attribution and copyright belong to re-ovo (RE); modifications are maintained by this fork\'s maintainer. If you like it, please support the original author.</string>
   <string name="setting_display_page_message_nav_position_title">Message nav on the left</string>
   <string name="setting_display_page_message_nav_position_desc">Move the edge message nav bar to the left while scrolling; default is on the right</string>
   <string name="task_tree_task">Task</string>
@@ -2271,7 +2271,7 @@
   <string name="setting_media_page_webdav_password">Password</string>
   <string name="setting_media_page_webdav_path">Directory</string>
   <string name="task_tree_generation">Generation %1$d</string>
-  <string name="workspace_revert_turn">Revert this turn's changes</string>
+  <string name="workspace_revert_turn">Revert this turn\'s changes</string>
   <string name="workspace_revert_confirm">Revert the files changed in this turn to their previous state? Files created in this turn will be deleted</string>
   <string name="workspace_revert_confirm_action">Revert</string>
   <string name="workspace_revert_nothing">Nothing to revert</string>
