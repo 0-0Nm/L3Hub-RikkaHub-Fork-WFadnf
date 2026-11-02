@@ -3,7 +3,9 @@ name: CI
 # 本机不能编译，所有验证都走这里。
 # 只跑单测，不出包；出包/发版仍由 build-apk.yml（打 tag 触发）负责。
 on:
+  # 打 tag 时 build-apk.yml 会在同一份代码上再跑一遍构建，这里只盯分支，别重复烧 runner
   push:
+    branches: ['**']
   workflow_dispatch:
 
 concurrency:
@@ -24,6 +26,14 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+
+      # :terminal / :workspace 带 CMake，配置阶段就要 NDK 28.2.13676358（约 700MB）。
+      # 不缓存的话每次都要现下，下坏一次（Error reading Zip content）整轮就红。
+      - name: Cache NDK
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/android/sdk/ndk/28.2.13676358
+          key: ndk-28.2.13676358-ubuntu
 
       - uses: gradle/actions/setup-gradle@v4
         with:

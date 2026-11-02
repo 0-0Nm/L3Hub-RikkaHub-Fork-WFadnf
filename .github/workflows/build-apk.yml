@@ -19,6 +19,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # 发布说明要用 git log 取出上一个 tag 到本 tag 的提交，浅克隆拿不到
+          fetch-depth: 0
           submodules: recursive
 
       - uses: actions/setup-java@v4
@@ -102,11 +104,36 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          # 幂等：release 已存在（例如手动发过、或重跑）就覆盖资产，不要整个 job 失败
+          set -euo pipefail
+          # 本仓库不走 PR，GitHub 的 --generate-notes 只会给一行 Full Changelog。
+          # 自己按「上一个 tag..这个 tag」列提交，读的人才知道这版改了什么。
+          prev=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+          {
+            echo "## 本版改动"
+            echo
+            if [ -n "$prev" ]; then
+              git log --no-merges --pretty='- %s' "${prev}..${TAG}" \
+                | grep -v '^- build: 版本 ' || true
+              echo
+              echo "**完整对比**：https://github.com/${GITHUB_REPOSITORY}/compare/${prev}...${TAG}"
+            else
+              echo "- 首个版本"
+            fi
+            echo
+            echo "## 安装"
+            echo
+            echo '`L3Hub-'"${TAG}"'-arm64-v8a.apk` — arm64-v8a，包名 `com.rikkahub.l3hub.wfadnf.debug`，覆盖安装即可。'
+            echo
+            echo '校验：`sha256sum -c L3Hub-'"${TAG}"'-arm64-v8a.apk.sha256`'
+          } > RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
+
+          # 幂等：release 已存在（重跑、或手动发过）就覆盖资产并刷新说明，不要整个 job 失败
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "release $TAG 已存在，覆盖资产"
+            echo "release $TAG 已存在，覆盖资产并刷新说明"
             gh release upload "$TAG" dist/*.apk dist/*.sha256 --clobber
+            gh release edit "$TAG" --notes-file RELEASE_NOTES.md
           else
             gh release create "$TAG" dist/*.apk dist/*.sha256 \
-              --prerelease --title "$TAG" --generate-notes --target "$GITHUB_SHA"
+              --prerelease --title "$TAG" --notes-file RELEASE_NOTES.md --target "$GITHUB_SHA"
           fi
