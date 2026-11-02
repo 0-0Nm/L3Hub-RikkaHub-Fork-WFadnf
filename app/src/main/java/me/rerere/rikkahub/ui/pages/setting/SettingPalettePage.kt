@@ -8,6 +8,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -93,6 +94,7 @@ import me.rerere.rikkahub.ui.theme.PaletteColors
 import me.rerere.rikkahub.ui.theme.PalettePresets
 import me.rerere.rikkahub.ui.theme.PaletteGroup
 import me.rerere.rikkahub.ui.theme.PaletteRole
+import me.rerere.rikkahub.ui.theme.PaletteStyle
 import me.rerere.rikkahub.ui.theme.PaletteSetting
 import me.rerere.rikkahub.ui.theme.UiSlot
 import me.rerere.rikkahub.ui.theme.UiSlotColors
@@ -1010,13 +1012,19 @@ private fun AppliedSchemeCard(title: String) {
 @Composable
 private fun SeedColorCard(onApply: (PaletteColors, Boolean) -> Unit) {
     var input by rememberSaveable { mutableStateOf("") }
+    // 同一个种子，换一种生成路子出来的是另一套气质
+    var style by rememberSaveable { mutableStateOf(PaletteStyle.MONO) }
     // 只有能解释的写法才展开：半截色号每敲一位都重算四套配色，手机上会卡。
     // 三位简写算能解释——parseHexColor 本来就吃它，不认的话用户会以为坏了。
     val usable = hexDigitCount(input).let { it == 3 || it == 6 || it == 8 }
     val seed = remember(input, usable) { if (usable) parseHexColor(input) else null }
     val invalid = isCompleteHexColor(input) && seed == null
-    val lightColors = remember(seed) { seed?.let { PaletteColors.fromSeed(it, dark = false) } }
-    val darkColors = remember(seed) { seed?.let { PaletteColors.fromSeed(it, dark = true) } }
+    val lightColors = remember(seed, style) {
+        seed?.let { PaletteColors.fromSeed(it, dark = false, style = style) }
+    }
+    val darkColors = remember(seed, style) {
+        seed?.let { PaletteColors.fromSeed(it, dark = true, style = style) }
+    }
 
     Surface(
         shape = RoundedCornerShape(20.dp),
@@ -1060,6 +1068,19 @@ private fun SeedColorCard(onApply: (PaletteColors, Boolean) -> Unit) {
                     }
                 },
             )
+
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                PaletteStyle.entries.forEach { candidate ->
+                    FilterChip(
+                        selected = style == candidate,
+                        onClick = { style = candidate },
+                        label = { Text(stringResource(candidate.labelRes)) },
+                    )
+                }
+            }
 
             if (lightColors != null && darkColors != null) {
                 SeedPreviewRow(

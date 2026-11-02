@@ -1064,6 +1064,12 @@
   <string name="setting_palette_page_slot_follow_role">跟随颜色</string>
   <string name="setting_palette_page_preview_show">看一眼界面</string>
   <string name="setting_palette_page_preview_hide">收起</string>
+  <string name="palette_style_mono">单色</string>
+  <string name="palette_style_analogous">邻近</string>
+  <string name="palette_style_triad">三分</string>
+  <string name="palette_style_complement">互补</string>
+  <string name="palette_style_vivid">浓郁</string>
+  <string name="palette_style_muted">柔和</string>
   <string name="palette_role_on_primary">主色上的文字</string>
   <string name="palette_role_error">错误色</string>
   <string name="palette_role_background">背景色</string>

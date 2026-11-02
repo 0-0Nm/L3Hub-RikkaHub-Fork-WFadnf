@@ -87,6 +87,37 @@ private const val DEFAULT_SURFACE = 0xFFFEF7FFL
 private const val DEFAULT_SURFACE_VARIANT = 0xFFE7E0ECL
 
 /**
+ * 从种子色生成整套配色的路子。
+ *
+ * 原版只有一种：主色、次色、三色全等于种子，所以不管换什么种子出来的都是单色系。
+ * 这里换成不同的色相偏移和彩度倍率，同一个种子能出好几种气质。
+ */
+enum class PaletteStyle(
+    /** 次色的色相偏移，度 */
+    val secondaryHue: Double,
+    /** 三色的色相偏移，度 */
+    val tertiaryHue: Double,
+    /** 彩度倍率：小于 1 更灰，大于 1 更艳 */
+    val chromaScale: Double,
+    /** 中性色（背景、表面）的彩度，给一点色相倾向免得死灰 */
+    val neutralChroma: Double,
+    @StringRes val labelRes: Int,
+) {
+    /** 单色：全靠明度分层，最安静 */
+    MONO(0.0, 0.0, 1.0, 4.0, R.string.palette_style_mono),
+    /** 邻近：次色 +25°、三色 +50°，同族但看得出层次 */
+    ANALOGOUS(25.0, 50.0, 1.15, 6.0, R.string.palette_style_analogous),
+    /** 三分：次色 +120°、三色 +240°，最跳 */
+    TRIAD(120.0, 240.0, 1.0, 5.0, R.string.palette_style_triad),
+    /** 互补：只有一处撞色，主次分明 */
+    COMPLEMENT(180.0, 180.0, 1.0, 4.0, R.string.palette_style_complement),
+    /** 浓郁：色相同邻近，彩度拉高 */
+    VIVID(25.0, 50.0, 1.6, 10.0, R.string.palette_style_vivid),
+    /** 柔和：彩度压到四成，接近莫兰迪 */
+    MUTED(25.0, 50.0, 0.45, 3.0, R.string.palette_style_muted),
+}
+
+/**
  * 一份调色板里用户改过的颜色。
  *
  * 每个字段都可空：null 表示「没动过，跟着种子派生」。这样旧版本存的九色配置还能用，
@@ -500,6 +531,7 @@ data class PaletteColors(
         )
     }
 
+
     companion object {
         /** 展开用的默认错误色。种子里没有红，出错提示就会和正文混在一起。 */
         const val DEFAULT_ERROR = 0xFFB3261EL
@@ -510,20 +542,31 @@ data class PaletteColors(
          * 只填九个常用角色，其余三十九个留空——它们跟着这九个派生，
          * 用户真去高级区改了再覆盖。
          */
-        fun fromSeed(seed: Long, dark: Boolean): PaletteColors {
+        fun fromSeed(
+            seed: Long,
+            dark: Boolean,
+            style: PaletteStyle = PaletteStyle.MONO,
+        ): PaletteColors {
             // 色卡本身是不透明的一套，alpha 在这里丢掉：带透明度的 primary 会让
             // 按钮、顶栏透出下层，而 onPrimary 是派生出来的不透明色，对比没保证
             val opaque = (seed and 0x00FFFFFFL) or 0xFF000000L
             val hct = Hct.fromInt(opaque.toInt())
             // 中音调取色相/彩度：靠近 0 或 100 时色域只放得下很小的彩度，
             // 种子是近白/近黑的话中性族会退化成纯灰，色相整个丢掉
-            val neutral = Hct.from(hct.hue, 4.0, 50.0)
-            val neutralVariant = Hct.from(hct.hue, 8.0, 50.0)
+            val neutral = Hct.from(hct.hue, style.neutralChroma, 50.0)
+            val neutralVariant = Hct.from(hct.hue, style.neutralChroma * 2, 50.0)
+            // 种子本身太灰时，次色三色也得给个下限，否则偏移色相也看不出差别
+            val accentChroma = (hct.chroma * style.chromaScale).coerceIn(20.0, 120.0)
+            fun accent(hueOffset: Double): Long {
+                if (hueOffset == 0.0) return opaque
+                val hue = (hct.hue + hueOffset) % 360.0
+                return Hct.from(hue, accentChroma, 50.0).toInt().toLong() and 0xFFFFFFFFL
+            }
             val scheme = paletteColorScheme(
                 dark = dark,
                 primary = opaque,
-                secondary = opaque,
-                tertiary = opaque,
+                secondary = accent(style.secondaryHue),
+                tertiary = accent(style.tertiaryHue),
                 error = DEFAULT_ERROR,
                 neutral = neutral.toInt().toLong() and 0xFFFFFFFFL,
                 neutralVariant = neutralVariant.toInt().toLong() and 0xFFFFFFFFL,

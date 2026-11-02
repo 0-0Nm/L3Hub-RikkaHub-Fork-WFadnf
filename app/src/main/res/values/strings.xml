@@ -1108,6 +1108,12 @@
   <string name="setting_palette_page_slot_follow_role">Follow role</string>
   <string name="setting_palette_page_preview_show">Peek</string>
   <string name="setting_palette_page_preview_hide">Hide</string>
+  <string name="palette_style_mono">Mono</string>
+  <string name="palette_style_analogous">Analogous</string>
+  <string name="palette_style_triad">Triad</string>
+  <string name="palette_style_complement">Complement</string>
+  <string name="palette_style_vivid">Vivid</string>
+  <string name="palette_style_muted">Muted</string>
   <string name="palette_role_on_primary">On primary</string>
   <string name="palette_role_error">Error</string>
   <string name="palette_role_background">Background</string>
