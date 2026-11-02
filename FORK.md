@@ -307,11 +307,14 @@ L3Hub 自己的设置都在 `Settings` 里，随 `settings.json` 整份序列化
 
 - 优先级：`dynamicColor`（跟随系统动态取色）> 调色板 > `themeId`（预设主题 / 自定义主题）。
   动态取色开着时调色板整块不生效，页面顶部同一处就能关掉它；默认值仍是上游的「开」，不动老用户
-- 自定义只让用户指定九个角色：primary / onPrimary / secondary / tertiary / error / background /
-  surface / surfaceVariant / onSurface，其余角色交给 `material3` 模块里的 material-color-utilities
-  按 HCT 音调展开，不手写二十个色值；`surfaceContainer*` 和 `surfaceBright/Dim` 由「表层色」单独接管，见下一条
+- 四十八个角色全部可改，按五组呈现：主色 / 辅色与第三色 / 表面与背景 / 错误与线条 / 高级。
+  「高级」那组（fixed 系列、scrim、surfaceTint）在本项目里引用点都在 1 上下，默认折叠。
+  每个字段都可空，**null 表示「没动过、跟着种子派生」**——旧版本存的九色配置照样能读，
+  新加的三十九个角色在没被指定时也不会打断原有派生
 - 生成方式：`paletteColorScheme()` 用四个彩色种子加中性种子（surface / surfaceVariant）构造 `DynamicScheme`，
-  `toColorScheme()` 之后再把这九个角色 `copy` 回去，所以选中的颜色所见即所得
+  `toColorScheme()` 之后先把表面族交给 `withSurfaceFamily()` 重算，再按用户指定逐个 `copy` 回去
+  （高级区直接调容器色时优先）；`onSurfaceVariant` 没被指定时由 `onSurface` 按音调关系派生一档，
+  否则改「表面上的文字」只有标题会动
 - 表面族由「表层色」接管：`withSurfaceFamily()` 取 surface 的 HCT 色相和彩度（彩度上限 12，
   保持 M3 中性色的观感），并在 scheme 自己算出的音调上**按表面色的深浅整体平移**——
   基准是 M3 的默认表面（浅色 tone 98、深色 tone 6），容器阶梯 94/96/98/100 相对它定。

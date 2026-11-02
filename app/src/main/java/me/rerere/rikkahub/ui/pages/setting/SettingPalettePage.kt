@@ -87,6 +87,7 @@ import me.rerere.rikkahub.ui.theme.DEFAULT_PALETTE_ID
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.ui.theme.PaletteColors
 import me.rerere.rikkahub.ui.theme.PalettePresets
+import me.rerere.rikkahub.ui.theme.PaletteGroup
 import me.rerere.rikkahub.ui.theme.PaletteRole
 import me.rerere.rikkahub.ui.theme.PaletteSetting
 import me.rerere.rikkahub.ui.theme.argbLong
@@ -345,8 +346,8 @@ fun SettingPalettePage(vm: SettingVM = koinViewModel()) {
         val preset = palette.preset()
         PaletteEditSheet(
             darkMode = dark,
-            initial = palette.effectiveColors(dark),
-            presetColors = (preset ?: findPalettePreset(DEFAULT_PALETTE_ID)).colors(dark),
+            initial = palette.effectiveColors(dark).full(dark),
+            presetColors = (preset ?: findPalettePreset(DEFAULT_PALETTE_ID)).colors(dark).full(dark),
             onDismiss = { editingDarkMode = null },
             onSave = { colors ->
                 updatePalette {
@@ -406,11 +407,11 @@ private fun PaletteSectionTitle(text: String) {
 private fun PaletteStrip(colors: PaletteColors, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(8.dp)
     val slices = listOf(
-        colors.primary,
-        colors.secondary,
-        colors.tertiary,
-        colors.error,
-        colors.surfaceVariant,
+        colors.primary ?: 0xFF000000L,
+        colors.secondary ?: 0xFF000000L,
+        colors.tertiary ?: 0xFF000000L,
+        colors.error ?: 0xFF000000L,
+        colors.surfaceVariant ?: 0xFF000000L,
     )
     Canvas(
         modifier = modifier
@@ -516,17 +517,55 @@ private fun PaletteEditSheet(
 
             Spacer(Modifier.height(12.dp))
 
+            var advancedOpen by rememberSaveable { mutableStateOf(false) }
             Column(
                 modifier = Modifier
                     .weight(1f, fill = false)
                     .verticalScroll(rememberScrollState()),
             ) {
-                PaletteRole.entries.forEach { role ->
-                    PaletteColorRow(
-                        role = role,
-                        argb = colors[role],
-                        onClick = { editingRole = role },
-                    )
+                PaletteGroup.entries.forEach { group ->
+                    val roles = PaletteRole.entries.filter { it.group == group }
+                    if (roles.isEmpty()) return@forEach
+                    val header = stringResource(group.labelRes())
+                    if (group == PaletteGroup.ADVANCED) {
+                        // 这一组在本项目里几乎没人引用，收起来免得面板太长
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { advancedOpen = !advancedOpen }
+                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = header,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.weight(1f))
+                            Icon(
+                                imageVector = if (advancedOpen) HugeIcons.ArrowDown01 else HugeIcons.ArrowRight01,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                        if (!advancedOpen) return@forEach
+                    } else {
+                        Text(
+                            text = header,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 4.dp, top = 10.dp, bottom = 4.dp),
+                        )
+                    }
+                    roles.forEach { role ->
+                        PaletteColorRow(
+                            role = role,
+                            argb = colors[role] ?: 0xFF000000L,
+                            onClick = { editingRole = role },
+                        )
+                    }
                 }
             }
 
@@ -551,7 +590,7 @@ private fun PaletteEditSheet(
     editingRole?.let { role ->
         PaletteColorDialog(
             role = role,
-            initial = colors[role],
+            initial = colors[role] ?: 0xFF000000L,
             onDismiss = { editingRole = null },
             onConfirm = { argb ->
                 colors = colors.with(role, argb)
@@ -580,7 +619,7 @@ private fun PaletteColorRow(
             drawCircle(color = Color(argb.toInt()))
         }
         Text(
-            text = stringResource(role.labelRes()),
+            text = stringResource(role.labelRes),
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f),
         )
@@ -603,7 +642,7 @@ private fun PaletteColorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(role.labelRes())) },
+        title = { Text(stringResource(role.labelRes)) },
         text = {
             // 限高再让它自己滚：M3 的 AlertDialog 不会替内容滚动，
             // 把可滚动内容直接丢进 text 槽会滚得乱七八糟
@@ -630,16 +669,12 @@ private fun PaletteColorDialog(
 }
 
 @StringRes
-private fun PaletteRole.labelRes(): Int = when (this) {
-    PaletteRole.PRIMARY -> R.string.setting_theme_page_primary_color
-    PaletteRole.ON_PRIMARY -> R.string.palette_role_on_primary
-    PaletteRole.SECONDARY -> R.string.setting_theme_page_secondary_color
-    PaletteRole.TERTIARY -> R.string.setting_theme_page_tertiary_color
-    PaletteRole.ERROR -> R.string.palette_role_error
-    PaletteRole.BACKGROUND -> R.string.palette_role_background
-    PaletteRole.SURFACE -> R.string.palette_role_surface
-    PaletteRole.SURFACE_VARIANT -> R.string.palette_role_surface_variant
-    PaletteRole.ON_SURFACE -> R.string.palette_role_on_surface
+private fun PaletteGroup.labelRes(): Int = when (this) {
+    PaletteGroup.MAIN -> R.string.palette_group_main
+    PaletteGroup.ACCENT -> R.string.palette_group_accent
+    PaletteGroup.SURFACE -> R.string.palette_group_surface
+    PaletteGroup.STATUS -> R.string.palette_group_status
+    PaletteGroup.ADVANCED -> R.string.palette_group_advanced
 }
 
 /**

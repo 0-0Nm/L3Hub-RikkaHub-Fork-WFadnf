@@ -59,9 +59,9 @@ class PaletteTest {
     fun `seed expands into a full palette`() {
         val colors = PaletteColors.fromSeed(0xFF116682, dark = false)
 
-        assertEquals(0xFF116682L, colors.primary)
+        assertEquals(0xFF116682L, colors.primary ?: 0L)
         // 换种子不影响错误色：红要留在红，否则出错提示和正文分不开
-        assertEquals(colors.error, PaletteColors.fromSeed(0xFF8B5000, dark = false).error)
+        assertEquals(colors.error ?: 0L, PaletteColors.fromSeed(0xFF8B5000, dark = false).error ?: 0L)
         // 表面族由 surface 展开，不该还是九个默认值里的白
         assertTrue(colors.surface != 0xFFFEF7FFL)
     }
@@ -98,19 +98,29 @@ class PaletteTest {
         val scheme = input.generateColorScheme(dark = false)
 
         val pairs = listOf(
-            "primary" to (input.primary to scheme.primary.argbLong()),
-            "onPrimary" to (input.onPrimary to scheme.onPrimary.argbLong()),
-            "secondary" to (input.secondary to scheme.secondary.argbLong()),
-            "tertiary" to (input.tertiary to scheme.tertiary.argbLong()),
-            "error" to (input.error to scheme.error.argbLong()),
-            "background" to (input.background to scheme.background.argbLong()),
-            "surface" to (input.surface to scheme.surface.argbLong()),
-            "surfaceVariant" to (input.surfaceVariant to scheme.surfaceVariant.argbLong()),
-            "onSurface" to (input.onSurface to scheme.onSurface.argbLong()),
+            "primary" to ((input.primary ?: 0L) to scheme.primary.argbLong()),
+            "onPrimary" to ((input.onPrimary ?: 0L) to scheme.onPrimary.argbLong()),
+            "secondary" to ((input.secondary ?: 0L) to scheme.secondary.argbLong()),
+            "tertiary" to ((input.tertiary ?: 0L) to scheme.tertiary.argbLong()),
+            "error" to ((input.error ?: 0L) to scheme.error.argbLong()),
+            "background" to ((input.background ?: 0L) to scheme.background.argbLong()),
+            "surface" to ((input.surface ?: 0L) to scheme.surface.argbLong()),
+            "surfaceVariant" to ((input.surfaceVariant ?: 0L) to scheme.surfaceVariant.argbLong()),
+            "onSurface" to ((input.onSurface ?: 0L) to scheme.onSurface.argbLong()),
         )
         pairs.forEach { (name, values) ->
             assertEquals(name, values.first, values.second)
         }
+    }
+
+    @Test
+    fun `advanced roles override the derived family`() {
+        // 高级区直接指定容器色时，必须盖过 withSurfaceFamily 算出来的值，
+        // 否则那几十个格子全是摆设
+        val custom = PaletteColors(surface = 0xFF000000, surfaceContainer = 0xFF102030)
+            .generateColorScheme(dark = false)
+
+        assertEquals(0xFF102030L, custom.surfaceContainer.argbLong())
     }
 
     @Test
@@ -134,7 +144,7 @@ class PaletteTest {
     @Test
     fun `seed drops alpha`() {
         // 带透明度的 primary 会让按钮和顶栏透出下层，色卡一律不透明
-        assertEquals(0xFF112233L, PaletteColors.fromSeed(0x80112233, dark = false).primary)
+        assertEquals(0xFF112233L, PaletteColors.fromSeed(0x80112233, dark = false).primary ?: 0L)
     }
 
     @Test
