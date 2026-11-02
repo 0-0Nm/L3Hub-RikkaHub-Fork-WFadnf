@@ -433,36 +433,6 @@ private fun PaletteStrip(colors: PaletteColors, modifier: Modifier = Modifier) {
     }
 }
 
-/** 展开后的完整配色预览：背景上摆一圈主要角色。 */
-@Composable
-private fun PalettePreview(colors: PaletteColors, darkMode: Boolean) {
-    val scheme = remember(colors, darkMode) { colors.generateColorScheme(darkMode) }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(scheme.surfaceContainer)
-            .border(1.dp, scheme.outlineVariant, RoundedCornerShape(16.dp))
-            .padding(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("Aa", style = MaterialTheme.typography.titleMedium, color = scheme.onSurface)
-        Spacer(Modifier.weight(1f))
-        listOf(
-            scheme.primary,
-            scheme.secondary,
-            scheme.tertiary,
-            scheme.error,
-            scheme.surfaceVariant,
-        ).forEach { color ->
-            Canvas(modifier = Modifier.size(24.dp).clip(CircleShape)) {
-                drawCircle(color = color)
-            }
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PaletteEditSheet(
@@ -541,7 +511,7 @@ private fun PaletteEditSheet(
 
             Spacer(Modifier.height(12.dp))
 
-            PalettePreview(colors = colors, darkMode = darkMode)
+            PaletteScreenPreview(colors = colors, darkMode = darkMode)
 
             Spacer(Modifier.height(12.dp))
 
@@ -703,6 +673,104 @@ private fun PaletteGroup.labelRes(): Int = when (this) {
     PaletteGroup.SURFACE -> R.string.palette_group_surface
     PaletteGroup.STATUS -> R.string.palette_group_status
     PaletteGroup.ADVANCED -> R.string.palette_group_advanced
+}
+
+/**
+ * 用编辑中的配色画一屏假界面。
+ *
+ * 调色板里改一格要保存、退出、看真机、再进来，一轮十几秒还容易记错；
+ * 这块把最常用的十几个角色一次性摆出来——顶栏、气泡、输入框、卡片、报错条——
+ * 改哪个，对应那块立刻变。
+ */
+@Composable
+private fun PaletteScreenPreview(colors: PaletteColors, darkMode: Boolean) {
+    val scheme = remember(colors, darkMode) { colors.generateColorScheme(darkMode) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(scheme.background)
+            .border(1.dp, scheme.outlineVariant, RoundedCornerShape(20.dp)),
+    ) {
+        // 顶栏：surfaceContainer + onSurface
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(scheme.surfaceContainer)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("聊天", style = MaterialTheme.typography.titleSmall, color = scheme.onSurface)
+            Spacer(Modifier.weight(1f))
+            Box(Modifier.size(10.dp).clip(CircleShape).background(scheme.primary))
+        }
+
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            // AI 气泡：surfaceContainerHigh + onSurfaceVariant
+            Text(
+                text = "好的，我看看",
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(scheme.surfaceContainerHigh)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+            // 用户气泡：primaryContainer + onPrimaryContainer
+            Text(
+                text = "把这段颜色调一下",
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onPrimaryContainer,
+                modifier = Modifier
+                    .align(Alignment.End)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(scheme.primaryContainer)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+            // 卡片：surface + outline
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(scheme.surface)
+                    .border(1.dp, scheme.outline, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("设置项", style = MaterialTheme.typography.bodySmall, color = scheme.onSurface)
+                Spacer(Modifier.weight(1f))
+                Text("次要说明", style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant)
+            }
+            // 报错条：errorContainer + onErrorContainer
+            Text(
+                text = "请求失败",
+                style = MaterialTheme.typography.labelSmall,
+                color = scheme.onErrorContainer,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(scheme.errorContainer)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+            // 输入框：surfaceContainerHigh + outlineVariant
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(scheme.surfaceContainerHigh)
+                    .border(1.dp, scheme.outlineVariant, RoundedCornerShape(14.dp))
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("输入消息…", style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
+                Spacer(Modifier.weight(1f))
+                Box(Modifier.size(18.dp).clip(CircleShape).background(scheme.primary))
+            }
+        }
+    }
 }
 
 /**
