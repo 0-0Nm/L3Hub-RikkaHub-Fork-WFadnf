@@ -202,9 +202,14 @@ internal fun Conversation.insertContextCheckpoint(
     keepPartsFrom: Int = 0,
 ): Conversation? {
     // 旧检查点已经被新摘要吸收——它的文本就在这次压缩的输入里——留着只会在聊天页堆出一串
-    // 摘要块，导出和 WebDto 也跟着带上全部旧摘要。请求侧本来只用最后一个，删掉不改变行为
+    // 摘要块，导出和 WebDto 也跟着带上全部旧摘要。请求侧本来只用最后一个，删掉不改变行为。
+    // 锚点本身是旧检查点时要留着：part 边界压缩的锚点正好是上一个检查点
+    // （endIndex - 1 == checkpointIndex），滤掉它会让这类压缩永远找不到插入位置
     val nodes = messageNodes
-        .filterNot { node -> node.messages.getOrNull(node.selectIndex)?.isContextCheckpoint == true }
+        .filterNot { node ->
+            node.id != afterNodeId &&
+                node.messages.getOrNull(node.selectIndex)?.isContextCheckpoint == true
+        }
         .toMutableList()
     val index = nodes.indexOfFirst { it.id == afterNodeId }
     if (index == -1) return null

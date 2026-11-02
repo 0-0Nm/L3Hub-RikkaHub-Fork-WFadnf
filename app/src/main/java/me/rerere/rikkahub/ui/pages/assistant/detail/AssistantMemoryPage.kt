@@ -600,8 +600,13 @@ private fun MemorySettingsTab(
                         )
                     },
                     onClick = {
-                        autoCompressTargetMode = assistant.autoCompressTarget
-                        autoCompressTargetInput = assistant.autoCompressTargetValue.toString()
+                        // 上限是后加的：存量配置可能已经越界，打开时先夹进区间，
+                        // 否则输入框一进来就是错误态、保存键禁用，用户不改数字就退不出去
+                        val mode = assistant.autoCompressTarget
+                        val range = if (mode == AutoCompressTarget.MESSAGES) 1..500 else 100..1_000_000
+                        autoCompressTargetMode = mode
+                        autoCompressTargetInput =
+                            assistant.autoCompressTargetValue.coerceIn(range).toString()
                         showAutoCompressTargetDialog = true
                     },
                 )

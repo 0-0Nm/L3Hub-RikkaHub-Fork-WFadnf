@@ -762,8 +762,8 @@ class ChatService(
                 session.submittingMessage = null
 
                 // 用户消息可能刚好把上下文推过门限，加入后再检查一次；
-                // 但这一轮已经尝试过就不再试：成功会总结两遍，失败时摘要请求已经付过钱，
-                // 再跑一遍只是再付一次
+                // 但这一轮已经尝试过就不再试：失败时摘要请求已经付过钱，再跑一遍只是再付一次。
+                // 代价是这一轮会带着超门限的上下文继续，真到硬上限由循环压缩或 provider 报错兜底
                 if (compressAttempt == CompressAttempt.SKIPPED) autoCompressIfNeeded(session)
 
                 // 开始补全

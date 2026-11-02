@@ -331,7 +331,6 @@ private val TRUNCATED_FINISH_REASONS = setOf(
     "max_tokens",
     "max_output_tokens",
     "incomplete",
-    "content_filter",
 )
 
 private fun String?.isTruncatedOutput(): Boolean {
@@ -344,7 +343,8 @@ private fun String?.isTruncatedOutput(): Boolean {
  * 指令要求七段结构；模型拒绝或答非所问时这两条都不满足。
  */
 private const val MIN_SUMMARY_CHARS = 80
-private val SUMMARY_HEADING = Regex("""(?m)^##\s+\S""")
+// ## 后面不强制空白：中文输出里「##用户目标」很常见，\s+ 会把合格摘要判成格式错误
+private val SUMMARY_HEADING = Regex("""(?m)^##\s*\S""")
 
 internal fun String.isUsableCompressionSummary(): Boolean =
     length >= MIN_SUMMARY_CHARS && SUMMARY_HEADING.findAll(this).count() >= 2
