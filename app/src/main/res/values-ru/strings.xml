@@ -1818,6 +1818,12 @@
   <string name="assistant_page_execution_permission_read_only">Только чтение</string>
   <string name="assistant_page_execution_permission_read_write">Чтение и запись</string>
   <string name="assistant_page_local_tools_sub_agent_desc">Разрешить ИИ передавать самостоятельные задачи ассистентам, отмеченным как субагенты, и ждать их результата</string>
+  <string name="assistant_page_allowed_sub_agents">Разрешённые субагенты</string>
+  <string name="assistant_page_allowed_sub_agents_summary_all">Без ограничений</string>
+  <string name="assistant_page_allowed_sub_agents_summary_selected">Выбрано: %1$d</string>
+  <string name="assistant_page_allowed_sub_agents_empty">Ни один другой ассистент не отмечен как субагент</string>
+  <string name="assistant_page_allowed_sub_agents_missing">Выбранные субагенты больше недоступны</string>
+  <string name="assistant_page_allowed_sub_agents_dialog_desc">Отметьте субагентов, которым этот ассистент может передавать задачи. Если ничего не отмечено, ограничений нет.</string>
   <string name="assistant_page_local_tools_sub_agent_title">Запуск субагентов</string>
   <string name="assistant_page_memory_auto_compress">Автосжатие</string>
   <string name="assistant_page_memory_auto_compress_desc">Когда занятость контекста достигает порога, история сжимается перед ответом; результат совпадает с ручным сжатием</string>

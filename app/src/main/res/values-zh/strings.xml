@@ -2116,6 +2116,12 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_sub_agent_desc">其他助手可通过 dispatch_sub_agent 工具将任务派发给该助手。子代理在独立会话中运行，不共享当前上下文</string>
   <string name="assistant_page_local_tools_sub_agent_title">派发子代理</string>
   <string name="assistant_page_local_tools_sub_agent_desc">允许 AI 将独立任务派发给标记为子代理的助手，并等待其返回结果</string>
+  <string name="assistant_page_allowed_sub_agents">允许派发的子代理</string>
+  <string name="assistant_page_allowed_sub_agents_summary_all">不限制</string>
+  <string name="assistant_page_allowed_sub_agents_summary_selected">已选择 %1$d 个</string>
+  <string name="assistant_page_allowed_sub_agents_empty">没有其他助手被设为子代理</string>
+  <string name="assistant_page_allowed_sub_agents_missing">已选择的子代理都不可用了</string>
+  <string name="assistant_page_allowed_sub_agents_dialog_desc">勾选这个助手允许派发的子代理；全部不勾选表示不限制</string>
   <string name="chat_task_tree_button">任务树</string>
   <string name="task_tree_title">任务树</string>
   <string name="task_tree_empty">暂无子代理任务。请在助手的本地工具中开启「派发子代理」，并将另一助手设为子代理</string>

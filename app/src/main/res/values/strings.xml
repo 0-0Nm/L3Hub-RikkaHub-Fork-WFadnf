@@ -2114,6 +2114,12 @@
   <string name="assistant_page_sub_agent_desc">Other assistants can dispatch tasks to it via the dispatch_sub_agent tool. Sub-agents run in isolated conversations and do not share the current context</string>
   <string name="assistant_page_local_tools_sub_agent_title">Dispatch sub-agents</string>
   <string name="assistant_page_local_tools_sub_agent_desc">Allow the AI to hand self-contained tasks to assistants marked as sub-agents and wait for their results</string>
+  <string name="assistant_page_allowed_sub_agents">Allowed sub-agents</string>
+  <string name="assistant_page_allowed_sub_agents_summary_all">Not restricted</string>
+  <string name="assistant_page_allowed_sub_agents_summary_selected">%1$d selected</string>
+  <string name="assistant_page_allowed_sub_agents_empty">No other assistant is marked as a sub-agent</string>
+  <string name="assistant_page_allowed_sub_agents_missing">The selected sub-agents are no longer available</string>
+  <string name="assistant_page_allowed_sub_agents_dialog_desc">Pick the sub-agents this assistant may dispatch to. Leave all unchecked to allow every sub-agent.</string>
   <string name="chat_task_tree_button">Task tree</string>
   <string name="task_tree_title">Task tree</string>
   <string name="task_tree_empty">No sub-agent tasks yet. Enable "Dispatch sub-agents" in the assistant\'s local tools and mark another assistant as a sub-agent</string>

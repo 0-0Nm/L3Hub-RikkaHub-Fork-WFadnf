@@ -1933,6 +1933,12 @@
   <string name="assistant_page_execution_permission_read_only">只讀</string>
   <string name="assistant_page_execution_permission_read_write">讀寫</string>
   <string name="assistant_page_local_tools_sub_agent_desc">允許 AI 將獨立任務派發給標記為子代理的助手，並等待其返回結果</string>
+  <string name="assistant_page_allowed_sub_agents">允許派發的子代理</string>
+  <string name="assistant_page_allowed_sub_agents_summary_all">不限制</string>
+  <string name="assistant_page_allowed_sub_agents_summary_selected">已選擇 %1$d 個</string>
+  <string name="assistant_page_allowed_sub_agents_empty">沒有其他助手被設為子代理</string>
+  <string name="assistant_page_allowed_sub_agents_missing">已選擇的子代理都不可用了</string>
+  <string name="assistant_page_allowed_sub_agents_dialog_desc">勾選這個助手允許派發的子代理；全部不勾選表示不限制</string>
   <string name="assistant_page_local_tools_sub_agent_title">派發子代理</string>
   <string name="assistant_page_memory_auto_compress">自動壓縮</string>
   <string name="assistant_page_memory_auto_compress_desc">上下文佔用達到閾值時，先壓縮歷史再回復，效果與手動壓縮一致</string>

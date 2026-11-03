@@ -54,16 +54,23 @@ class SubAgentRunner(
         task: String,
     ): String {
         val settings = settingsStore.awaitLoaded()
-        val candidate = settings.assistants.firstOrNull { assistant ->
+        val parent = conversationRepository.getConversationById(parentConversationId)
+            ?: return "The parent conversation no longer exists, so the task cannot be dispatched."
+        val dispatcher = settings.getAssistantOf(parent)
+        val named = settings.assistants.firstOrNull { assistant ->
             assistant.isSubAgent && assistant.matchesSubAgentName(target)
         } ?: return "No sub-agent named \"$target\". Use one of the names in the available sub-agent list."
 
-        val parent = conversationRepository.getConversationById(parentConversationId)
-            ?: return "The parent conversation no longer exists, so the task cannot be dispatched."
-
-        if (settings.getAssistantOf(parent).id == candidate.id) {
+        if (named.id == dispatcher.id) {
             return "A sub-agent cannot dispatch a task to itself. Pick another sub-agent."
         }
+
+        // 工具层的目录已经按 allowedSubAgentIds 过滤过，这里再查一次：模型可能凭历史记录直接报名字，
+        // 而设置可能在派发期间被改过
+        val candidates = dispatchableSubAgents(dispatcher, settings.assistants)
+        val candidate = candidates.firstOrNull { assistant ->
+            assistant.matchesSubAgentName(target)
+        } ?: return "Sub-agent \"${subAgentLabel(named)}\" is not in the allowed sub-agent list of \"${subAgentLabel(dispatcher)}\". Available: ${candidates.joinToString { subAgentLabel(it) }}"
 
         val depth = depthOf(parentConversationId)
         if (depth >= MAX_DEPTH) {

@@ -71,6 +71,8 @@ data class Assistant(
     val timeReminderIntervalMinutes: Int = 60, // 时间提醒间隔（分钟，至少 1 分钟）
     val allowConversationSystemPrompt: Boolean = false, // 允许对话单独重写 system prompt
     val heartbeat: HeartbeatSetting = HeartbeatSetting(), // 定时主动说话；没配模型时只当闹钟
+    // 允许派发的子代理（助手 id）；留空表示不限制，非空时只能派发给列出的助手
+    val allowedSubAgentIds: Set<Uuid> = emptySet(),
 ) {
     /** 主工作区在前，兼容只写过 [workspaceId] 的旧助手。 */
     val allWorkspaceIds: Set<Uuid>

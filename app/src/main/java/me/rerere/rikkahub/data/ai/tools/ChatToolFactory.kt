@@ -103,6 +103,7 @@ class ChatToolFactory(
                     },
                     conversationId = conversationId,
                     assistants = settings.assistants,
+                    dispatcher = assistant,
                 )
             )
             if (assistant.enableRecentChatsReference) {

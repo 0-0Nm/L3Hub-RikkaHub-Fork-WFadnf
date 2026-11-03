@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.ai.tools.local
 import android.content.Context
 import me.rerere.ai.core.Tool
 import me.rerere.rikkahub.data.ai.subagent.SubAgentRunner
+import me.rerere.rikkahub.data.ai.subagent.dispatchableSubAgents
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.event.AppEventBus
@@ -38,6 +39,7 @@ class LocalTools(
         options: List<LocalToolOption>,
         conversationId: Uuid? = null,
         assistants: List<Assistant> = emptyList(),
+        dispatcher: Assistant? = null,
     ): List<Tool> {
         val tools = mutableListOf<Tool>()
         if (options.contains(LocalToolOption.JavascriptEngine)) {
@@ -65,8 +67,9 @@ class LocalTools(
         if (options.contains(LocalToolOption.ChartDisplay)) {
             tools.add(chartDisplayTool)
         }
-        if (options.contains(LocalToolOption.SubAgent) && conversationId != null) {
-            val subAgents = assistants.filter { it.isSubAgent }
+        if (options.contains(LocalToolOption.SubAgent) && conversationId != null && dispatcher != null) {
+            // 只把派发者允许的目标列进工具目录；留空时是不限制
+            val subAgents = dispatchableSubAgents(dispatcher, assistants)
             if (subAgents.isNotEmpty()) {
                 tools.add(buildSubAgentTool(conversationId, subAgents, subAgentRunner))
             }

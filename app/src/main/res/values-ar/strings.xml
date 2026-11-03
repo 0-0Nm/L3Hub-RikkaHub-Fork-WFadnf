@@ -1810,6 +1810,12 @@
   <string name="assistant_page_execution_permission_read_only">للقراءة فقط</string>
   <string name="assistant_page_execution_permission_read_write">قراءة/كتابة</string>
   <string name="assistant_page_local_tools_sub_agent_desc">السماح للذكاء الاصطناعي بإسناد مهام مستقلة إلى المساعدين المعلَّمين كوكلاء فرعيين وانتظار نتائجهم</string>
+  <string name="assistant_page_allowed_sub_agents">الوكلاء الفرعيون المسموح بهم</string>
+  <string name="assistant_page_allowed_sub_agents_summary_all">بلا قيود</string>
+  <string name="assistant_page_allowed_sub_agents_summary_selected">تم اختيار %1$d</string>
+  <string name="assistant_page_allowed_sub_agents_empty">لا يوجد مساعد آخر معلَّم كوكيل فرعي</string>
+  <string name="assistant_page_allowed_sub_agents_missing">الوكلاء الفرعيون المختارون لم يعودوا متاحين</string>
+  <string name="assistant_page_allowed_sub_agents_dialog_desc">اختر الوكلاء الفرعيين الذين يُسمح لهذا المساعد بإسناد المهام إليهم. عدم اختيار أي منهم يعني عدم وجود قيود.</string>
   <string name="assistant_page_local_tools_sub_agent_title">إسناد وكلاء فرعيين</string>
   <string name="assistant_page_memory_auto_compress">الضغط التلقائي</string>
   <string name="assistant_page_memory_auto_compress_desc">عند بلوغ استخدام السياق العتبة، يُضغط السجل قبل الرد؛ والنتيجة مطابقة للضغط اليدوي</string>

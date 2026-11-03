@@ -1813,6 +1813,12 @@
   <string name="assistant_page_execution_permission_read_only">Nur lesen</string>
   <string name="assistant_page_execution_permission_read_write">Lesen und schreiben</string>
   <string name="assistant_page_local_tools_sub_agent_desc">Erlaubt der KI, eigenständige Aufgaben an als Sub-Agent markierte Assistenten zu übergeben und auf deren Ergebnisse zu warten</string>
+  <string name="assistant_page_allowed_sub_agents">Erlaubte Sub-Agents</string>
+  <string name="assistant_page_allowed_sub_agents_summary_all">Nicht eingeschränkt</string>
+  <string name="assistant_page_allowed_sub_agents_summary_selected">%1$d ausgewählt</string>
+  <string name="assistant_page_allowed_sub_agents_empty">Kein anderer Assistent ist als Sub-Agent markiert</string>
+  <string name="assistant_page_allowed_sub_agents_missing">Die ausgewählten Sub-Agents sind nicht mehr verfügbar</string>
+  <string name="assistant_page_allowed_sub_agents_dialog_desc">Wähle die Sub-Agents, an die dieser Assistent Aufgaben verteilen darf. Ohne Auswahl sind alle erlaubt.</string>
   <string name="assistant_page_local_tools_sub_agent_title">Sub-Agents verteilen</string>
   <string name="assistant_page_memory_auto_compress">Automatisch komprimieren</string>
   <string name="assistant_page_memory_auto_compress_desc">Sobald die Kontextnutzung den Schwellenwert erreicht, wird der Verlauf vor der Antwort komprimiert; das Ergebnis entspricht der manuellen Komprimierung</string>

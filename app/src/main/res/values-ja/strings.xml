@@ -1812,6 +1812,12 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_execution_permission_read_only">読み取り専用</string>
   <string name="assistant_page_execution_permission_read_write">読み書き</string>
   <string name="assistant_page_local_tools_sub_agent_desc">AI が独立したタスクをサブエージェントとして指定したアシスタントに渡し、その結果を待つことを許可します</string>
+  <string name="assistant_page_allowed_sub_agents">派遣できるサブエージェント</string>
+  <string name="assistant_page_allowed_sub_agents_summary_all">制限なし</string>
+  <string name="assistant_page_allowed_sub_agents_summary_selected">%1$d 件選択</string>
+  <string name="assistant_page_allowed_sub_agents_empty">サブエージェントに設定された他のアシスタントがありません</string>
+  <string name="assistant_page_allowed_sub_agents_missing">選択したサブエージェントは現在利用できません</string>
+  <string name="assistant_page_allowed_sub_agents_dialog_desc">このアシスタントが派遣できるサブエージェントを選択します。すべて未選択の場合は制限しません</string>
   <string name="assistant_page_local_tools_sub_agent_title">サブエージェントの派遣</string>
   <string name="assistant_page_memory_auto_compress">自動圧縮</string>
   <string name="assistant_page_memory_auto_compress_desc">コンテキスト使用量がしきい値に達すると、返信の前に履歴を圧縮します。結果は手動圧縮と同じです</string>

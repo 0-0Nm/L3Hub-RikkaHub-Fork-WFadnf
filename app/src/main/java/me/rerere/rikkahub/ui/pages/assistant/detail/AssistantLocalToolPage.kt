@@ -5,11 +5,17 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -17,15 +23,22 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import me.rerere.ui.components.RikkaConfirmDialog
 import me.rerere.ui.toast.ToastType
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.Calendar03
 import me.rerere.hugeicons.stroke.ChartLineData01
 import me.rerere.hugeicons.stroke.ClipboardPaste
@@ -36,6 +49,7 @@ import me.rerere.hugeicons.stroke.MessageQuestion
 import me.rerere.hugeicons.stroke.SmartPhone01
 import me.rerere.hugeicons.stroke.VolumeHigh
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.ai.subagent.subAgentLabel
 import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -52,6 +66,7 @@ import me.rerere.rikkahub.utils.hasUsageStatsPermission
 import me.rerere.rikkahub.utils.openUsageAccessSettings
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
+import kotlin.uuid.Uuid
 
 @Composable
 fun AssistantLocalToolPage(id: String) {
@@ -61,6 +76,7 @@ fun AssistantLocalToolPage(id: String) {
         }
     )
     val assistant by vm.assistant.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -82,6 +98,7 @@ fun AssistantLocalToolPage(id: String) {
         AssistantLocalToolContent(
             innerPadding = innerPadding,
             assistant = assistant,
+            assistants = settings.assistants,
             onUpdate = { vm.update(it) }
         )
     }
@@ -91,10 +108,14 @@ fun AssistantLocalToolPage(id: String) {
 private fun AssistantLocalToolContent(
     innerPadding: PaddingValues,
     assistant: Assistant,
+    assistants: List<Assistant>,
     onUpdate: (Assistant) -> Unit
 ) {
     val context = LocalContext.current
     val toaster = LocalToaster.current
+    var showSubAgentPicker by remember { mutableStateOf(false) }
+    val subAgentCandidates = assistants.filter { it.isSubAgent && it.id != assistant.id }
+    val allowedSubAgentCount = subAgentCandidates.count { it.id in assistant.allowedSubAgentIds }
     val permissionRequiredText =
         stringResource(R.string.assistant_page_local_tools_screen_time_permission_required)
 
@@ -229,6 +250,128 @@ private fun AssistantLocalToolContent(
                 title = R.string.assistant_page_local_tools_sub_agent_title,
                 description = R.string.assistant_page_local_tools_sub_agent_desc,
             )
+            // 开了派发工具，或者它自己是子代理（子代理会话会自动拿到派发工具）时，
+            // 这个范围都可能生效
+            if (assistant.localTools.contains(LocalToolOption.SubAgent) || assistant.isSubAgent) {
+                item(
+                    onClick = if (subAgentCandidates.isNotEmpty()) {
+                        { showSubAgentPicker = true }
+                    } else {
+                        null
+                    },
+                    leadingContent = {
+                        CardGroupIcon(
+                            icon = HugeIcons.Flowchart01,
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    },
+                    supportingContent = {
+                        Text(
+                            text = when {
+                                subAgentCandidates.isEmpty() -> stringResource(
+                                    R.string.assistant_page_allowed_sub_agents_empty
+                                )
+                                assistant.allowedSubAgentIds.isEmpty() -> stringResource(
+                                    R.string.assistant_page_allowed_sub_agents_summary_all
+                                )
+                                allowedSubAgentCount == 0 -> stringResource(
+                                    R.string.assistant_page_allowed_sub_agents_missing
+                                )
+                                else -> stringResource(
+                                    R.string.assistant_page_allowed_sub_agents_summary_selected,
+                                    allowedSubAgentCount,
+                                )
+                            }
+                        )
+                    },
+                    headlineContent = {
+                        Text(stringResource(R.string.assistant_page_allowed_sub_agents))
+                    },
+                    trailingContent = {
+                        Icon(
+                            imageVector = HugeIcons.ArrowRight01,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                )
+            }
+        }
+    }
+
+    SubAgentAllowlistDialog(
+        show = showSubAgentPicker,
+        assistant = assistant,
+        candidates = subAgentCandidates,
+        onDismiss = { showSubAgentPicker = false },
+        onConfirm = { ids ->
+            onUpdate(assistant.copy(allowedSubAgentIds = ids))
+            showSubAgentPicker = false
+        },
+    )
+}
+
+/** 多选派发范围；一项都不勾表示不限制 */
+@Composable
+private fun SubAgentAllowlistDialog(
+    show: Boolean,
+    assistant: Assistant,
+    candidates: List<Assistant>,
+    onDismiss: () -> Unit,
+    onConfirm: (Set<Uuid>) -> Unit,
+) {
+    if (!show) return
+    var selected by remember { mutableStateOf(assistant.allowedSubAgentIds) }
+
+    RikkaConfirmDialog(
+        show = show,
+        title = stringResource(R.string.assistant_page_allowed_sub_agents),
+        confirmText = stringResource(R.string.confirm),
+        dismissText = stringResource(R.string.cancel),
+        onConfirm = { onConfirm(selected) },
+        onDismiss = onDismiss,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 360.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.assistant_page_allowed_sub_agents_dialog_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+            candidates.forEach { candidate ->
+                val checked = candidate.id in selected
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = checked,
+                            role = Role.Checkbox,
+                            onValueChange = { enabled ->
+                                selected = if (enabled) {
+                                    selected + candidate.id
+                                } else {
+                                    selected - candidate.id
+                                }
+                            },
+                        )
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Checkbox(checked = checked, onCheckedChange = null)
+                    Text(
+                        text = subAgentLabel(candidate),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
         }
     }
 }
