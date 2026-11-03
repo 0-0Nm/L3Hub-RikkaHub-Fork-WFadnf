@@ -8,6 +8,7 @@ import android.util.Log
 import android.view.WindowManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalConfiguration
@@ -82,6 +83,7 @@ class ChatFloatingWindows(
     private val chatService by lazyChatService
     private var bubble: FxControl? = null
     private var panel: FxControl? = null
+    private var panelFeature: PanelWindowFeature? = null
 
     // 悬浮窗显示期间一直汇总，气泡和面板切换时直接拿到当前状态，不会先空一帧
     private val uiState: StateFlow<FloatingChatUiState?> = tracker.window
@@ -166,12 +168,19 @@ class ChatFloatingWindows(
         compose {
             WindowContent { state, display ->
                 val conversationId = state.conversationId
+                // 面板宽度变化（拖动、设置页滑块、旋转）时同步窗口宽度
+                val screenWidthPx = panelWidthPx(1f)
+                LaunchedEffect(display.floatingPanelWidthRatio, screenWidthPx) {
+                    panelFeature?.setWindowWidth(panelWidthPx(display.floatingPanelWidthRatio))
+                }
                 ChatFloatingPanel(
                     state = state,
                     widthFraction = display.floatingPanelWidthRatio,
                     heightFraction = display.floatingPanelHeightRatio,
                     maxHeight = rememberPanelMaxHeight(),
                     previewMaxHeight = display.floatingPreviewMaxHeight.dp,
+                    onWidthChanged = { ratio -> panelFeature?.setWindowWidth(panelWidthPx(ratio)) },
+                    onReplyFocusChanged = { focused -> panelFeature?.setWindowFocusable(focused) },
                     onResize = { width, height, previewHeight ->
                         appScope.launch {
                             settingsStore.update { settings ->
@@ -200,15 +209,18 @@ class ChatFloatingWindows(
         anchor(FxGravity.TOP_CENTER, dy = dp(PANEL_TOP_OFFSET_DP))
         gesture(FxGesture(click = false, longPress = false, drag = FxDrag.DISABLED))
         animation(FxAnimations.fade())
-        addFeature(PanelFocusFeature())
+        PanelWindowFeature().also { feature ->
+            panelFeature = feature
+            addFeature(feature)
+        }
         systemHost(context) {
             permission(FxPermissionStrategy.skip())
             layoutParams {
-                // 不能在这里清掉 FLAG_NOT_FOCUSABLE：Android 会给不可聚焦窗口隐式启用
-                // NOT_TOUCH_MODAL，去掉 NOT_FOCUSABLE 又不显式补回的话窗口会变成模态窗口，
-                // 整个屏幕的触摸都会被它吞掉。窗口焦点由 PanelFocusFeature 按展开/收起切换。
-                // wrap_content 的窗口会先按对话框宽度（约 320dp）测量，面板会被压窄
-                it.width = WindowManager.LayoutParams.MATCH_PARENT
+                // 窗口宽度 = 面板可见宽度，不是全屏宽：WindowManager 按窗口矩形分发触摸，
+                // 全屏宽会把面板两侧的透明区也变成吃触摸的区域，缩窄后窗口外的触摸才归下面的窗口。
+                // 这里只给首帧一个初值（wrap_content 的窗口会先按对话框宽度约 320dp 测量，
+                // 面板会被压窄），之后宽度由 PanelWindowFeature 随设置/拖动实时同步。
+                it.width = panelWidthPx(settingsStore.settingsFlow.value.displaySetting.floatingPanelWidthRatio)
             }
             onBackPressed {
                 tracker.collapse()
@@ -218,12 +230,13 @@ class ChatFloatingWindows(
     }
 
     /**
-     * 面板窗口只在展开时拿焦点：面板里有输入框，窗口可聚焦才能弹键盘；收起后恢复不可聚焦。
-     * 不能一劳永逸地在 layoutParams 里清掉 FLAG_NOT_FOCUSABLE——Android 会给 NOT_FOCUSABLE
-     * 窗口隐式启用 NOT_TOUCH_MODAL，清掉它又没显式补回时窗口会变成模态窗口，吞掉整个屏幕的触摸。
-     * 基础 flags 里 NOT_TOUCH_MODAL 始终显式保留，这里只切换 NOT_FOCUSABLE 一位。
+     * 面板窗口的两个运行期状态都在这里改：
+     * - 宽度：窗口矩形只覆盖面板可见部分，面板两侧的透明区不再拦截触摸；
+     * - 焦点：只在输入框按下/聚焦时临时放开（弹键盘用），失焦或收起立即恢复，
+     *   面板展开本身不抢前台应用的按键/输入法焦点。
+     * 系统窗口默认 flags 里始终带着 NOT_TOUCH_MODAL，窗口外的触摸本来就透传。
      */
-    private class PanelFocusFeature : FxFeature {
+    private class PanelWindowFeature : FxFeature {
         private var container: FxWindowContainer? = null
 
         override fun onAttach(scope: FxFeatureScope) {
@@ -234,11 +247,22 @@ class ChatFloatingWindows(
             container = null
         }
 
-        override fun onShow() {
-            container?.setWindowFocusable(true)
+        fun setWindowWidth(px: Int) {
+            val c = container ?: return
+            val width = px.coerceAtLeast(1)
+            if (c.windowParams.width == width) return
+            c.windowParams.width = width
+            // 改宽度要走 updateViewLayout，applyLayout 顺带按锚点(TOP_CENTER)重算坐标；
+            // 内容重测后 core 还会按新尺寸再校正一次位置
+            c.applyLayout(c.contentPosition().x, c.contentPosition().y, FxGravity.TOP_CENTER, c.isLtr)
+        }
+
+        fun setWindowFocusable(focusable: Boolean) {
+            container?.setWindowFocusable(focusable)
         }
 
         override fun onHide() {
+            // 收起后窗口不再接收输入，把按键/输入法焦点让回去
             container?.setWindowFocusable(false)
         }
     }
@@ -285,6 +309,15 @@ class ChatFloatingWindows(
     }
 
     private fun dp(value: Float): Float = value * context.resources.displayMetrics.density
+
+    // 用与 Compose 侧同一份尺寸（screenWidthDp * density）算窗口宽度，两边才能真正对齐；
+    // 直接用 widthPixels 在个别机型上会和 LocalConfiguration.screenWidthDp 差几像素，
+    // 窗口窄了会裁掉面板，宽了又会多出吃触摸的透明区
+    private fun panelWidthPx(ratio: Float): Int {
+        val configuration = context.resources.configuration
+        val screenWidthPx = configuration.screenWidthDp * context.resources.displayMetrics.density
+        return (screenWidthPx * FloatingPanelSizing.clampWidthRatio(ratio)).toInt().coerceAtLeast(1)
+    }
 }
 
 /** [replyMessageId] 是本轮正在写的助手消息，这一轮还没有输出时为空 */

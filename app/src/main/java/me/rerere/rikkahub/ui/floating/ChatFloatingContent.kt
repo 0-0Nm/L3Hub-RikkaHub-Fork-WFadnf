@@ -10,6 +10,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -357,6 +360,10 @@ fun ChatFloatingPanel(
     maxHeight: Dp,
     previewMaxHeight: Dp,
     onResize: (widthFraction: Float, heightFraction: Float, previewHeightDp: Int) -> Unit,
+    /** 拖动中实时通知窗口层改宽度，不然面板会被窗口边缘裁掉 */
+    onWidthChanged: (Float) -> Unit,
+    /** 输入框按下/失焦时通知窗口层切换可聚焦（弹键盘用） */
+    onReplyFocusChanged: (Boolean) -> Unit,
     onCollapse: () -> Unit,
     onDismiss: () -> Unit,
     onOpenConversation: () -> Unit,
@@ -386,7 +393,7 @@ fun ChatFloatingPanel(
     // weight + verticalScroll 吸收，标题栏和回复栏不会被挤出去
     val panelMaxHeight = maxHeight * height
 
-    // 窗口和屏幕一样宽，面板按比例收窄后居中
+    // 窗口宽度已经收窄到面板本身，这里的 fillMaxWidth 不会超出可见区域
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
         // 手柄放在面板下方而不是叠在角落里：叠着会盖住回复栏的发送按钮
         Column(
@@ -450,6 +457,7 @@ fun ChatFloatingPanel(
                         generating = state.generating,
                         onSend = onSend,
                         onStop = onStop,
+                        onReplyFocusChanged = onReplyFocusChanged,
                     )
                 }
             }
@@ -465,6 +473,7 @@ fun ChatFloatingPanel(
                         min = FloatingPanelSizing.MIN_WIDTH_RATIO,
                         max = FloatingPanelSizing.MAX_WIDTH_RATIO,
                     )
+                    onWidthChanged(width)
                     previewHeight = FloatingPanelSizing.draggedPreviewHeight(
                         currentDp = previewHeight,
                         deltaDp = delta.y / density.density,
@@ -688,6 +697,7 @@ private fun ReplyBar(
     generating: Boolean,
     onSend: (String) -> Unit,
     onStop: () -> Unit,
+    onReplyFocusChanged: (Boolean) -> Unit,
 ) {
     val focusManager = LocalFocusManager.current
     var text by rememberSaveable(conversationId) { mutableStateOf("") }
@@ -707,7 +717,16 @@ private fun ReplyBar(
         TextField(
             value = text,
             onValueChange = { text = it },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                // 窗口平时不可聚焦，手指按下时先临时放开，键盘才有办法弹出来
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown()
+                        onReplyFocusChanged(true)
+                    }
+                }
+                .onFocusChanged { onReplyFocusChanged(it.isFocused) },
             // 生成中发送的消息会排队，等这一轮结束后再发
             placeholder = {
                 Text(
