@@ -39,7 +39,8 @@ class LocalTools(
         options: List<LocalToolOption>,
         conversationId: Uuid? = null,
         assistants: List<Assistant> = emptyList(),
-        dispatcher: Assistant? = null,
+        // 派发工具必须知道是谁在派发，不传就不注册；不给默认值，免得调用方忘了传还静默生效
+        dispatcher: Assistant,
     ): List<Tool> {
         val tools = mutableListOf<Tool>()
         if (options.contains(LocalToolOption.JavascriptEngine)) {
@@ -67,7 +68,7 @@ class LocalTools(
         if (options.contains(LocalToolOption.ChartDisplay)) {
             tools.add(chartDisplayTool)
         }
-        if (options.contains(LocalToolOption.SubAgent) && conversationId != null && dispatcher != null) {
+        if (options.contains(LocalToolOption.SubAgent) && conversationId != null) {
             // 只把派发者允许的目标列进工具目录；留空时是不限制
             val subAgents = dispatchableSubAgents(dispatcher, assistants)
             if (subAgents.isNotEmpty()) {

@@ -35,15 +35,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import me.rerere.ui.components.RikkaConfirmDialog
-import me.rerere.ui.toast.ToastType
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.Calendar03
 import me.rerere.hugeicons.stroke.ChartLineData01
 import me.rerere.hugeicons.stroke.ClipboardPaste
-import me.rerere.hugeicons.stroke.Flowchart01
 import me.rerere.hugeicons.stroke.Clock01
+import me.rerere.hugeicons.stroke.Flowchart01
 import me.rerere.hugeicons.stroke.JavaScript
 import me.rerere.hugeicons.stroke.MessageQuestion
 import me.rerere.hugeicons.stroke.SmartPhone01
@@ -64,6 +62,8 @@ import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.hasUsageStatsPermission
 import me.rerere.rikkahub.utils.openUsageAccessSettings
+import me.rerere.ui.components.RikkaConfirmDialog
+import me.rerere.ui.toast.ToastType
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 import kotlin.uuid.Uuid
@@ -254,7 +254,7 @@ private fun AssistantLocalToolContent(
             // 这个范围都可能生效
             if (assistant.localTools.contains(LocalToolOption.SubAgent) || assistant.isSubAgent) {
                 item(
-                    onClick = if (subAgentCandidates.isNotEmpty()) {
+                    onClick = if (subAgentCandidates.isNotEmpty() || assistant.allowedSubAgentIds.isNotEmpty()) {
                         { showSubAgentPicker = true }
                     } else {
                         null
@@ -306,7 +306,9 @@ private fun AssistantLocalToolContent(
         candidates = subAgentCandidates,
         onDismiss = { showSubAgentPicker = false },
         onConfirm = { ids ->
-            onUpdate(assistant.copy(allowedSubAgentIds = ids))
+            // 只写回仍然可用的目标：设置被并发改过时也不会留下看不见的失效项
+            val validIds = subAgentCandidates.mapTo(mutableSetOf()) { it.id }
+            onUpdate(assistant.copy(allowedSubAgentIds = ids.intersect(validIds)))
             showSubAgentPicker = false
         },
     )
@@ -322,7 +324,9 @@ private fun SubAgentAllowlistDialog(
     onConfirm: (Set<Uuid>) -> Unit,
 ) {
     if (!show) return
-    var selected by remember { mutableStateOf(assistant.allowedSubAgentIds) }
+    var selected by remember(show, assistant.allowedSubAgentIds) {
+        mutableStateOf(assistant.allowedSubAgentIds)
+    }
 
     RikkaConfirmDialog(
         show = show,
@@ -361,7 +365,7 @@ private fun SubAgentAllowlistDialog(
                                 }
                             },
                         )
-                        .padding(vertical = 4.dp),
+                        .padding(vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {

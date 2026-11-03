@@ -52,6 +52,9 @@ internal fun Settings.withoutInvalidReferences(): Settings {
     val validModeInjectionIds = settings.modeInjections.map { it.id }.toSet()
     val validLorebookIds = settings.lorebooks.map { it.id }.toSet()
     val validQuickMessageIds = settings.quickMessages.map { it.id }.toSet()
+    // 只有仍然存在的子代理才能被派发；删掉目标或取消「设为子代理」后，
+    // 允许列表里的残留 id 会清掉，否则它会把派发能力永久锁死
+    val validSubAgentIds = settings.assistants.filter { it.isSubAgent }.map { it.id }.toSet()
     val validModelIds by lazy { settings.providers.flatMap { it.models }.mapTo(HashSet()) { it.id } }
     val asrProviders = settings.asrProviders.distinctBy { it.id }
     return settings.copy(
@@ -75,6 +78,10 @@ internal fun Settings.withoutInvalidReferences(): Settings {
                 // 过滤掉不存在的快捷消息 ID
                 quickMessageIds = assistant.quickMessageIds.filter { id ->
                     id in validQuickMessageIds
+                }.toSet(),
+                // 过滤掉不存在的、已取消子代理标记的、以及自己的 id
+                allowedSubAgentIds = assistant.allowedSubAgentIds.filter { id ->
+                    id != assistant.id && id in validSubAgentIds
                 }.toSet()
             )
         },

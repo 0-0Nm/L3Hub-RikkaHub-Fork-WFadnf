@@ -8,7 +8,8 @@ import org.junit.Test
 import kotlin.uuid.Uuid
 
 class SubAgentCandidatesTest {
-    private val dispatcher = Assistant(id = Uuid.random(), name = "main")
+    // 派发者自己也是子代理，才能覆盖「不能派发给自己」这条分支
+    private val dispatcher = Assistant(id = Uuid.random(), name = "main", isSubAgent = true)
     private val childA = Assistant(id = Uuid.random(), name = "Alpha", isSubAgent = true)
     private val childB = Assistant(id = Uuid.random(), name = "Beta", isSubAgent = true)
     private val plainAssistant = Assistant(id = Uuid.random(), name = "Plain")

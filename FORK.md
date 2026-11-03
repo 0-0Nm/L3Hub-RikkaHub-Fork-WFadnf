@@ -168,7 +168,7 @@ file:///data/user/0/me.rerere.rikkahub/files/upload/<uuid>.png
 实现要点：
 
 - 子代理跑在独立会话里，会话带 `parentConversationId`，挂在父会话下面，不占用主对话上下文
-- 子代理最多嵌套 4 层，超过后工具直接返回提示；不能把任务派发给自己
+- 子代理最多三代（主 → 子 → 孙），超过后工具直接返回提示；不能把任务派发给自己
 - 子代理会话就是普通会话：和别的会话一样出现在侧边栏与「历史会话」里，也能被搜索到；打开时侧边栏会跟着切到它自己的助手，`parentConversationId` 只用来画任务树
 - 数据库升到 v33，新增 `parent_conversation_id` / `sub_agent_task` / `sub_agent_state` 三列，走 Room 自动迁移
 - 子代理会话没有人在旁边点确认，工具调用一律按完全权限直接执行；`ask_user` 没有真人可答，直接返回提示让子代理自己决定

@@ -1821,8 +1821,8 @@
   <string name="assistant_page_allowed_sub_agents">Разрешённые субагенты</string>
   <string name="assistant_page_allowed_sub_agents_summary_all">Без ограничений</string>
   <string name="assistant_page_allowed_sub_agents_summary_selected">Выбрано: %1$d</string>
-  <string name="assistant_page_allowed_sub_agents_empty">Ни один другой ассистент не отмечен как субагент</string>
-  <string name="assistant_page_allowed_sub_agents_missing">Выбранные субагенты больше недоступны</string>
+  <string name="assistant_page_allowed_sub_agents_empty">Ни один другой ассистент не отмечен как субагент. Сначала включите «Сделать субагентом» в настройках этого ассистента.</string>
+  <string name="assistant_page_allowed_sub_agents_missing">Выбранные субагенты больше недоступны. Нажмите, чтобы выбрать заново.</string>
   <string name="assistant_page_allowed_sub_agents_dialog_desc">Отметьте субагентов, которым этот ассистент может передавать задачи. Если ничего не отмечено, ограничений нет.</string>
   <string name="assistant_page_local_tools_sub_agent_title">Запуск субагентов</string>
   <string name="assistant_page_memory_auto_compress">Автосжатие</string>

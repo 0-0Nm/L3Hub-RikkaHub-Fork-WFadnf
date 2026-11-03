@@ -2117,8 +2117,8 @@
   <string name="assistant_page_allowed_sub_agents">Allowed sub-agents</string>
   <string name="assistant_page_allowed_sub_agents_summary_all">Not restricted</string>
   <string name="assistant_page_allowed_sub_agents_summary_selected">%1$d selected</string>
-  <string name="assistant_page_allowed_sub_agents_empty">No other assistant is marked as a sub-agent</string>
-  <string name="assistant_page_allowed_sub_agents_missing">The selected sub-agents are no longer available</string>
+  <string name="assistant_page_allowed_sub_agents_empty">No other assistant is marked as a sub-agent. Turn on “Set as sub-agent” in that assistant first.</string>
+  <string name="assistant_page_allowed_sub_agents_missing">The selected sub-agents are no longer available. Tap to choose again.</string>
   <string name="assistant_page_allowed_sub_agents_dialog_desc">Pick the sub-agents this assistant may dispatch to. Leave all unchecked to allow every sub-agent.</string>
   <string name="chat_task_tree_button">Task tree</string>
   <string name="task_tree_title">Task tree</string>

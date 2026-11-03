@@ -1816,8 +1816,8 @@
   <string name="assistant_page_allowed_sub_agents">Erlaubte Sub-Agents</string>
   <string name="assistant_page_allowed_sub_agents_summary_all">Nicht eingeschränkt</string>
   <string name="assistant_page_allowed_sub_agents_summary_selected">%1$d ausgewählt</string>
-  <string name="assistant_page_allowed_sub_agents_empty">Kein anderer Assistent ist als Sub-Agent markiert</string>
-  <string name="assistant_page_allowed_sub_agents_missing">Die ausgewählten Sub-Agents sind nicht mehr verfügbar</string>
+  <string name="assistant_page_allowed_sub_agents_empty">Kein anderer Assistent ist als Sub-Agent markiert. Aktiviere zuerst „Als Sub-Agent festlegen“ in den Einstellungen dieses Assistenten.</string>
+  <string name="assistant_page_allowed_sub_agents_missing">Die ausgewählten Sub-Agents sind nicht mehr verfügbar. Tippe, um neu zu wählen.</string>
   <string name="assistant_page_allowed_sub_agents_dialog_desc">Wähle die Sub-Agents, an die dieser Assistent Aufgaben verteilen darf. Ohne Auswahl sind alle erlaubt.</string>
   <string name="assistant_page_local_tools_sub_agent_title">Sub-Agents verteilen</string>
   <string name="assistant_page_memory_auto_compress">Automatisch komprimieren</string>

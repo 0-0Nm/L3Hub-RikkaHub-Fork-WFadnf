@@ -2119,8 +2119,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_allowed_sub_agents">允许派发的子代理</string>
   <string name="assistant_page_allowed_sub_agents_summary_all">不限制</string>
   <string name="assistant_page_allowed_sub_agents_summary_selected">已选择 %1$d 个</string>
-  <string name="assistant_page_allowed_sub_agents_empty">没有其他助手被设为子代理</string>
-  <string name="assistant_page_allowed_sub_agents_missing">已选择的子代理都不可用了</string>
+  <string name="assistant_page_allowed_sub_agents_empty">没有其他助手被设为子代理。先到那个助手的「基础」里打开「设为子代理」</string>
+  <string name="assistant_page_allowed_sub_agents_missing">已选择的子代理都不可用了，点此重新选择</string>
   <string name="assistant_page_allowed_sub_agents_dialog_desc">勾选这个助手允许派发的子代理；全部不勾选表示不限制</string>
   <string name="chat_task_tree_button">任务树</string>
   <string name="task_tree_title">任务树</string>
