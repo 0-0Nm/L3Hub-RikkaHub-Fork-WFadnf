@@ -80,11 +80,7 @@ jobs:
               *) variant=release ;;
             esac
           fi
-          # 这两个组合发出去就是事故：包名/签名和 tag 对不上，事后只能重发
-          if [ "$variant" = "release" ] && [ -z "$tag" ]; then
-            echo "正式版必须给 tag：不带 tag 的手动构建只出预览包" >&2
-            exit 1
-          fi
+          # 正式版包套上预览 tag 会发成正式 Release，包名/签名和 tag 对不上，事后只能重发
           if [ "$variant" = "debug" ] && [ "$is_pre" = "false" ] && [ -n "$tag" ]; then
             echo "tag ${tag} 不带 -，是正式版，必须用 release 变体；只要预览包请用带 - 的 tag" >&2
             exit 1
