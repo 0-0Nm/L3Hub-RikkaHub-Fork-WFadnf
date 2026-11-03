@@ -535,23 +535,56 @@ debug 里 dex 有 38 个、release 压缩后只剩 2 个，差的就是 R8。上
 
 ## 发版：交给 GitHub Actions
 
-本机不跑 Gradle（Termux 上编译会把机器拖死），出包和发版都放在 runner 上：
+本机不跑 Gradle（Termux 上编译会把机器拖死），出包和发版都放在 runner 上。
+两条线共用 `build-apk.yml`，按 tag 形态分流：
 
-1. 改 `app/build.gradle.kts` 的 `versionCode` / `versionName`（每次各 +1，例如 279 / `L.3.1.1.101`），连同改动一起提交
-2. `git tag v3.1.1-preview.101 && git push origin v3.1.1-preview.101`
-3. tag 推上去自动触发 `build-apk.yml`：checkout（含子模块）→ pnpm 装 web-ui → `tools/build-apk.sh`（`:app:assembleGithubDebug`，跳过 lint vital）→ 产物改名 → 建 prerelease
+| tag | 变体 | 包名 | Release |
+|---|---|---|---|
+| `v3.1.1` | `githubRelease` | `com.rikkahub.l3hub.wfadnf` | 正式版（非 prerelease，自动成为 latest） |
+| `v3.1.1-preview.102` | `githubDebug` | `com.rikkahub.l3hub.wfadnf.debug` | Pre-release |
 
-产物是 `L3Hub-<tag>-arm64-v8a.apk` 加同名 `.sha256`：包名 `com.rikkahub.l3hub.wfadnf.debug`、arm64-v8a、
-R8 已开，可以直接覆盖安装。Release notes 由流程按「上一个 tag..本 tag」的提交自己生成——本仓库不走 PR，
+两个包是两个独立应用，可以同装在一台手机上，数据互不影响（预览版桌面名是 L3Hub Preview）。
+
+步骤：
+
+1. 改 `app/build.gradle.kts` 的 `versionCode` / `versionName`（每次各 +1，例如 280 / `L.3.1.1.102`），连同改动一起提交
+2. 打 tag 推上去：`git tag v3.1.1 && git push origin v3.1.1`（预览版就是 `v3.1.1-preview.102`）
+3. `build-apk.yml` 自动跑：checkout（含子模块）→ pnpm 装 web-ui → `tools/build-apk.sh`
+   （按 `VARIANT` 选 `:app:assembleGithubRelease` / `:app:assembleGithubDebug`，跳过 lint vital）→ 重命名产物 → 建 Release
+
+产物是 `L3Hub-<tag>-arm64-v8a.apk` 加同名 `.sha256`，arm64-v8a，R8 已开。
+Release notes 由流程按「上一个 tag..本 tag」的提交自己生成——本仓库不走 PR，
 GitHub 自带的 `--generate-notes` 只会给一行 Full Changelog。
+
+### 正式版的签名
+
+正式版密钥不在仓库里，走 repository secrets：
+
+| secret | 内容 |
+|---|---|
+| `ANDROID_RELEASE_KEYSTORE` | `l3hub-release.jks` 的 base64（单行） |
+| `ANDROID_RELEASE_STORE_PASSWORD` | store 口令 |
+| `ANDROID_RELEASE_KEY_ALIAS` | `l3hub` |
+| `ANDROID_RELEASE_KEY_PASSWORD` | key 口令（与 store 相同） |
+
+流程把 keystore 还原到 `$RUNNER_TEMP`，再把 `storeFile` / `storePassword` / `keyAlias` / `keyPassword`
+写进 `local.properties`——`app/build.gradle.kts` 的 release 签名只认这个文件。
+证书 SHA-256 指纹是 `0E:D1:33:05:52:46:D7:23:18:88:E7:21:97:F2:9F:A6:16:A6:53:67:DE:87:50:42:10:8F:9D:41:7B:58:35:42`，
+每次发版都会写进 Release notes，装之前可以核对。
+
+密钥丢了就再也发不出能覆盖安装的更新：本机备份在 `~/keystore-backup/`（jks + 口令），务必另外存一份。
+预览版不走这套：它用仓库里公开的 `keystore/l3hub-debug.jks`，泄露了也无所谓。
 
 几点：
 
 - `ci.yml` 只跑单测、只跟分支；tag 触发的构建由 `build-apk.yml` 负责，同一份代码不重复跑
 - `:terminal` / `:workspace` 带 CMake，配置阶段需要 NDK 28.2.13676358（约 700MB）。两个 workflow 都缓存了这个目录；
   不缓存的话每次现下，下坏过一次（`Error reading Zip content from a SeekableByteChannel`），整轮直接红
-- 同一个 tag 重跑不会失败：release 已存在时覆盖资产、刷新说明
-- 只想要个包不发版：`workflow_dispatch` 触发 `build-apk.yml`，tag 留空，产物在 run 的 artifact 里
+- 同一个 tag 重跑不会失败：release 已存在时覆盖资产、刷新说明，prerelease 标记也跟着 tag 走
+- 只想要个包不发版：`workflow_dispatch` 触发 `build-apk.yml`，tag 留空，产物在 run 的 artifact 里；
+  也可以在 inputs 的 `variant` 里手动指定出哪个变体
+- 正式版是 R8 全量混淆出来的，`proguard-rules.pro` 覆盖不到的反射装配（sshd、Koin、serialization 之类）
+  只有装到真机才看得出来，发版前先自己装一遍跑核心功能
 
 ## 和上游同步
 

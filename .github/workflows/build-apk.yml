@@ -1,19 +1,36 @@
-name: Build Debug APK
+name: Build APK
 
+# 两条线共用一套流程，按 tag 形态区分：
+#   v3.1.1              → 正式版：githubRelease 变体（包名不带 .debug），正式 Release
+#   v3.1.1-preview.102  → 预览版：githubDebug 变体（包名 .debug），Pre-release
+# 正式版签名密钥放在仓库 Secrets，见 FORK.md「发版」一节。
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: '发布 tag（留空只出 artifact）'
+        description: '发布 tag（留空只出 artifact 不发版；不带 - 视为正式版，带 - 视为预览版）'
         required: false
         default: ''
+      variant:
+        description: '构建变体'
+        required: false
+        type: choice
+        default: auto
+        options:
+          - auto
+          - release
+          - debug
   push:
     tags: ['v*']
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
       contents: write
     steps:
@@ -28,15 +45,91 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Restore debug keystore
+      # 变体、tag、是否 prerelease 全在第一步定下来：后面的步骤只读环境变量，
+      # 不用把 ${{ }} 判断散在各处
+      - name: Resolve build parameters
+        id: params
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_VARIANT: ${{ inputs.variant }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            tag="$REF_NAME"
+          else
+            tag="${INPUT_TAG:-}"
+          fi
+          # 首字符 - 会被 gh 当 flag；/ 和空格会让 cp 写进不存在的目录。
+          # 空 tag 是合法输入：手动触发只出 artifact、不发版
+          case "$tag" in
+            '' ) ;;
+            -*|*[!A-Za-z0-9._-]*)
+              echo "非法 tag：[${tag}]" >&2
+              exit 1 ;;
+          esac
+          # tag 带 -（preview / rc）算预览版，不带 - 算正式版
+          case "$tag" in
+            *-*) is_pre=true ;;
+            *) is_pre=false ;;
+          esac
+          variant="${INPUT_VARIANT:-auto}"
+          if [ "$variant" = "auto" ]; then
+            case "$tag" in
+              ''|*-*) variant=debug ;;
+              *) variant=release ;;
+            esac
+          fi
+          # 这两个组合发出去就是事故：包名/签名和 tag 对不上，事后只能重发
+          if [ "$variant" = "release" ] && [ -z "$tag" ]; then
+            echo "正式版必须给 tag：不带 tag 的手动构建只出预览包" >&2
+            exit 1
+          fi
+          if [ "$variant" = "debug" ] && [ "$is_pre" = "false" ] && [ -n "$tag" ]; then
+            echo "tag ${tag} 不带 -，是正式版，必须用 release 变体；只要预览包请用带 - 的 tag" >&2
+            exit 1
+          fi
+          {
+            echo "VARIANT=$variant"
+            echo "TAG=$tag"
+            echo "IS_PRERELEASE=$is_pre"
+          } >> "$GITHUB_ENV"
+          echo "artifact=L3Hub-${variant}" >> "$GITHUB_OUTPUT"
+          echo "变体=$variant tag=${tag:-（无，只出 artifact）} prerelease=$is_pre"
+
+      # 预览版用仓库里固定的 debug key（keystore/l3hub-debug.jks），正式版用 Secrets 里的
+      # release key。build.gradle.kts 的 release 签名只认 local.properties，这里按变体写进去。
+      - name: Restore signing keystore
         env:
           ANDROID_DEBUG_KEYSTORE: ${{ secrets.ANDROID_DEBUG_KEYSTORE }}
+          ANDROID_RELEASE_KEYSTORE: ${{ secrets.ANDROID_RELEASE_KEYSTORE }}
+          ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+          ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
           if [ -n "$ANDROID_DEBUG_KEYSTORE" ]; then
             mkdir -p "$HOME/.android"
-            echo "$ANDROID_DEBUG_KEYSTORE" | base64 -d > "$HOME/.android/debug.keystore"
+            printf '%s' "$ANDROID_DEBUG_KEYSTORE" | base64 -d > "$HOME/.android/debug.keystore"
             chmod 600 "$HOME/.android/debug.keystore"
           fi
+          if [ "$VARIANT" != "release" ]; then
+            exit 0
+          fi
+          if [ -z "${ANDROID_RELEASE_KEYSTORE:-}" ]; then
+            echo "正式版缺少 ANDROID_RELEASE_KEYSTORE secret" >&2
+            exit 1
+          fi
+          ks="$RUNNER_TEMP/l3hub-release.jks"
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE" | base64 -d > "$ks"
+          chmod 600 "$ks"
+          {
+            echo "storeFile=$ks"
+            echo "storePassword=$ANDROID_RELEASE_STORE_PASSWORD"
+            echo "keyAlias=$ANDROID_RELEASE_KEY_ALIAS"
+            echo "keyPassword=$ANDROID_RELEASE_KEY_PASSWORD"
+          } >> local.properties
+          echo "release keystore 已还原到 $ks"
 
       # :terminal / :workspace 带 CMake，AGP 每次配置阶段都要 NDK 28.2.13676358（约 700MB）。
       # 上一次「Error reading Zip content from a SeekableByteChannel」就是这份下载被截断，
@@ -85,50 +178,62 @@ jobs:
           # 本地默认跳过 Web UI；CI 装上 pnpm 后把它一起打进包，避免 APK 里缺 static/assets
           WITH_WEB_UI: '1'
         run: |
+          set -euo pipefail
           chmod +x gradlew tools/build-apk.sh
           ./tools/build-apk.sh
-          ls -l app/build/outputs/apk/github/debug/*.apk
-          sha256sum app/build/outputs/apk/github/debug/*.apk
+          ls -l "app/build/outputs/apk/github/${VARIANT}"/*.apk
+          sha256sum "app/build/outputs/apk/github/${VARIANT}"/*.apk
 
-      # Gradle 产出的名字是 app-github-arm64-v8a-debug.apk，下载下来分不清版本。
-      # 这里按 tag 重命名，并附一份 sha256 供校验。
-      - name: Collect APK
+      # 正式版换了包名和签名密钥，这一步把「装到手机上到底是什么」打进日志，
+      # 出问题时不用重新下载 APK 就能核对
+      - name: Verify APK
         env:
-          INPUT_TAG: ${{ inputs.tag }}
-          REF_NAME: ${{ github.ref_name }}
+          ANDROID_HOME: /usr/local/lib/android/sdk
         run: |
           set -euo pipefail
-          # tag 事件直接用 tag 名；手动触发没填 tag 时退回 build.gradle.kts 的 versionName，
-          # 否则产物会叫 L3Hub-master-arm64-v8a.apk
-          tag="${INPUT_TAG:-}"
-          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            tag="$REF_NAME"
+          apk=$(ls "app/build/outputs/apk/github/${VARIANT}"/*.apk)
+          build_tools=$(ls -d "$ANDROID_HOME/build-tools/"*/ | sort -V | tail -1)
+          "${build_tools}apksigner" verify --print-certs "$apk"
+          # 变体选错（正式版签成了 debug 包之类）在这里就红，不要等发出去才发现
+          pkg=$("${build_tools}aapt2" dump packagename "$apk" | tail -1)
+          want=com.rikkahub.l3hub.wfadnf
+          if [ "$VARIANT" = "debug" ]; then want="${want}.debug"; fi
+          if [ "$pkg" != "$want" ]; then
+            echo "包名对不上：${pkg} ≠ ${want}" >&2
+            exit 1
           fi
-          if [ -z "$tag" ]; then
-            tag="$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts | head -1)"
+          echo "包名：${pkg}"
+          "${build_tools}aapt2" dump badging "$apk" 2>/dev/null \
+            | grep -E '^(package|application-label|sdkVersion|targetSdkVersion)' || true
+          cert=$("${build_tools}apksigner" verify --print-certs "$apk" \
+            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)
+          echo "CERT_SHA256=$cert" >> "$GITHUB_ENV"
+
+      # Gradle 产出的名字是 app-github-arm64-v8a-release.apk，下载下来分不清版本。
+      # 这里按 tag 重命名，并附一份 sha256 供校验。
+      - name: Collect APK
+        run: |
+          set -euo pipefail
+          if [ -z "$TAG" ]; then
+            # 只出 artifact 时按 build.gradle.kts 的 versionName 命名，否则产物会叫 L3Hub-arm64-v8a.apk
+            TAG="$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts | head -1)"
+            echo "TAG=$TAG" >> "$GITHUB_ENV"
           fi
-          # 首字符 - 会被 gh 当 flag；/ 和空格会让 cp 写进不存在的目录
-          case "$tag" in
-            ''|-*|*[!A-Za-z0-9._-]*)
-              echo "非法 tag：[${tag}]" >&2
-              exit 1 ;;
-          esac
-          echo "TAG=$tag" >> "$GITHUB_ENV"
-          echo "产物 tag：$tag"
+          echo "产物 tag：$TAG"
 
           mkdir -p dist
-          mapfile -t apks < <(ls app/build/outputs/apk/github/debug/*.apk)
+          mapfile -t apks < <(ls "app/build/outputs/apk/github/${VARIANT}"/*.apk)
           if [ "${#apks[@]}" -ne 1 ]; then
             echo "期望恰好 1 个 APK，实际 ${#apks[@]} 个：${apks[*]:-无}" >&2
             exit 1
           fi
-          cp "${apks[0]}" "dist/L3Hub-${tag}-arm64-v8a.apk"
-          ( cd dist && sha256sum "L3Hub-${tag}-arm64-v8a.apk" > "L3Hub-${tag}-arm64-v8a.apk.sha256" )
+          cp "${apks[0]}" "dist/L3Hub-${TAG}-arm64-v8a.apk"
+          ( cd dist && sha256sum "L3Hub-${TAG}-arm64-v8a.apk" > "L3Hub-${TAG}-arm64-v8a.apk.sha256" )
           ls -l dist
 
       - uses: actions/upload-artifact@v4
         with:
-          name: L3Hub-debug
+          name: ${{ steps.params.outputs.artifact }}
           path: dist/*.apk
           if-no-files-found: error
 
@@ -141,6 +246,8 @@ jobs:
           # 本仓库不走 PR，GitHub 的 --generate-notes 只会给一行 Full Changelog。
           # 自己按「上一个 tag..这个 tag」列提交，读的人才知道这版改了什么。
           prev=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+          pkg=com.rikkahub.l3hub.wfadnf
+          version=$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts | head -1)
           {
             echo "## 本版改动"
             echo
@@ -155,9 +262,21 @@ jobs:
             echo
             echo "## 安装"
             echo
-            echo '`L3Hub-'"${TAG}"'-arm64-v8a.apk` — arm64-v8a，包名 `com.rikkahub.l3hub.wfadnf.debug`，覆盖安装即可。'
+            if [ "$VARIANT" = "release" ]; then
+              echo '`L3Hub-'"${TAG}"'-arm64-v8a.apk` — arm64-v8a 正式版，包名 `'"${pkg}"'`，版本 `'"${version}"'`。'
+              echo
+              echo '和预览版（包名 `'"${pkg}"'.debug`）是两个独立的应用，可以同装在一台手机上，互不覆盖数据。'
+              echo
+              echo '从预览版迁过来：在预览版里导出备份，装正式版后导入即可；备份里的附件、字体路径会按新包名自动改写。'
+            else
+              echo '`L3Hub-'"${TAG}"'-arm64-v8a.apk` — arm64-v8a 预览版，包名 `'"${pkg}"'.debug`，版本 `'"${version}"'`，覆盖安装即可。'
+            fi
             echo
             echo '校验：`sha256sum -c L3Hub-'"${TAG}"'-arm64-v8a.apk.sha256`'
+            if [ -n "${CERT_SHA256:-}" ]; then
+              echo
+              echo '签名证书 SHA-256：`'"${CERT_SHA256}"'`'
+            fi
           } > RELEASE_NOTES.md
           cat RELEASE_NOTES.md
 
@@ -165,8 +284,12 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "release $TAG 已存在，覆盖资产并刷新说明"
             gh release upload "$TAG" dist/*.apk dist/*.sha256 --clobber
-            gh release edit "$TAG" --notes-file RELEASE_NOTES.md
+            gh release edit "$TAG" --notes-file RELEASE_NOTES.md --prerelease="$IS_PRERELEASE"
           else
+            flags=()
+            if [ "$IS_PRERELEASE" = "true" ]; then
+              flags+=(--prerelease)
+            fi
             gh release create "$TAG" dist/*.apk dist/*.sha256 \
-              --prerelease --title "$TAG" --notes-file RELEASE_NOTES.md --target "$GITHUB_SHA"
+              --title "$TAG" --notes-file RELEASE_NOTES.md --target "$GITHUB_SHA" "${flags[@]}"
           fi

@@ -11,3 +11,6 @@ local.properties
 .cursor
 .history
 .kotlin
+# 正式版签名密钥不进仓库：走 repository secrets（见 FORK.md「正式版的签名」）
+keystore/*release*.jks
+keystore/*.pass
