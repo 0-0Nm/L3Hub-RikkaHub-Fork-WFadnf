@@ -1,6 +1,6 @@
 package me.rerere.rikkahub.ui.components.ai
 
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedVisibility as PlainAnimatedVisibility
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
@@ -167,41 +167,40 @@ fun ModelPickerTwoPane(
     }
 
     Row(modifier = Modifier.fillMaxSize()) {
-        // 包一层 Box：Row 直接调 AnimatedVisibility 会命中 RowScope 重载，它自己会带权重
-        Box {
-            AnimatedVisibility(
-                visible = sidebarExpanded,
-                enter = expandHorizontally(),
-                exit = shrinkHorizontally(),
-            ) {
-                Row(modifier = Modifier.fillMaxHeight()) {
-                    ModelPickerSidebar(
-                        providersByGroup = providersByGroup,
-                        orderedGroups = orderedGroups,
-                        showFavoritesEntry = favoriteModels.isNotEmpty(),
-                        showFavorites = showFavorites,
-                        selectedProviderId = selectedProviderId,
-                        onCollapse = { sidebarExpanded = false },
-                        onSelectFavorites = {
-                            showFavorites = true
-                            search = ""
-                        },
-                        onSelectProvider = { provider ->
-                            showFavorites = false
-                            search = ""
-                            selectedProviderId = provider.id
-                        },
-                        onOpenProvider = onOpenProvider,
-                        onReorderGroups = { reorderDialog = true },
-                        onOpenProviderSettings = onOpenProviderSettings,
-                    )
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .fillMaxHeight()
-                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                    )
-                }
+        // 在 Row 里直接写 AnimatedVisibility 会命中 RowScope 的那个重载（自带 weight 语义），
+        // 这里要的是不带作用域的动画，所以上面的 import 起了别名
+        PlainAnimatedVisibility(
+            visible = sidebarExpanded,
+            enter = expandHorizontally(),
+            exit = shrinkHorizontally(),
+        ) {
+            Row(modifier = Modifier.fillMaxHeight()) {
+                ModelPickerSidebar(
+                    providersByGroup = providersByGroup,
+                    orderedGroups = orderedGroups,
+                    showFavoritesEntry = favoriteModels.isNotEmpty(),
+                    showFavorites = showFavorites,
+                    selectedProviderId = selectedProviderId,
+                    onCollapse = { sidebarExpanded = false },
+                    onSelectFavorites = {
+                        showFavorites = true
+                        search = ""
+                    },
+                    onSelectProvider = { provider ->
+                        showFavorites = false
+                        search = ""
+                        selectedProviderId = provider.id
+                    },
+                    onOpenProvider = onOpenProvider,
+                    onReorderGroups = { reorderDialog = true },
+                    onOpenProviderSettings = onOpenProviderSettings,
+                )
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .fillMaxHeight()
+                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                )
             }
         }
 
