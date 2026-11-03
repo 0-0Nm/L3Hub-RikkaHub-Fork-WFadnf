@@ -80,7 +80,7 @@ fun ModelPickerTwoPane(
     modelType: ModelType,
     groups: List<String>,
     assignments: Map<String, String>,
-    favoriteIds: Set<Uuid>,
+    favoriteIds: List<Uuid>,
     onSelect: (Model) -> Unit,
     onReorderGroups: (List<String>) -> Unit,
     onToggleFavorite: (Uuid) -> Unit,
@@ -104,12 +104,15 @@ fun ModelPickerTwoPane(
                 .forEach { name -> if (name !in this) add(name) }
         }
     }
-    // favoriteIds 来自 settings.favoriteModels，保留着用户拖动出来的顺序，别再按供应商顺序重排
+    // favoriteIds 来自 settings.favoriteModels，保留着用户收藏出来的顺序，别再按供应商顺序重排
+    // 直接带出各自的供应商：同一个模型 id 可能挂在多个供应商下，收藏视图不能事后反查
     val favoriteModels = remember(providers, favoriteIds, modelType) {
         val order = favoriteIds.withIndex().associate { (index, id) -> id to index }
-        providers.flatMap { provider -> provider.models.filter { it.type == modelType } }
-            .filter { it.id in favoriteIds }
-            .sortedBy { order[it.id] ?: Int.MAX_VALUE }
+        providers.flatMap { provider ->
+            provider.models
+                .filter { it.type == modelType && it.id in favoriteIds }
+                .map { model -> model to provider }
+        }.sortedBy { (model, _) -> order[model.id] ?: Int.MAX_VALUE }
     }
 
     val initialProvider = remember(currentModel, providers) {
@@ -140,10 +143,7 @@ fun ModelPickerTwoPane(
                     .map { model -> model to provider }
             }
 
-            showFavorites -> favoriteModels.mapNotNull { model ->
-                providers.firstOrNull { provider -> provider.models.any { it.id == model.id } }
-                    ?.let { provider -> model to provider }
-            }
+            showFavorites -> favoriteModels
 
             selectedProvider != null -> selectedProvider.models
                 .filter { it.type == modelType }
@@ -162,7 +162,8 @@ fun ModelPickerTwoPane(
     // 只在切换供应商/切回收藏时定位，收藏切换会重算 models，跟着跳会打断操作
     LaunchedEffect(selectedProviderId, showFavorites) {
         val selectedIndex = models.indexOfFirst { it.first.id == currentModel }
-        if (selectedIndex > 0) listState.scrollToItem(selectedIndex)
+        // 换供应商时列表偏移还留在上一家，没命中就回到顶部
+        listState.scrollToItem(if (selectedIndex >= 0) selectedIndex else 0)
     }
 
     Row(modifier = Modifier.fillMaxSize()) {
@@ -317,7 +318,7 @@ fun ModelPickerTwoPane(
                         compact = compact,
                         onLongClick = { onEditModel(model, provider) },
                         // 搜索结果把多个供应商拍平了，卡片上得带上供应商名才分得清
-                        subtitle = contextWatermark(model, provider.name.takeIf { query.isNotBlank() }),
+                        subtitle = contextWatermark(model, provider.name.takeIf { query.isNotBlank() || showFavorites }),
                         tail = {
                             IconButton(
                                 onClick = { onToggleFavorite(model.id) },
@@ -325,7 +326,7 @@ fun ModelPickerTwoPane(
                             ) {
                                 Icon(
                                     imageVector = HeartIcon,
-                                    contentDescription = stringResource(R.string.model_list_favorite),
+                                    contentDescription = "${stringResource(R.string.model_list_favorite)} ${model.displayName}",
                                     modifier = Modifier.size(20.dp),
                                     tint = if (model.id in favoriteIds) {
                                         MaterialTheme.colorScheme.primary
@@ -527,7 +528,8 @@ private fun ProviderLogoButton(
             .size(44.dp)
             .clip(shape)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .semantics { contentDescription = name },
+            // 供应商图标自带 contentDescription，再叠一层会被读两遍；收藏入口的心形没有，才补
+            .then(if (isFavoriteEntry) Modifier.semantics { contentDescription = name } else Modifier),
         shape = shape,
         color = if (selected) {
             MaterialTheme.colorScheme.primaryContainer

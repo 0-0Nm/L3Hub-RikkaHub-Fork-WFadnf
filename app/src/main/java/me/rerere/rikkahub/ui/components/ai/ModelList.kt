@@ -358,7 +358,7 @@ fun ModelListSheet(
                 modelType = state.type,
                 groups = settings.providerGroups,
                 assignments = settings.providerGroupAssignments,
-                favoriteIds = settings.favoriteModels.toSet(),
+                favoriteIds = settings.favoriteModels,
                 onSelect = {
                     onSelect(it)
                     dismiss()
