@@ -944,7 +944,7 @@
   <string name="setting_page_extensions">الإضافات</string>
   <string name="setting_page_extensions_desc">إدارة حقن المطالبات والمهارات والمزيد</string>
   <string name="setting_page_general_settings">الإعدادات العامة</string>
-  <string name="setting_page_interaction_notification_settings">التفاعل &amp;amp; الإشعارات</string>
+  <string name="setting_page_interaction_notification_settings">التفاعل &amp; الإشعارات</string>
   <string name="setting_page_mcp">MCP</string>
   <string name="setting_page_mcp_desc">تكوين خوادم MCP</string>
   <string name="setting_page_message_display_settings">عرض الرسائل</string>

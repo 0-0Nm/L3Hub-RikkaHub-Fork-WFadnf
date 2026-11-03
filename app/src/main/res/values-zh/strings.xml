@@ -674,7 +674,7 @@
   <string name="setting_display_page_chat_font_family_serif">衬线体</string>
   <string name="setting_display_page_chat_font_family_title">聊天字体</string>
   <string name="setting_display_page_font_global_title">应用到全局</string>
-  <string name="setting_display_page_font_global_desc">开启后所选字体用于整个应用（设置、列表等全部界面），不限于聊天</string>
+  <string name="setting_display_page_font_global_desc">开启后所选字体应用于整个应用，不限于聊天</string>
   <string name="setting_display_page_chat_list_model_icon_desc">是否在聊天列表消息中显示模型图标</string>
   <string name="setting_display_page_chat_list_model_icon_title">聊天列表模型图标</string>
   <string name="setting_display_page_code_block_auto_collapse_desc">默认自动折叠代码块</string>
@@ -687,7 +687,7 @@
   <string name="setting_display_page_custom_font_import_failed">导入字体失败：%1$s</string>
   <string name="setting_display_page_custom_font_import_success">自定义字体已导入</string>
   <string name="setting_display_page_custom_font_not_imported">未导入自定义字体。支持 .ttf、.otf 和 .ttc 文件。</string>
-  <string name="setting_display_page_custom_font_chain_desc">已导入 %1$d 款字体，按导入顺序组成回退链：同一字形靠前的优先，缺失的自动用下一款</string>
+  <string name="setting_display_page_custom_font_chain_desc">已导入 %1$d 款字体，按导入顺序组成回退链；同字形靠前者优先，缺失字形自动使用下一款</string>
   <string name="setting_display_page_custom_font_chain_position">回退链第 %1$d 款</string>
   <string name="setting_display_page_custom_font_fallback_name">字体 %1$d</string>
   <string name="setting_display_page_custom_font_move_up">上移</string>
@@ -972,10 +972,10 @@
   <string name="palette_role_tertiary_fixed_dim">固定第三色（暗）</string>
   <string name="palette_role_on_tertiary_fixed">固定第三色文字</string>
   <string name="palette_role_on_tertiary_fixed_variant">固定第三色文字（变体）</string>
-  <string name="palette_use_primary">发送/生成按钮、链接、选中标签、开关轨道、强调文字与图标、统计图、主题色块</string>
+  <string name="palette_use_primary">发送与生成按钮、链接、选中标签、开关轨道、强调文字与图标、图表、主题色块</string>
   <string name="palette_use_on_primary">主色底上的文字与图标（按钮、选中项）</string>
   <string name="palette_use_primary_container">用户消息气泡、选中项与图标底色</string>
-  <string name="palette_use_on_primary_container">用户气泡与选中项上的文字、工具卡片文字</string>
+  <string name="palette_use_on_primary_container">用户消息气泡与选中项上的文字、工具卡片文字</string>
   <string name="palette_use_inverse_primary">未接线（仅调试页引用）</string>
   <string name="palette_use_secondary">思考与工具过程文字、二维码、次要图标</string>
   <string name="palette_use_on_secondary">未接线（仅调试页引用）</string>
@@ -990,7 +990,7 @@
   <string name="palette_use_surface">弹窗、菜单与悬浮面板底、抽屉、表情面板</string>
   <string name="palette_use_on_surface">标题与选中项文字、JSON 值、控制台日志</string>
   <string name="palette_use_surface_variant">行内代码与消息片段底、表情分类底、抽屉项、热力图空格</string>
-  <string name="palette_use_on_surface_variant">说明与辅助文字、时间戳、代码行号、统计坐标（全应用使用最频繁）</string>
+  <string name="palette_use_on_surface_variant">说明与辅助文字、时间戳、代码行号、统计图标签（全应用使用最频繁）</string>
   <string name="palette_use_surface_dim">未接线（仅调试页引用）</string>
   <string name="palette_use_surface_bright">列表项与搜索框底、玻璃效果底</string>
   <string name="palette_use_surface_container_lowest">悬浮窗消息预览底</string>
@@ -998,7 +998,7 @@
   <string name="palette_use_surface_container">顶栏、代码块与表格底</string>
   <string name="palette_use_surface_container_high">AI 气泡、思考链与附件底、工具卡片</string>
   <string name="palette_use_surface_container_highest">卡片与列表分组底、轨道与未选中项</string>
-  <string name="palette_use_inverse_surface">提示条（Snackbar）背景（M3 组件内部使用）</string>
+  <string name="palette_use_inverse_surface">提示条（Snackbar）背景，由 M3 组件内部使用</string>
   <string name="palette_use_inverse_on_surface">提示条（Snackbar）文字、图片上的关闭图标</string>
   <string name="palette_use_surface_tint">未接线（仅调试页引用）</string>
   <string name="palette_use_error">错误与失败文字、删除操作、超限提示、Shell 非零退出码</string>
@@ -1007,7 +1007,7 @@
   <string name="palette_use_on_error_container">错误提示条上的文字与图标</string>
   <string name="palette_use_outline">卡片与组件描边、分隔线、空闲状态色</string>
   <string name="palette_use_outline_variant">分隔线与输入框描边、代码块边框</string>
-  <string name="palette_use_scrim">弹窗与浮窗背后遮罩、图片遮罩</string>
+  <string name="palette_use_scrim">弹窗与悬浮窗背后遮罩、图片遮罩</string>
   <string name="palette_use_primary_fixed">未接线（保留以兼容旧配置）</string>
   <string name="palette_use_primary_fixed_dim">未接线（保留以兼容旧配置）</string>
   <string name="palette_use_on_primary_fixed">未接线（保留以兼容旧配置）</string>
@@ -1041,15 +1041,15 @@
   <string name="palette_slot_title_text">标题文字</string>
   <string name="palette_slot_use_title_text">页面大标题</string>
   <string name="palette_slot_body_text">正文文字</string>
-  <string name="palette_slot_use_body_text">用于消息正文与设置项名称</string>
+  <string name="palette_slot_use_body_text">消息正文与设置项名称</string>
   <string name="palette_slot_caption_text">说明文字</string>
-  <string name="palette_slot_use_caption_text">用于辅助说明文字、时间戳与输入框提示</string>
+  <string name="palette_slot_use_caption_text">辅助说明文字、时间戳与输入框提示</string>
   <string name="palette_slot_accent_text">强调文字</string>
-  <string name="palette_slot_use_accent_text">用于链接与强调词</string>
+  <string name="palette_slot_use_accent_text">链接与强调词</string>
   <string name="palette_slot_accent_icon">强调图标</string>
-  <string name="palette_slot_use_accent_icon">用于返回箭头、加号与开启状态的开关</string>
+  <string name="palette_slot_use_accent_icon">返回箭头、加号与已开启的开关</string>
   <string name="palette_slot_button">按钮</string>
-  <string name="palette_slot_use_button">用于发送按钮与确认按钮</string>
+  <string name="palette_slot_use_button">发送按钮与确认按钮</string>
   <string name="palette_slot_button_text">按钮文字</string>
   <string name="palette_slot_use_button_text">按钮上的文字与图标</string>
   <string name="palette_slot_divider">分隔线</string>
@@ -1068,10 +1068,10 @@
   <string name="setting_palette_page_mode_roles">按颜色 · 48</string>
   <string name="setting_palette_page_slot_custom">已修改</string>
   <string name="setting_palette_page_slot_follow_role">跟随颜色</string>
-  <string name="setting_palette_page_impact_none">此颜色未画在界面任何位置（保留以兼容旧配置）</string>
-  <string name="setting_palette_page_impact_unused">示意图中没有出现此颜色（界面其它区域可能用到，见上方说明）</string>
+  <string name="setting_palette_page_impact_none">此颜色未用于界面任何位置（保留以兼容旧配置）</string>
+  <string name="setting_palette_page_impact_unused">示意图中未出现此颜色（界面其它区域可能用到，见上方说明）</string>
   <string name="setting_palette_page_impact_covered">已单独设置（覆盖此色）</string>
-  <string name="setting_palette_page_impact_hint">品红 = 改这一格会跟着变的位置</string>
+  <string name="setting_palette_page_impact_hint">品红标记修改此颜色会随之变化的位置</string>
   <string name="setting_palette_page_preview_show">预览界面</string>
   <string name="setting_palette_page_preview_hide">收起</string>
   <string name="palette_style_mono">单色</string>
@@ -1081,7 +1081,7 @@
   <string name="palette_style_vivid">鲜艳</string>
   <string name="palette_style_muted">柔和</string>
   <string name="setting_palette_page_probe">编辑模式</string>
-  <string name="setting_palette_page_probe_desc">点击界面任意位置，查看其颜色并当场修改</string>
+  <string name="setting_palette_page_probe_desc">点击界面任意位置，查看其颜色并直接修改</string>
   <string name="palette_role_on_primary">主色文字</string>
   <string name="palette_role_error">错误色</string>
   <string name="palette_role_background">背景色</string>
@@ -1101,7 +1101,7 @@
   <string name="setting_palette_page_export">导出调色板</string>
   <string name="setting_palette_page_export_desc">将调色板设置保存为 JSON 文件</string>
   <string name="setting_palette_page_copy">复制到剪贴板</string>
-  <string name="setting_palette_page_copy_desc">复制同一份 JSON，便于分享</string>
+  <string name="setting_palette_page_copy_desc">复制当前 JSON，便于分享</string>
   <string name="setting_palette_page_import">导入调色板</string>
   <string name="setting_palette_page_import_desc">使用 JSON 文件替换当前调色板设置</string>
   <string name="setting_palette_page_export_done">调色板已导出</string>
@@ -1430,7 +1430,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_detail_enable_shell_desc">允许此工作区使用本地Rootfs运行终端环境</string>
   <string name="workspace_detail_tool_approval">工具审批</string>
   <string name="workspace_detail_tool_approval_desc">启用后，AI 调用此工具前需要用户确认</string>
-  <string name="workspace_detail_tool_approval_permission_hint">这些开关仅在「逐项确认」档位生效；当前助手为「%1$s」，以该档位为准</string>
+  <string name="workspace_detail_tool_approval_permission_hint">这些开关仅在「逐项确认」模式下生效；当前助手为「%1$s」，以该模式为准</string>
   <string name="workspace_detail_tool_list_files">列出文件</string>
   <string name="workspace_detail_tool_read_file">读取文件</string>
   <string name="workspace_detail_tool_write_file">写入文件</string>
@@ -1640,7 +1640,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_display_page_background_effect_glass">玻璃</string>
   <string name="setting_display_page_background_effect_off">关闭</string>
   <string name="setting_display_page_input_layout_title">输入框布局</string>
-  <string name="setting_display_page_input_layout_desc">单行模式将模型选择收入思考强度菜单，输入相关按钮排列在同一行</string>
+  <string name="setting_display_page_input_layout_desc">单行模式将模型选择并入思考强度菜单，输入相关按钮排列在同一行</string>
   <string name="setting_display_page_input_layout_single">单行</string>
   <string name="setting_display_page_input_layout_double">双行</string>
   <string name="safe_mode_enter_app">进入应用</string>
@@ -1896,8 +1896,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chat_page_compress_not_enough_messages">可压缩的消息不足，请减少保留的消息数</string>
   <string name="chat_page_compress_handle_pending_tools">压缩前请先处理待处理的工具调用</string>
   <string name="chat_page_compress_tool_call_response">模型试图调用工具，而不是编写摘要。请重试。</string>
-  <string name="chat_page_compress_truncated">摘要生成到一半被截断，请重试</string>
-  <string name="chat_page_compress_malformed">模型没有返回可用的摘要，请重试</string>
+  <string name="chat_page_compress_truncated">摘要生成中途被截断，请重试</string>
+  <string name="chat_page_compress_malformed">模型未返回可用摘要，请重试</string>
   <string name="assistant_page_memory_auto_dream">自动做梦</string>
   <string name="assistant_page_memory_auto_dream_desc">聊天暂停后，在后台将聊天内容转为记忆。关闭后，仅在点击“立即做梦”时执行此操作</string>
   <string name="chat_message_usage_title">用量</string>
@@ -2037,7 +2037,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_ssh_editor_missing_password">请填写密码</string>
   <string name="workspace_ssh_editor_missing_private_key">请填写或导入私钥</string>
   <string name="workspace_ssh_editor_credentials_lost">已保存的凭据不可用</string>
-  <string name="workspace_ssh_editor_credentials_lost_desc">这些凭据由其他设备或应用密钥加密（如恢复备份后），当前无法解密。请重新填写并保存</string>
+  <string name="workspace_ssh_editor_credentials_lost_desc">这些凭据由其他设备或应用的密钥加密（如恢复备份后），当前无法解密。请重新填写并保存</string>
   <string name="workspace_ssh_editor_dir_denied">%1$s（无访问权限，请选择 SSH 用户可访问的目录）</string>
   <string name="workspace_ssh_editor_dir_not_directory">%1$s（不是目录）</string>
   <string name="workspace_ssh_editor_auth_failed_key">服务器拒绝了该密钥。请确认对应公钥已写入服务器的 ~/.ssh/authorized_keys，且 ~/.ssh 权限为 700、authorized_keys 为 600</string>
@@ -2096,17 +2096,17 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="floating_chat_status_done">回复完成</string>
   <string name="floating_chat_status_idle">空闲</string>
   <string name="floating_bubble_icon_title">悬浮球图标</string>
-  <string name="floating_bubble_icon_desc">收起时显示的图标</string>
+  <string name="floating_bubble_icon_desc">悬浮窗收起时显示的图标</string>
   <string name="floating_bubble_icon_preset">内置图标</string>
   <string name="floating_bubble_icon_custom">自定义</string>
   <string name="floating_bubble_icon_app_logo">应用图标</string>
   <string name="floating_bubble_icon_emoji">Emoji</string>
   <string name="floating_bubble_icon_gallery">从相册选择</string>
-  <string name="floating_bubble_icon_load_failed">这个图片读不出来</string>
+  <string name="floating_bubble_icon_load_failed">无法读取该图片</string>
   <string name="floating_panel_width">面板宽度</string>
   <string name="floating_panel_height">面板最大高度</string>
   <string name="floating_preview_height">预览区高度</string>
-  <string name="floating_panel_resize">拖动调整面板大小</string>
+  <string name="floating_panel_resize">拖动调整面板尺寸</string>
   <string name="floating_size_dp">%1$d dp</string>
   <string name="setting_model_page_memory_model">记忆整理模型</string>
   <string name="setting_model_page_memory_model_desc">用于在后台将对话整理为长期记忆的模型；未设置时使用快速模型</string>
@@ -2131,12 +2131,12 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_memory_auto_compress">自动压缩</string>
   <string name="assistant_page_memory_auto_compress_desc">上下文占用达到阈值时，先压缩历史再回复，效果与手动压缩一致</string>
   <string name="assistant_page_memory_auto_compress_loop">循环压缩</string>
-  <string name="assistant_page_memory_auto_compress_loop_desc">模型循环中请求超出上下文上限时，自动压缩并继续当前生成。此时只保留最后一条回复，更早的消息都压进摘要</string>
+  <string name="assistant_page_memory_auto_compress_loop_desc">模型循环中请求超出上下文上限时，自动压缩并继续当前生成；此时只保留最后一条回复，更早的消息并入摘要</string>
   <string name="assistant_page_memory_auto_compress_threshold">触发阈值</string>
   <string name="assistant_page_memory_auto_compress_threshold_desc">WARN 为预警线，MAX 为硬上限</string>
   <string name="assistant_page_memory_auto_compress_target">压缩后保留</string>
   <string name="assistant_page_memory_auto_compress_target_range">取值范围 %1$d–%2$d</string>
-  <string name="assistant_page_memory_auto_compress_target_desc">指定不参与压缩的最近上下文量；按 Token 计算时，切割点落在思考、正文与工具调用的边界</string>
+  <string name="assistant_page_memory_auto_compress_target_desc">指定不参与压缩的最近上下文量；按 Token 计算时，切割点对齐思考、正文与工具调用的边界</string>
   <string name="assistant_page_memory_auto_compress_messages">%1$d 条消息</string>
   <string name="assistant_page_memory_auto_compress_tokens">%1$d 个 Token</string>
   <string name="assistant_page_memory_auto_compress_mode_messages">按消息数</string>
@@ -2152,7 +2152,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="task_tree_collapse">收起</string>
 
   <string name="chat_page_compress_before_send_title">上下文已满</string>
-  <string name="chat_page_compress_before_send_desc">发送前将自动压缩对话历史，压缩完成后自动发送</string>
+  <string name="chat_page_compress_before_send_desc">发送前压缩对话历史，完成后自动发送</string>
   <string name="chat_page_compress_and_send">压缩并发送</string>
   <string name="chat_page_auto_compress_failed">自动压缩失败</string>
 
@@ -2161,12 +2161,12 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_page_preferences_notification_battery_optimization_granted">已在白名单中，后台运行不受电池优化限制</string>
   <string name="chat_message_expand_content">展开</string>
   <string name="chat_message_collapse_content">收起</string>
-  <string name="chat_message_expand_earlier_steps">展开前 %1$d 步</string>
-  <string name="chat_message_collapse_earlier_steps">收起前 %1$d 步</string>
+  <string name="chat_message_expand_earlier_steps">展开此前 %1$d 步</string>
+  <string name="chat_message_collapse_earlier_steps">收起此前 %1$d 步</string>
 
   <string name="chat_page_stats">统计</string>
   <string name="setting_page_profile">个人资料</string>
-  <string name="setting_page_profile_desc">点击修改昵称，点击头像更换头像</string>
+  <string name="setting_page_profile_desc">点击昵称可修改，点击头像可更换</string>
 
   <string name="chat_page_week_this">本周</string>
   <string name="chat_page_week_last">上周</string>
@@ -2189,9 +2189,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="stats_page_export_done">已保存至 %1$s</string>
   <string name="stats_page_export_failed">导出失败：%1$s</string>
   <string name="setting_display_page_blur_opacity_title">模糊不透明度</string>
-  <string name="setting_display_page_blur_opacity_desc">模糊效果下气泡、输入框与顶栏按钮的底色浓度，数值越低越通透</string>
+  <string name="setting_display_page_blur_opacity_desc">模糊效果下气泡、输入框与顶栏按钮的着色强度，数值越低越通透</string>
   <string name="setting_display_page_glass_opacity_title">玻璃透明度</string>
-  <string name="setting_display_page_glass_opacity_desc">设置项、选项卡与顶栏按钮的玻璃底色浓度，数值越低越通透；关闭模糊效果后恢复实色</string>
+  <string name="setting_display_page_glass_opacity_desc">设置项、选项卡与顶栏按钮的玻璃背景着色强度，数值越低越通透；关闭模糊效果后恢复实色</string>
   <string name="setting_display_page_full_width_title">全宽组件</string>
   <string name="setting_display_page_full_width_desc">气泡与卡片撑满屏幕、圆角改为直角；输入框与顶栏取消左右留白</string>
   <string name="setting_display_page_empty_slogan_title">新对话标语</string>
@@ -2241,7 +2241,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chat_page_worldbook_injected">已注入世界书 %1$d 条</string>
   <string name="reasoning_ultra">极致</string>
   <string name="setting_display_page_use_l3hub_reasoning_title">使用 L3Hub 思考强度图标</string>
-  <string name="setting_display_page_use_l3hub_reasoning_desc">将思考强度图标改为颜色指示（Off 灰色，Auto 至 Ultra 由绿渐变至红），滑块改用带圆形滑钮的条形样式</string>
+  <string name="setting_display_page_use_l3hub_reasoning_desc">将思考强度图标改为颜色指示（Off 为灰，Auto 至 Ultra 从绿渐变至红），滑块改用带圆形滑钮的条形样式</string>
   <string name="chat_page_export_xml">XML</string>
   <string name="chat_page_export_xml_desc">导出保留原始标记的 XML 文本</string>
   <string name="chat_page_shortcuts">快捷入口</string>
@@ -2250,7 +2250,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_tab_heartbeat">心跳</string>
   <string name="assistant_detail_heartbeat_desc">定时主动发起对话，也可仅用作提醒</string>
   <string name="heartbeat_page_enable_title">启用心跳</string>
-  <string name="heartbeat_page_enable_desc">到点让助手主动说话；未选择模型时仅发送通知</string>
+  <string name="heartbeat_page_enable_desc">到达触发时间后由助手主动发起对话；未选择模型时仅发送通知</string>
   <string name="heartbeat_page_interval_title">间隔时间</string>
   <string name="heartbeat_page_interval_desc">两次心跳之间的最小间隔（分钟）</string>
   <string name="heartbeat_page_hours_title">活跃时间段</string>
@@ -2258,12 +2258,12 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="heartbeat_page_hours_start">开始</string>
   <string name="heartbeat_page_hours_end">结束</string>
   <string name="heartbeat_page_prompt_title">心跳提示词</string>
-  <string name="heartbeat_page_prompt_desc">到点发送给助手的内容</string>
+  <string name="heartbeat_page_prompt_desc">触发时发送给助手的内容</string>
   <string name="heartbeat_page_prompt_placeholder">例如：看看现在几点，说点什么</string>
   <string name="heartbeat_page_model_title">心跳模型</string>
   <string name="heartbeat_page_model_desc">仅闹钟（未选择模型）</string>
   <string name="setting_display_page_input_padding_title">输入框左右内边距</string>
-  <string name="setting_display_page_input_padding_desc">输入框内容距左右边框 %1$d dp；调小可使内部圆角更贴合</string>
+  <string name="setting_display_page_input_padding_desc">输入框内容距左右边框 %1$d dp；调小后内部圆角更贴合</string>
   <string name="model_list_search">搜索模型</string>
   <string name="model_list_reorder_groups">分组排序</string>
   <string name="about_page_original_author">原作者</string>
@@ -2272,10 +2272,10 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="about_page_sponsor_desc">打开赞助页面，支持原作者 re-ovo (RE)</string>
   <string name="about_page_attribution">本应用为 RikkaHub 的修改版本，原作者署名与版权归 re-ovo (RE) 所有，修改部分由本分支维护者负责。若喜欢本应用，请支持原作者。</string>
   <string name="setting_display_page_message_nav_position_title">消息导航位于左侧</string>
-  <string name="setting_display_page_message_nav_position_desc">滚动时将边缘的消息横条移至左侧；默认位于右侧</string>
+  <string name="setting_display_page_message_nav_position_desc">滚动时将边缘的消息导航条移至左侧；默认位于右侧</string>
   <string name="task_tree_task">任务</string>
   <string name="setting_display_page_disable_animations_title">关闭所有动画</string>
-  <string name="setting_display_page_disable_animations_desc">界面切换与卡片展开等直接跳变，不使用 Material 动效</string>
+  <string name="setting_display_page_disable_animations_desc">界面切换与卡片展开直接跳变，不使用 Material 动效</string>
   <string name="heartbeat_page_model_clear">清除当前</string>
   <string name="chat_page_select_multiple">多选</string>
   <string name="chat_page_selected_count">已选 %1$d 项</string>
@@ -2300,7 +2300,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_media_page_webdav_path">目录</string>
   <string name="task_tree_generation">第 %1$d 代</string>
   <string name="workspace_revert_turn">撤销本轮修改</string>
-  <string name="workspace_revert_confirm">还原本轮修改过的文件至修改前状态？本轮新建的文件将被删除</string>
+  <string name="workspace_revert_confirm">将本轮修改过的文件还原至修改前的状态？本轮新建的文件将被删除</string>
   <string name="workspace_revert_confirm_action">撤销</string>
   <string name="workspace_revert_nothing">无可还原的内容</string>
   <string name="workspace_revert_done">已还原 %1$d 个文件</string>

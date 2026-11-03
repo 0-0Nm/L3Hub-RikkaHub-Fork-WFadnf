@@ -901,7 +901,7 @@
   <string name="setting_page_extensions">Extensions</string>
   <string name="setting_page_extensions_desc">Manage prompt injections, skills and more</string>
   <string name="setting_page_general_settings">General Settings</string>
-  <string name="setting_page_interaction_notification_settings">Interaction &amp;amp; Notifications</string>
+  <string name="setting_page_interaction_notification_settings">Interaction &amp; Notifications</string>
   <string name="setting_page_mcp">MCP</string>
   <string name="setting_page_mcp_desc">Configure MCP Servers</string>
   <string name="setting_page_message_display_settings">Message Display</string>
@@ -1115,7 +1115,7 @@
   <string name="setting_palette_page_impact_none">Not used anywhere in the UI (kept for compatibility with old configs)</string>
   <string name="setting_palette_page_impact_unused">This color does not appear in the preview (it may be used elsewhere in the UI — see the description above)</string>
   <string name="setting_palette_page_impact_covered">Set separately (overrides this color)</string>
-  <string name="setting_palette_page_impact_hint">Magenta = places this color affects</string>
+  <string name="setting_palette_page_impact_hint">Magenta marks the places affected by this color</string>
   <string name="setting_palette_page_preview_show">Preview</string>
   <string name="setting_palette_page_preview_hide">Hide</string>
   <string name="palette_style_mono">Monochrome</string>
@@ -2100,7 +2100,7 @@
   <string name="floating_bubble_icon_app_logo">App icon</string>
   <string name="floating_bubble_icon_emoji">Emoji</string>
   <string name="floating_bubble_icon_gallery">Choose from gallery</string>
-  <string name="floating_bubble_icon_load_failed">Could not read that image</string>
+  <string name="floating_bubble_icon_load_failed">Unable to read the image</string>
   <string name="floating_panel_width">Panel width</string>
   <string name="floating_panel_height">Max panel height</string>
   <string name="floating_preview_height">Preview height</string>
@@ -2164,7 +2164,7 @@
 
   <string name="chat_page_stats">Stats</string>
   <string name="setting_page_profile">Profile</string>
-  <string name="setting_page_profile_desc">Tap to change your name; tap the avatar to change it</string>
+  <string name="setting_page_profile_desc">Tap your name to edit it; tap the avatar to change it</string>
 
   <string name="chat_page_week_this">This week</string>
   <string name="chat_page_week_last">Last week</string>

@@ -2090,7 +2090,7 @@
   <string name="palette_slot_use_user_bubble">使用者訊息氣泡背景</string>
   <string name="palette_slot_use_user_bubble_text">使用者訊息氣泡文字</string>
   <string name="palette_use_background">聊天頁根背景，常被背景圖覆蓋</string>
-  <string name="palette_use_error">刪除按鈕與失敗圖示</string>
+  <string name="palette_use_error">錯誤與失敗文字、刪除操作、超限提示、Shell 非零退出碼</string>
   <string name="palette_use_error_container">錯誤提示條與失敗氣泡</string>
   <string name="palette_use_inverse_on_surface">Snackbar 文字</string>
   <string name="palette_use_inverse_primary">Snackbar 操作按鈕（較少使用）</string>
@@ -2246,6 +2246,10 @@
   <string name="setting_palette_page_seed_title">從色號生成調色盤</string>
   <string name="setting_palette_page_slot_custom">已修改</string>
   <string name="setting_palette_page_slot_follow_role">跟隨顏色</string>
+  <string name="setting_palette_page_impact_none">此顏色未用於介面任何位置（保留以相容舊設定）</string>
+  <string name="setting_palette_page_impact_unused">示意圖中未出現此顏色（介面其他區域可能用到，見上方說明）</string>
+  <string name="setting_palette_page_impact_covered">已單獨設定（覆蓋此色）</string>
+  <string name="setting_palette_page_impact_hint">品紅標記修改此顏色會隨之變化的位置</string>
   <string name="setting_provider_group_create">新建並歸入</string>
   <string name="setting_provider_group_delete">刪除分組</string>
   <string name="setting_provider_group_new">新建分組</string>
