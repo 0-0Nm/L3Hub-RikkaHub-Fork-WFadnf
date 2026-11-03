@@ -2280,4 +2280,27 @@
   <string name="workspace_ssh_editor_missing_password">يرجى إدخال كلمة المرور</string>
   <string name="workspace_ssh_editor_missing_private_key">يرجى إدخال مفتاح خاص أو استيراده</string>
   <string name="workspace_ssh_editor_use_home">الدليل الرئيسي</string>
+  <string name="floating_bubble_icon_app_logo">أيقونة التطبيق</string>
+  <string name="floating_bubble_icon_custom">مخصص</string>
+  <string name="floating_bubble_icon_desc">الأيقونة المعروضة عند طيّ النافذة</string>
+  <string name="floating_bubble_icon_emoji">إيموجي</string>
+  <string name="floating_bubble_icon_gallery">اختر من المعرض</string>
+  <string name="floating_bubble_icon_load_failed">تعذّر قراءة الصورة</string>
+  <string name="floating_bubble_icon_preset">أيقونات مدمجة</string>
+  <string name="floating_bubble_icon_title">أيقونة عائمة</string>
+  <string name="floating_panel_height">أقصى ارتفاع للوحة</string>
+  <string name="floating_panel_resize">اسحب لتغيير حجم اللوحة</string>
+  <string name="floating_panel_width">عرض اللوحة</string>
+  <string name="floating_preview_height">ارتفاع المعاينة</string>
+  <string name="floating_size_dp">%1$d dp</string>
+  <string name="setting_display_page_custom_font_chain_desc">تم استيراد %1$d خط. تشكّل سلسلة احتياطية بترتيب الاستيراد: الخطوط السابقة لها الأولوية في الحروف المشتركة، والحروف المفقودة تنتقل تلقائيًا إلى الخط التالي</string>
+  <string name="setting_display_page_custom_font_chain_position">احتياطي #%1$d</string>
+  <string name="setting_display_page_custom_font_fallback_name">خط %1$d</string>
+  <string name="setting_display_page_custom_font_move_up">نقل للأعلى</string>
+  <string name="setting_display_page_font_global_desc">عند التفعيل، يُستخدم الخط المحدد في التطبيق بأكمله (الإعدادات، القوائم، إلخ)، وليس في الدردشة فقط</string>
+  <string name="setting_display_page_font_global_title">تطبيق على التطبيق بالكامل</string>
+  <string name="setting_palette_page_impact_covered">تم تعيينه بشكل منفصل (يتجاوز هذا اللون)</string>
+  <string name="setting_palette_page_impact_hint">الأرجواني = الأماكن المتأثرة بهذا اللون</string>
+  <string name="setting_palette_page_impact_none">غير مستخدم في أي مكان بواجهة المستخدم (محفوظ للتوافق مع التكوينات القديمة)</string>
+  <string name="setting_palette_page_impact_unused">لا يظهر في المعاينة (قد يُستخدم في أماكن أخرى من واجهة المستخدم — انظر الوصف أعلاه)</string>
 </resources>

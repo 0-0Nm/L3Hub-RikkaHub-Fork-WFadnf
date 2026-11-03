@@ -2282,4 +2282,27 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="workspace_ssh_editor_missing_password">비밀번호를 입력하세요</string>
   <string name="workspace_ssh_editor_missing_private_key">개인 키를 입력하거나 가져오세요</string>
   <string name="workspace_ssh_editor_use_home">홈 디렉터리</string>
+  <string name="floating_bubble_icon_app_logo">앱 아이콘</string>
+  <string name="floating_bubble_icon_custom">사용자 지정</string>
+  <string name="floating_bubble_icon_desc">창이 접혀 있을 때 표시되는 아이콘</string>
+  <string name="floating_bubble_icon_emoji">이모지</string>
+  <string name="floating_bubble_icon_gallery">갤러리에서 선택</string>
+  <string name="floating_bubble_icon_load_failed">이미지를 읽을 수 없습니다</string>
+  <string name="floating_bubble_icon_preset">내장 아이콘</string>
+  <string name="floating_bubble_icon_title">플로팅 아이콘</string>
+  <string name="floating_panel_height">패널 최대 높이</string>
+  <string name="floating_panel_resize">드래그하여 패널 크기 조정</string>
+  <string name="floating_panel_width">패널 너비</string>
+  <string name="floating_preview_height">미리보기 높이</string>
+  <string name="floating_size_dp">%1$d dp</string>
+  <string name="setting_display_page_custom_font_chain_desc">%1$d개 글꼴을 가져왔습니다. 가져오기 순서대로 폴백 체인을 구성하며, 같은 글리프는 앞쪽이 우선되고 누락된 글리프는 자동으로 다음 글꼴을 사용합니다</string>
+  <string name="setting_display_page_custom_font_chain_position">폴백 #%1$d</string>
+  <string name="setting_display_page_custom_font_fallback_name">글꼴 %1$d</string>
+  <string name="setting_display_page_custom_font_move_up">위로 이동</string>
+  <string name="setting_display_page_font_global_desc">활성화하면 선택한 글꼴이 채팅뿐만 아니라 앱 전체(설정, 목록 등)에 적용됩니다</string>
+  <string name="setting_display_page_font_global_title">앱 전체에 적용</string>
+  <string name="setting_palette_page_impact_covered">개별 설정됨 (이 색상을 덮어씀)</string>
+  <string name="setting_palette_page_impact_hint">마젠타 = 이 색상의 영향을 받는 위치</string>
+  <string name="setting_palette_page_impact_none">UI 어디에도 사용되지 않음 (이전 설정과의 호환성을 위해 유지)</string>
+  <string name="setting_palette_page_impact_unused">미리보기에 표시되지 않음 (UI의 다른 곳에서 사용될 수 있습니다. 위 설명을 참조하세요)</string>
 </resources>

@@ -2283,4 +2283,27 @@
   <string name="workspace_ssh_editor_missing_password">Bitte ein Passwort eingeben</string>
   <string name="workspace_ssh_editor_missing_private_key">Bitte einen privaten Schlüssel eingeben oder importieren</string>
   <string name="workspace_ssh_editor_use_home">Home-Verzeichnis</string>
+  <string name="floating_bubble_icon_app_logo">App-Symbol</string>
+  <string name="floating_bubble_icon_custom">Benutzerdefiniert</string>
+  <string name="floating_bubble_icon_desc">Das Symbol, das im eingeklappten Fenster angezeigt wird</string>
+  <string name="floating_bubble_icon_emoji">Emoji</string>
+  <string name="floating_bubble_icon_gallery">Aus Galerie auswählen</string>
+  <string name="floating_bubble_icon_load_failed">Bild konnte nicht gelesen werden</string>
+  <string name="floating_bubble_icon_preset">Integrierte Symbole</string>
+  <string name="floating_bubble_icon_title">Schwebendes Symbol</string>
+  <string name="floating_panel_height">Maximale Panelhöhe</string>
+  <string name="floating_panel_resize">Zum Anpassen der Panelgröße ziehen</string>
+  <string name="floating_panel_width">Panelbreite</string>
+  <string name="floating_preview_height">Vorschauhöhe</string>
+  <string name="floating_size_dp">%1$d dp</string>
+  <string name="setting_display_page_custom_font_chain_desc">%1$d Schriftarten importiert. Die Fallback-Kette folgt der Importreihenfolge: gemeinsame Glyphen werden von der früheren Schriftart gewonnen, fehlende Glyphen verwenden automatisch die nächste Schriftart</string>
+  <string name="setting_display_page_custom_font_chain_position">Fallback #%1$d</string>
+  <string name="setting_display_page_custom_font_fallback_name">Schriftart %1$d</string>
+  <string name="setting_display_page_custom_font_move_up">Nach oben</string>
+  <string name="setting_display_page_font_global_desc">Wenn aktiviert, wird die ausgewählte Schriftart in der gesamten App verwendet (Einstellungen, Listen usw.), nicht nur im Chat</string>
+  <string name="setting_display_page_font_global_title">Auf gesamte App anwenden</string>
+  <string name="setting_palette_page_impact_covered">Separat festgelegt (überschreibt diese Farbe)</string>
+  <string name="setting_palette_page_impact_hint">Magenta = Stellen, die von dieser Farbe betroffen sind</string>
+  <string name="setting_palette_page_impact_none">Wird nirgendwo in der UI verwendet (aus Kompatibilität mit alten Konfigurationen beibehalten)</string>
+  <string name="setting_palette_page_impact_unused">Erscheint nicht in der Vorschau (kann an anderen Stellen der UI verwendet werden — siehe Beschreibung oben)</string>
 </resources>

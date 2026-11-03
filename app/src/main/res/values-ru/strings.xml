@@ -2288,4 +2288,21 @@
   <string name="workspace_ssh_editor_missing_password">Введите пароль</string>
   <string name="workspace_ssh_editor_missing_private_key">Введите или импортируйте закрытый ключ</string>
   <string name="workspace_ssh_editor_use_home">Домашний каталог</string>
+  <string name="floating_bubble_icon_app_logo">Значок приложения</string>
+  <string name="floating_bubble_icon_custom">Пользовательский</string>
+  <string name="floating_bubble_icon_desc">Значок, отображаемый в свёрнутом окне</string>
+  <string name="floating_bubble_icon_emoji">Эмодзи</string>
+  <string name="floating_bubble_icon_gallery">Выбрать из галереи</string>
+  <string name="floating_bubble_icon_load_failed">Не удалось прочитать изображение</string>
+  <string name="floating_bubble_icon_preset">Встроенные значки</string>
+  <string name="floating_bubble_icon_title">Плавающий значок</string>
+  <string name="floating_panel_height">Макс. высота панели</string>
+  <string name="floating_panel_resize">Перетащите для изменения размера панели</string>
+  <string name="floating_panel_width">Ширина панели</string>
+  <string name="floating_preview_height">Высота предпросмотра</string>
+  <string name="floating_size_dp">%1$d dp</string>
+  <string name="setting_palette_page_impact_covered">Настроено отдельно (переопределяет этот цвет)</string>
+  <string name="setting_palette_page_impact_hint">Пурпурный = места, на которые влияет этот цвет</string>
+  <string name="setting_palette_page_impact_none">Не используется в интерфейсе (сохранено для совместимости со старыми настройками)</string>
+  <string name="setting_palette_page_impact_unused">Не отображается в предпросмотре (может использоваться в других местах интерфейса — см. описание выше)</string>
 </resources>
