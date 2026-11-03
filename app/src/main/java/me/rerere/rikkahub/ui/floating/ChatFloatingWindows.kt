@@ -24,11 +24,14 @@ import com.petterp.floatingx.compose.compose
 import com.petterp.floatingx.core.FloatingX
 import com.petterp.floatingx.core.FxControl
 import com.petterp.floatingx.core.animation.FxAnimations
+import com.petterp.floatingx.core.feature.FxFeature
+import com.petterp.floatingx.core.feature.FxFeatureScope
 import com.petterp.floatingx.core.gesture.FxDrag
 import com.petterp.floatingx.core.gesture.FxGesture
 import com.petterp.floatingx.core.layout.FxAdsorb
 import com.petterp.floatingx.core.layout.FxGravity
 import com.petterp.floatingx.core.storage.FxSpStorage
+import com.petterp.floatingx.system.container.FxWindowContainer
 import com.petterp.floatingx.system.permission.FxPermission
 import com.petterp.floatingx.system.permission.FxPermissionStrategy
 import com.petterp.floatingx.system.systemHost
@@ -197,11 +200,13 @@ class ChatFloatingWindows(
         anchor(FxGravity.TOP_CENTER, dy = dp(PANEL_TOP_OFFSET_DP))
         gesture(FxGesture(click = false, longPress = false, drag = FxDrag.DISABLED))
         animation(FxAnimations.fade())
+        addFeature(PanelFocusFeature())
         systemHost(context) {
             permission(FxPermissionStrategy.skip())
             layoutParams {
-                // 面板里有输入框，窗口要能获得焦点才能弹键盘；收起时窗口是 GONE，不会抢走其他应用的焦点
-                it.flags = it.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+                // 不能在这里清掉 FLAG_NOT_FOCUSABLE：Android 会给不可聚焦窗口隐式启用
+                // NOT_TOUCH_MODAL，去掉 NOT_FOCUSABLE 又不显式补回的话窗口会变成模态窗口，
+                // 整个屏幕的触摸都会被它吞掉。窗口焦点由 PanelFocusFeature 按展开/收起切换。
                 // wrap_content 的窗口会先按对话框宽度（约 320dp）测量，面板会被压窄
                 it.width = WindowManager.LayoutParams.MATCH_PARENT
             }
@@ -209,6 +214,32 @@ class ChatFloatingWindows(
                 tracker.collapse()
                 true
             }
+        }
+    }
+
+    /**
+     * 面板窗口只在展开时拿焦点：面板里有输入框，窗口可聚焦才能弹键盘；收起后恢复不可聚焦。
+     * 不能一劳永逸地在 layoutParams 里清掉 FLAG_NOT_FOCUSABLE——Android 会给 NOT_FOCUSABLE
+     * 窗口隐式启用 NOT_TOUCH_MODAL，清掉它又没显式补回时窗口会变成模态窗口，吞掉整个屏幕的触摸。
+     * 基础 flags 里 NOT_TOUCH_MODAL 始终显式保留，这里只切换 NOT_FOCUSABLE 一位。
+     */
+    private class PanelFocusFeature : FxFeature {
+        private var container: FxWindowContainer? = null
+
+        override fun onAttach(scope: FxFeatureScope) {
+            container = scope.container as? FxWindowContainer
+        }
+
+        override fun onDetach() {
+            container = null
+        }
+
+        override fun onShow() {
+            container?.setWindowFocusable(true)
+        }
+
+        override fun onHide() {
+            container?.setWindowFocusable(false)
         }
     }
 
