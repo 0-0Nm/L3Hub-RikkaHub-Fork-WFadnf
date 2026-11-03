@@ -309,7 +309,8 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "release $TAG 已存在，覆盖资产并刷新说明"
             gh release upload "$TAG" dist/*.apk dist/*.sha256 --clobber
-            gh release edit "$TAG" --notes-file RELEASE_NOTES.md --prerelease="$IS_PRERELEASE"
+            # --draft=false：同名 release 停在草稿状态时，只改说明会让它永远发不出去，而 job 是绿的
+            gh release edit "$TAG" --notes-file RELEASE_NOTES.md --prerelease="$IS_PRERELEASE" --draft=false
           else
             flags=()
             if [ "$IS_PRERELEASE" = "true" ]; then
