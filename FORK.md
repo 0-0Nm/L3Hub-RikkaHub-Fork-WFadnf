@@ -564,7 +564,7 @@ GitHub 自带的 `--generate-notes` 只会给一行 Full Changelog。
 |---|---|
 | `ANDROID_RELEASE_KEYSTORE` | `l3hub-release.jks` 的 base64（单行） |
 | `ANDROID_RELEASE_STORE_PASSWORD` | store 口令 |
-| `ANDROID_RELEASE_KEY_ALIAS` | `l3hub` |
+| `ANDROID_RELEASE_KEY_ALIAS` | `l3hub-release` |
 | `ANDROID_RELEASE_KEY_PASSWORD` | key 口令（与 store 相同） |
 
 流程把 keystore 还原到 `$RUNNER_TEMP`，再把 `storeFile` / `storePassword` / `keyAlias` / `keyPassword`

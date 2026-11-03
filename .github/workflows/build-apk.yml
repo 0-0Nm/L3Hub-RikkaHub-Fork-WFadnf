@@ -201,8 +201,15 @@ jobs:
           echo "包名：${pkg}"
           "${build_tools}aapt2" dump badging "$apk" 2>/dev/null \
             | grep -E '^(package|application-label|sdkVersion|targetSdkVersion)' || true
+          # apksigner 不同版本打的前缀不一样（Signer #1 certificate… / V2 Signer: certificate…），
+          # 只认后面那截
           cert=$("${build_tools}apksigner" verify --print-certs "$apk" \
-            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)
+            | sed -n 's/^.*certificate SHA-256 digest: //p' | head -1)
+          if [ -z "$cert" ]; then
+            echo "没读到签名证书指纹，apksigner 输出格式变了？" >&2
+            exit 1
+          fi
+          echo "签名证书 SHA-256：${cert}"
           echo "CERT_SHA256=$cert" >> "$GITHUB_ENV"
 
       # Gradle 产出的名字是 app-github-arm64-v8a-release.apk，下载下来分不清版本。
