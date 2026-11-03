@@ -1795,6 +1795,10 @@
   <string name="app_lock_locked_desc">تحقق من كلمة مرور شاشة القفل في هاتفك للمتابعة</string>
   <string name="app_lock_locked_title">التطبيق مقفل</string>
   <string name="app_lock_unlock">فتح القفل</string>
+  <string name="app_lock_verify_unavailable">لا يوجد قفل شاشة على هذا الجهاز، لذا لا يمكن للتطبيق التحقق من هويتك</string>
+  <string name="app_lock_enter_anyway">الدخول على أي حال</string>
+  <string name="app_lock_verify_failed">التحقق من النظام غير متاح الآن. أعد المحاولة أو اخرج من التطبيق</string>
+  <string name="app_lock_exit">الخروج من التطبيق</string>
   <string name="assistant_detail_heartbeat_desc">إرسال رسائل في أوقات محددة؛ ويمكن استخدامه كتذكير فقط أيضًا</string>
   <string name="assistant_page_background_blur">ضبابية الخلفية</string>
   <string name="assistant_page_background_blur_desc">تطبيق تأثير ضبابي على صورة خلفية المحادثة دون التأثير على عناصر الواجهة</string>
@@ -2078,6 +2082,7 @@
   <string name="search_picker_selected_count">تم تحديد %1$d من المزوّدين</string>
   <string name="setting_app_lock_desc">بعد مغادرة التطبيق مدة تتجاوز الوقت المحدد، يلزم إدخال كلمة مرور شاشة القفل للدخول</string>
   <string name="setting_app_lock_immediately">فورًا</string>
+  <string name="setting_app_lock_requires_device_lock">اضبط قفل الشاشة في إعدادات النظام أولًا</string>
   <string name="setting_app_lock_minutes">%d دقيقة</string>
   <string name="setting_app_lock_switch">قفل التطبيق</string>
   <string name="setting_app_lock_timeout">القفل بعد المغادرة</string>

@@ -3,6 +3,7 @@ package me.rerere.rikkahub.utils
 import android.Manifest
 import android.app.Activity
 import android.app.AppOpsManager
+import android.app.KeyguardManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.ContextWrapper
@@ -74,6 +75,10 @@ fun Context.writeClipboardText(text: String) {
         Toast.makeText(this, "Failed to write text into clipboard", Toast.LENGTH_SHORT).show()
     }
 }
+
+/** 设备是否设置了锁屏密码（PIN/图案/密码），没有的话应用锁无法验证身份。 */
+fun Context.hasDeviceCredential(): Boolean =
+    getSystemService(KeyguardManager::class.java)?.isDeviceSecure == true
 
 /**
  * Whether the app has been granted the "Usage access" special permission

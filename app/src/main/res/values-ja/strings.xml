@@ -1797,6 +1797,10 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="app_lock_locked_desc">端末の画面ロックのパスワードを確認してから続行します</string>
   <string name="app_lock_locked_title">アプリはロックされています</string>
   <string name="app_lock_unlock">ロック解除</string>
+  <string name="app_lock_verify_unavailable">この端末には画面ロックが設定されていないため、アプリロックを確認できません</string>
+  <string name="app_lock_enter_anyway">そのまま開く</string>
+  <string name="app_lock_verify_failed">現在システム認証を起動できません。再試行するかアプリを終了してください</string>
+  <string name="app_lock_exit">アプリを終了</string>
   <string name="assistant_detail_heartbeat_desc">定期的に自発的に会話を開始します。リマインダーとしてのみ使うこともできます</string>
   <string name="assistant_page_background_blur">背景ブラー</string>
   <string name="assistant_page_background_blur_desc">チャットの背景画像にブラー効果を適用します。UI 要素には影響しません</string>
@@ -2080,6 +2084,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="search_picker_selected_count">%1$d 個のプロバイダーを選択済み</string>
   <string name="setting_app_lock_desc">アプリを離れて設定した時間を超えると、端末の画面ロックのパスワードを確認してから入る必要があります</string>
   <string name="setting_app_lock_immediately">即時</string>
+  <string name="setting_app_lock_requires_device_lock">先にシステム設定で画面ロックを設定してください</string>
   <string name="setting_app_lock_minutes">%d 分</string>
   <string name="setting_app_lock_switch">アプリロック</string>
   <string name="setting_app_lock_timeout">離れた後にロック</string>

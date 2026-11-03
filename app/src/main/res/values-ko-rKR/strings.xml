@@ -1797,6 +1797,10 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="app_lock_locked_desc">휴대폰 잠금 화면 비밀번호를 확인한 후 계속 사용합니다</string>
   <string name="app_lock_locked_title">앱이 잠겼습니다</string>
   <string name="app_lock_unlock">잠금 해제</string>
+  <string name="app_lock_verify_unavailable">이 기기에 화면 잠금이 설정되어 있지 않아 앱 잠금을 확인할 수 없습니다</string>
+  <string name="app_lock_enter_anyway">그대로 들어가기</string>
+  <string name="app_lock_verify_failed">지금은 시스템 인증을 시작할 수 없습니다. 다시 시도하거나 앱을 종료하세요</string>
+  <string name="app_lock_exit">앱 종료</string>
   <string name="assistant_detail_heartbeat_desc">정해진 시간에 먼저 대화를 시작하며, 알림 용도로만 사용할 수도 있습니다</string>
   <string name="assistant_page_background_blur">배경 흐리게</string>
   <string name="assistant_page_background_blur_desc">채팅 배경 이미지에만 흐림 효과를 적용하며 UI 요소에는 영향을 주지 않습니다</string>
@@ -2080,6 +2084,7 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="search_picker_selected_count">제공자 %1$d개 선택됨</string>
   <string name="setting_app_lock_desc">앱을 떠난 시간이 설정한 시간을 넘으면 휴대폰 잠금 화면 비밀번호를 확인해야 들어갈 수 있습니다</string>
   <string name="setting_app_lock_immediately">즉시</string>
+  <string name="setting_app_lock_requires_device_lock">먼저 시스템 설정에서 화면 잠금을 설정하세요</string>
   <string name="setting_app_lock_minutes">%d분</string>
   <string name="setting_app_lock_switch">앱 잠금</string>
   <string name="setting_app_lock_timeout">떠난 후 잠금</string>

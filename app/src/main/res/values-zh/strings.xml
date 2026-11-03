@@ -2226,6 +2226,10 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="app_lock_locked_title">应用已锁定</string>
   <string name="app_lock_locked_desc">验证手机锁屏密码后继续使用</string>
   <string name="app_lock_unlock">解锁</string>
+  <string name="app_lock_verify_unavailable">设备未设置锁屏密码，应用锁暂时无法验证</string>
+  <string name="app_lock_enter_anyway">仍要进入</string>
+  <string name="app_lock_verify_failed">暂时无法调起系统验证，请重试或退出应用</string>
+  <string name="app_lock_exit">退出应用</string>
   <string name="app_lock_confirm_title">解锁 L3Hub</string>
   <string name="app_lock_confirm_desc">验证手机锁屏密码后继续使用</string>
   <string name="setting_app_lock_title">隐私</string>
@@ -2234,6 +2238,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_app_lock_timeout">离开后锁定</string>
   <string name="setting_app_lock_timeout_desc">应用在后台停留超过该时间后锁定；选择「立即」则每次离开即锁定</string>
   <string name="setting_app_lock_immediately">立即</string>
+  <string name="setting_app_lock_requires_device_lock">请先在系统设置中设置锁屏密码</string>
   <string name="setting_app_lock_minutes">%d 分钟</string>
   <string name="setting_network_ca_title">自定义 CA 证书</string>
   <string name="setting_network_ca_installed">已信任，用于自签 HTTPS</string>

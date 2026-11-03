@@ -1803,6 +1803,10 @@
   <string name="app_lock_locked_desc">Подтвердите пароль блокировки экрана, чтобы продолжить</string>
   <string name="app_lock_locked_title">Приложение заблокировано</string>
   <string name="app_lock_unlock">Разблокировать</string>
+  <string name="app_lock_verify_unavailable">На устройстве не настроена блокировка экрана, поэтому приложение не может проверить личность</string>
+  <string name="app_lock_enter_anyway">Всё равно войти</string>
+  <string name="app_lock_verify_failed">Системная проверка сейчас недоступна. Повторите попытку или выйдите из приложения</string>
+  <string name="app_lock_exit">Выйти из приложения</string>
   <string name="assistant_detail_heartbeat_desc">Отправляет сообщения по расписанию; может работать только как напоминание</string>
   <string name="assistant_page_background_blur">Размытие фона</string>
   <string name="assistant_page_background_blur_desc">Применяет размытие к фоновому изображению чата, не затрагивая элементы интерфейса</string>
@@ -2086,6 +2090,7 @@
   <string name="search_picker_selected_count">Выбрано провайдеров: %1$d</string>
   <string name="setting_app_lock_desc">Если приложение было закрыто дольше заданного времени, для входа потребуется пароль блокировки экрана</string>
   <string name="setting_app_lock_immediately">Сразу</string>
+  <string name="setting_app_lock_requires_device_lock">Сначала установите блокировку экрана в настройках системы</string>
   <string name="setting_app_lock_minutes">%d минут</string>
   <string name="setting_app_lock_switch">Блокировка приложения</string>
   <string name="setting_app_lock_timeout">Блокировать после выхода</string>

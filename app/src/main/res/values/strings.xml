@@ -2224,6 +2224,10 @@
   <string name="app_lock_locked_title">App locked</string>
   <string name="app_lock_locked_desc">Verify your phone\'s lock screen password to continue</string>
   <string name="app_lock_unlock">Unlock</string>
+  <string name="app_lock_verify_unavailable">No screen lock is set on this device, so the app lock cannot verify your identity</string>
+  <string name="app_lock_enter_anyway">Enter anyway</string>
+  <string name="app_lock_verify_failed">System verification is unavailable right now. Try again or exit the app.</string>
+  <string name="app_lock_exit">Exit app</string>
   <string name="app_lock_confirm_title">Unlock L3Hub</string>
   <string name="app_lock_confirm_desc">Verify your phone\'s lock screen password to continue</string>
   <string name="setting_app_lock_title">Privacy</string>
@@ -2232,6 +2236,7 @@
   <string name="setting_app_lock_timeout">Lock after leaving</string>
   <string name="setting_app_lock_timeout_desc">Locks after the app stays in the background longer than this time; "Immediately" locks every time you leave</string>
   <string name="setting_app_lock_immediately">Immediately</string>
+  <string name="setting_app_lock_requires_device_lock">Set a screen lock in system settings first</string>
   <string name="setting_app_lock_minutes">%d minutes</string>
   <string name="setting_network_ca_title">Custom CA certificates</string>
   <string name="setting_network_ca_installed">Trusted, used for self-signed HTTPS</string>

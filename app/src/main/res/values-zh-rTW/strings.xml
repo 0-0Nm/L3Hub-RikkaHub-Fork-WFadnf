@@ -1921,6 +1921,10 @@
   <string name="app_lock_locked_desc">驗證手機鎖屏密碼後繼續使用</string>
   <string name="app_lock_locked_title">應用已鎖定</string>
   <string name="app_lock_unlock">解鎖</string>
+  <string name="app_lock_verify_unavailable">裝置未設定螢幕鎖定密碼，應用程式鎖暫時無法驗證</string>
+  <string name="app_lock_enter_anyway">仍要進入</string>
+  <string name="app_lock_verify_failed">暫時無法調起系統驗證，請重試或退出應用</string>
+  <string name="app_lock_exit">退出應用</string>
   <string name="assistant_page_background_blur">背景模糊</string>
   <string name="assistant_page_background_blur_desc">對聊天背景圖應用模糊效果，不影響介面元素</string>
   <string name="assistant_page_dreaming_model">Dreaming 模型</string>
@@ -2149,6 +2153,7 @@
   <string name="search_picker_selected_count">已選擇 %1$d 個提供商</string>
   <string name="setting_app_lock_desc">離開應用超過設定時間後，需驗證手機鎖屏密碼方可進入</string>
   <string name="setting_app_lock_immediately">立即</string>
+  <string name="setting_app_lock_requires_device_lock">請先在系統設定中設定螢幕鎖定密碼</string>
   <string name="setting_app_lock_minutes">%d 分鐘</string>
   <string name="setting_app_lock_switch">應用鎖</string>
   <string name="setting_app_lock_timeout">離開後鎖定</string>

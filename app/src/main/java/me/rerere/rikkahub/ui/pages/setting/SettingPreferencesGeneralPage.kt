@@ -45,6 +45,7 @@ import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceButtons
 import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceLabel
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.components.ui.switchItem
+import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.rememberSharedPreferenceBoolean
 import me.rerere.rikkahub.ui.terminal.RadioButton
 import me.rerere.rikkahub.ui.terminal.TextButton
@@ -53,7 +54,9 @@ import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.adaptiveHorizontalPadding
 import me.rerere.rikkahub.utils.AppLanguage
 import me.rerere.rikkahub.utils.getActivity
+import me.rerere.rikkahub.utils.hasDeviceCredential
 import me.rerere.rikkahub.utils.plus
+import me.rerere.ui.toast.ToastType
 import org.koin.androidx.compose.koinViewModel
 import kotlin.math.roundToInt
 
@@ -61,6 +64,8 @@ import kotlin.math.roundToInt
 fun SettingPreferencesGeneralPage(embedded: Boolean = false, vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val toaster = LocalToaster.current
+    val deviceLockRequired = stringResource(R.string.setting_app_lock_requires_device_lock)
     var displaySetting by remember(settings) { mutableStateOf(settings.displaySetting) }
     var ttsPlaybackSpeed by remember(settings.defaultTTSPlaybackSpeed) {
         mutableFloatStateOf(settings.defaultTTSPlaybackSpeed)
@@ -439,7 +444,11 @@ fun SettingPreferencesGeneralPage(embedded: Boolean = false, vm: SettingVM = koi
                 switchItem(
                     checked = settings.appLockEnabled,
                     onCheckedChange = { enabled ->
-                        vm.updateSettings { it.copy(appLockEnabled = enabled) }
+                        if (enabled && !context.hasDeviceCredential()) {
+                            toaster.show(deviceLockRequired, ToastType.Warning)
+                        } else {
+                            vm.updateSettings { it.copy(appLockEnabled = enabled) }
+                        }
                     },
                     supportingContent = { Text(stringResource(R.string.setting_app_lock_desc)) },
                     headlineContent = { Text(stringResource(R.string.setting_app_lock_switch)) },

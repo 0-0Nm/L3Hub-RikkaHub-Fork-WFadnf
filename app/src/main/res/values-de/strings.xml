@@ -1798,6 +1798,10 @@
   <string name="app_lock_locked_desc">Zum Fortfahren das Passwort der Bildschirmsperre bestätigen</string>
   <string name="app_lock_locked_title">App gesperrt</string>
   <string name="app_lock_unlock">Entsperren</string>
+  <string name="app_lock_verify_unavailable">Auf diesem Gerät ist keine Bildschirmsperre eingerichtet, daher kann die App-Sperre nicht prüfen</string>
+  <string name="app_lock_enter_anyway">Trotzdem öffnen</string>
+  <string name="app_lock_verify_failed">Systemverifizierung ist derzeit nicht verfügbar. Erneut versuchen oder App beenden</string>
+  <string name="app_lock_exit">App beenden</string>
   <string name="assistant_detail_heartbeat_desc">Nach Zeitplan Nachrichten senden; auch nur als Erinnerung nutzbar</string>
   <string name="assistant_page_background_blur">Hintergrundunschärfe</string>
   <string name="assistant_page_background_blur_desc">Unschärfe auf das Chat-Hintergrundbild anwenden, ohne Bedienelemente zu beeinflussen</string>
@@ -2081,6 +2085,7 @@
   <string name="search_picker_selected_count">%1$d Anbieter ausgewählt</string>
   <string name="setting_app_lock_desc">Nach mehr als der eingestellten Zeit im Hintergrund ist zum Öffnen das Passwort der Bildschirmsperre erforderlich</string>
   <string name="setting_app_lock_immediately">Sofort</string>
+  <string name="setting_app_lock_requires_device_lock">Zuerst eine Bildschirmsperre in den Systemeinstellungen einrichten</string>
   <string name="setting_app_lock_minutes">%d Minuten</string>
   <string name="setting_app_lock_switch">App-Sperre</string>
   <string name="setting_app_lock_timeout">Sperren nach Verlassen</string>
