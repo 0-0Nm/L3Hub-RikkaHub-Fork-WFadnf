@@ -2316,4 +2316,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_palette_page_impact_hint">マゼンタ = この色の影響を受ける箇所</string>
   <string name="setting_palette_page_impact_none">UI のどこにも使用されていません（旧設定との互換性のため保持）</string>
   <string name="setting_palette_page_impact_unused">プレビューに表示されていません（UI の他の場所で使用されている可能性があります。上記の説明を参照）</string>
+  <string name="model_list_collapse_sidebar">サイドバーを折りたたむ</string>
+  <string name="model_list_expand_sidebar">サイドバーを展開</string>
+  <string name="model_list_no_match">一致するモデルがありません</string>
 </resources>

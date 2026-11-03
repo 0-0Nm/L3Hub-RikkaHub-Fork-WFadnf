@@ -2316,4 +2316,7 @@
   <string name="setting_palette_page_impact_hint">Пурпурный = места, на которые влияет этот цвет</string>
   <string name="setting_palette_page_impact_none">Не используется в интерфейсе (сохранено для совместимости со старыми настройками)</string>
   <string name="setting_palette_page_impact_unused">Не отображается в предпросмотре (может использоваться в других местах интерфейса — см. описание выше)</string>
+  <string name="model_list_collapse_sidebar">Свернуть панель</string>
+  <string name="model_list_expand_sidebar">Развернуть панель</string>
+  <string name="model_list_no_match">Нет подходящих моделей</string>
 </resources>

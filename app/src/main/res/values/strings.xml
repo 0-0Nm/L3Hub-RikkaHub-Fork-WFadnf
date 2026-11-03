@@ -2329,4 +2329,7 @@
   <string name="workspace_detail_tool_git">Git review</string>
   <string name="workspace_detail_tool_test">Run tests</string>
   <string name="workspace_detail_tool_repo_map">Repository map</string>
+  <string name="model_list_collapse_sidebar">Collapse sidebar</string>
+  <string name="model_list_expand_sidebar">Expand sidebar</string>
+  <string name="model_list_no_match">No matching models</string>
 </resources>

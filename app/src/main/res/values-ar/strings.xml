@@ -2314,4 +2314,7 @@
   <string name="setting_palette_page_impact_hint">الأرجواني = الأماكن المتأثرة بهذا اللون</string>
   <string name="setting_palette_page_impact_none">غير مستخدم في أي مكان بواجهة المستخدم (محفوظ للتوافق مع التكوينات القديمة)</string>
   <string name="setting_palette_page_impact_unused">لا يظهر في المعاينة (قد يُستخدم في أماكن أخرى من واجهة المستخدم — انظر الوصف أعلاه)</string>
+  <string name="model_list_collapse_sidebar">طي الشريط الجانبي</string>
+  <string name="model_list_expand_sidebar">توسيع الشريط الجانبي</string>
+  <string name="model_list_no_match">لا توجد نماذج مطابقة</string>
 </resources>

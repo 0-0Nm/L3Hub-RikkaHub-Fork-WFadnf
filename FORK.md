@@ -420,6 +420,28 @@ CompositionLocal，页面只读它，不各自去判断 `Settings`。
 默认关闭，打开后仍然保留的内边距（有意为之）：气泡内部文字 10dp、输入框内部的 `inputPadding`、
 `CardGroup` 每项内部的 16dp、对话框按钮区。这些是内容离组件边缘的距离，不是组件边缘离屏幕的距离。
 
+## 模型选择弹窗（fork 改版）
+
+所有选模型的入口（聊天输入框、默认模型设置、助手、心跳、记忆整理、图像生成、翻译、连通性测试）共用
+`ui/components/ai/ModelList.kt` 的 `ModelListSheet`，弹窗内容换成 `ModelPickerTwoPane` 的双列布局：
+
+- 左栏 88dp：收藏入口 → 分组（各自可折叠，带 ▾）→ 组内供应商 Logo → 「未分组」段。
+  长按分组名调整顺序，长按 Logo 进该供应商详情，底部齿轮直接进供应商设置页
+- 左上角箭头把整条左栏收成 0 宽，右侧主视图拿满弹窗宽度；收起后同一个箭头移到标题左边
+- 标题行右侧是关闭按钮，搜索框占满主视图一整行，带清空按钮。搜索同时匹配**供应商名**、
+  模型的 `displayName` 和 `modelId`；命中供应商时连同该供应商的全部模型一起列出，结果卡片会带上供应商名
+- 卡片：左侧图标方块，右侧模型名、`WARN x · MAX y`、标签行（供应商覆盖 / 类型 / 模态 / 能力）
+- 屏幕宽度 < 360dp 时自动换成紧凑卡片：图标缩小，标签独占一行，名称不再被收藏按钮挤没
+
+> 上游的单列实现（供应商 sticky header + 收藏拖动排序 + 供应商 Badge 横向滚动）在改成双列后
+> 就没人调用了，这次随改版一起删掉，`ModelList.kt` 从 1016 行降到 639 行。
+
+| 文件 | 说明 |
+|---|---|
+| `ui/components/ai/ModelPickerTwoPane.kt` | 重写：可收起的左栏、顶部搜索与关闭、双列布局、窄屏断点、分组排序对话框 |
+| `ui/components/ai/ModelList.kt` | `ModelItem` 改成「图标方块 + 名称 / 水位 / 标签」，新增 `compact`、`subtitle` 参数与 `ModelProviderOverrideTag`；删除旧单列实现 |
+| `res/values*/strings.xml` | 新增 `model_list_collapse_sidebar`、`model_list_expand_sidebar`、`model_list_no_match` |
+
 ## 内置 SSH 服务端（fork 新增）
 
 设置 → Web 服务器 → 「在终端中使用」：打开后可以在系统终端里 `ssh -p 2222 l3hub@127.0.0.1` 直接操作 App。

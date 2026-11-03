@@ -6,50 +6,34 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,8 +42,6 @@ import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.util.fastFilter
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
@@ -71,32 +53,22 @@ import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.Brain02
 import me.rerere.hugeicons.stroke.Cancel01
-import me.rerere.hugeicons.stroke.DragDropHorizontal
-import me.rerere.hugeicons.stroke.Favourite
 import me.rerere.hugeicons.stroke.Image03
-import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Text
 import me.rerere.hugeicons.stroke.Tools
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
-import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
-import me.rerere.rikkahub.ui.components.ui.glassAssistChipColors
 import me.rerere.rikkahub.ui.context.LocalNavController
-import me.rerere.rikkahub.ui.hooks.rememberSharedPreferenceString
 import me.rerere.rikkahub.ui.terminal.Card
 import me.rerere.rikkahub.ui.terminal.IconButton
 import me.rerere.rikkahub.ui.terminal.TextButton
-import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.toDp
-import me.rerere.ui.icons.HeartIcon
 import org.koin.compose.koinInject
-import sh.calvin.reorderable.ReorderableItem
-import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlin.uuid.Uuid
 
 class ModelListState internal constructor(
@@ -423,420 +395,17 @@ fun ModelListSheet(
                         )
                     )
                 },
+                onOpenProviderSettings = {
+                    dismiss()
+                    navController.navigate(Screen.SettingProvider)
+                },
             )
         }
     }
 }
 
-@Composable
-private fun ColumnScope.ModelList(
-    currentModel: Uuid? = null,
-    providers: List<ProviderSetting>,
-    modelType: ModelType,
-    onSelect: (Model) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val coroutineScope = rememberCoroutineScope()
-    val settingsStore = koinInject<SettingsStore>()
-    val settings = settingsStore.settingsFlow
-        .collectAsStateWithLifecycle()
-
-    // 拖动排序时先改这份本地顺序，松手再写回设置。设置是异步回到界面的，拖到边缘自动滚动时拖拽库每帧都会按
-    // 旧布局再算一次移动，直接改设置会让顺序被反复改回去，看起来就是来回抽搐
-    var draggingFavoriteOrder by remember { mutableStateOf<List<Uuid>?>(null) }
-    val favoriteModels = (draggingFavoriteOrder ?: settings.value.favoriteModels).mapNotNull { modelId ->
-        val model = settings.value.providers.findModelById(modelId) ?: return@mapNotNull null
-        if (model.type != modelType) return@mapNotNull null
-        val provider = model.findProvider(providers = settings.value.providers, checkOverwrite = false) ?: return@mapNotNull null
-        model to provider
-    }
-
-    var searchKeywords by remember { mutableStateOf("") }
-
-    // 折叠的供应商（持久化），搜索时全部展开
-    var collapsedProvidersPref by rememberSharedPreferenceString("model_list_collapsed_providers", "")
-    val collapsedProviders = remember(collapsedProvidersPref) {
-        collapsedProvidersPref.orEmpty().split(",").filter { it.isNotBlank() }.toSet()
-    }
-    fun isCollapsed(provider: ProviderSetting): Boolean =
-        searchKeywords.isBlank() && provider.id.toString() in collapsedProviders
-
-    fun toggleCollapsed(provider: ProviderSetting) {
-        val id = provider.id.toString()
-        collapsedProvidersPref = (if (id in collapsedProviders) collapsedProviders - id else collapsedProviders + id)
-            .joinToString(",")
-    }
-
-    val typeFilteredModelsByProvider = remember(providers, modelType) {
-        providers.associate { provider ->
-            provider.id to provider.models.fastFilter { it.type == modelType }
-        }
-    }
-
-    val searchFilteredModelsByProvider = remember(providers, modelType, searchKeywords) {
-        providers.associate { provider ->
-            provider.id to provider.models.fastFilter {
-                it.type == modelType && it.displayName.contains(searchKeywords, true)
-            }
-        }
-    }
-
-    val visibleModelsByProvider = remember(providers, searchFilteredModelsByProvider, collapsedProviders, searchKeywords) {
-        providers.associate { provider ->
-            provider.id to if (isCollapsed(provider)) emptyList() else searchFilteredModelsByProvider[provider.id].orEmpty()
-        }
-    }
-
-    // 计算当前选中模型的位置
-    val selectedModelPosition = remember(currentModel, favoriteModels, providers, typeFilteredModelsByProvider) {
-        // 仅用于初始定位，搜索关键词此时为空
-        if (currentModel == null) return@remember 0
-
-        var position = 0
-
-        // 跳过无providers提示
-        if (providers.isEmpty()) {
-            position += 1
-        }
-
-        // 检查是否在收藏列表中
-        val favoriteIndex = favoriteModels.indexOfFirst { it.first.id == currentModel }
-        if (favoriteIndex >= 0) {
-            if (favoriteModels.isNotEmpty()) {
-                position += 1 // favorite header
-            }
-            position += favoriteIndex
-            return@remember position
-        }
-
-        // 跳过收藏列表
-        if (favoriteModels.isNotEmpty()) {
-            position += 1 // favorite header
-            position += favoriteModels.size
-        }
-
-        // 在providers中查找
-        for (provider in providers) {
-            position += 1 // provider header
-            val models = typeFilteredModelsByProvider[provider.id].orEmpty()
-            val modelIndex = models.indexOfFirst { it.id == currentModel }
-            val collapsed = isCollapsed(provider)
-            if (modelIndex >= 0) {
-                // 折叠时定位到供应商标题
-                if (collapsed) return@remember position - 1
-                position += modelIndex
-                return@remember position
-            }
-            if (!collapsed) position += models.size
-        }
-
-        0
-    }
-
-    val lazyListState = rememberLazyListState(
-        initialFirstVisibleItemIndex = selectedModelPosition
-    )
-    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
-        // 列表里只显示当前类型的收藏，下标和完整的收藏列表对不上，按 key 找到对应的模型再移动
-        val ids = (draggingFavoriteOrder ?: settings.value.favoriteModels).toMutableList()
-        val fromPos = ids.indexOfFirst { "favorite:$it" == from.key }
-        val toPos = ids.indexOfFirst { "favorite:$it" == to.key }
-        if (fromPos >= 0 && toPos >= 0) {
-            ids.add(toPos, ids.removeAt(fromPos))
-            draggingFavoriteOrder = ids
-        }
-    }
-    val haptic = LocalHapticFeedback.current
-
-    val providerPositions = remember(providers, favoriteModels, visibleModelsByProvider) {
-        var currentIndex = 0
-        if (providers.isEmpty()) {
-            currentIndex = 1 // no providers item
-        }
-        if (favoriteModels.isNotEmpty()) {
-            currentIndex += 1 // favorite header
-            currentIndex += favoriteModels.size // favorite models
-        }
-
-        providers.map { provider ->
-            val position = currentIndex
-            currentIndex += 1 // provider header
-            currentIndex += visibleModelsByProvider[provider.id].orEmpty().size
-            provider.id to position
-        }.toMap()
-    }
-
-    Surface(
-        shape = RoundedCornerShape(50),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp),
-    ) {
-        OutlinedTextField(
-            value = searchKeywords,
-            onValueChange = { searchKeywords = it },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = {
-                Text(
-                    text = stringResource(R.string.model_list_search_placeholder),
-                )
-            },
-            shape = RoundedCornerShape(50),
-            colors = TextFieldDefaults.colors(
-                unfocusedIndicatorColor = Color.Transparent,
-                focusedIndicatorColor = Color.Transparent,
-                focusedContainerColor = Color.Transparent,
-                unfocusedContainerColor = Color.Transparent,
-            ),
-            leadingIcon = {
-                Icon(HugeIcons.Search01, null)
-            },
-            maxLines = 1,
-        )
-    }
-
-    LazyColumn(
-        state = lazyListState,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(8.dp),
-        modifier = Modifier
-            .weight(1f)
-            .fillMaxWidth(),
-    ) {
-        if (providers.isEmpty()) {
-            item {
-                Text(
-                    text = stringResource(R.string.model_list_no_providers),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.extendColors.gray6,
-                    modifier = Modifier.padding(8.dp)
-                )
-            }
-        }
-
-        if (favoriteModels.isNotEmpty()) {
-            stickyHeader {
-                Text(
-                    text = stringResource(R.string.model_list_favorite),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .padding(bottom = 4.dp, top = 8.dp)
-                )
-            }
-
-            items(
-                items = favoriteModels,
-                key = { "favorite:" + it.first.id.toString() }
-            ) { (model, provider) ->
-                ReorderableItem(
-                    state = reorderableState,
-                    key = "favorite:" + model.id.toString()
-                ) { isDragging ->
-                    ModelItem(
-                        model = model,
-                        onSelect = onSelect,
-                        modifier = Modifier
-                            .scale(if (isDragging) 0.95f else 1f)
-                            .animateItem(),
-                        providerSetting = provider,
-                        select = model.id == currentModel,
-                        onDismiss = {
-                            onDismiss()
-                        },
-                        tail = {
-                            IconButton(
-                                onClick = {
-                                    coroutineScope.launch {
-                                        settingsStore.update { settings ->
-                                            settings.copy(
-                                                favoriteModels = settings.favoriteModels.filter { it != model.id }
-                                            )
-                                        }
-                                    }
-                                }
-                            ) {
-                                Icon(
-                                    HeartIcon,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                        },
-                        dragHandle = {
-                            Icon(
-                                imageVector = HugeIcons.DragDropHorizontal,
-                                contentDescription = null,
-                                modifier = Modifier.longPressDraggableHandle(
-                                    onDragStarted = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                                    },
-                                    onDragStopped = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                                        val order = draggingFavoriteOrder ?: return@longPressDraggableHandle
-                                        coroutineScope.launch {
-                                            settingsStore.update { it.copy(favoriteModels = order) }
-                                            // 写盘时界面已经收到新设置，这时再撤掉本地顺序不会闪回旧顺序。
-                                            // 写盘期间可能已经开始下一次拖动，那时的本地顺序要留给下一次松手保存
-                                            if (draggingFavoriteOrder === order) draggingFavoriteOrder = null
-                                        }
-                                    }
-                                )
-                            )
-                        }
-                    )
-                }
-            }
-        }
-
-        providers.fastForEach { providerSetting ->
-            val collapsed = isCollapsed(providerSetting)
-            stickyHeader(key = "header:${providerSetting.id}") {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(MaterialTheme.shapes.small)
-                        .clickable { toggleCollapsed(providerSetting) }
-                        .padding(horizontal = 8.dp)
-                        .padding(bottom = 4.dp, top = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Icon(
-                        imageVector = if (collapsed) HugeIcons.ArrowRight01 else HugeIcons.ArrowDown01,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-
-                    val groupName = settings.value.providerGroupAssignments[providerSetting.id.toString()]
-                    Text(
-                        text = if (groupName.isNullOrBlank()) {
-                            providerSetting.name
-                        } else {
-                            "${providerSetting.name} · $groupName"
-                        },
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    ProviderQuotaText(
-                        providerSetting = providerSetting,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
-
-            items(
-                items = visibleModelsByProvider[providerSetting.id].orEmpty(),
-                key = { it.id }
-            ) { model ->
-                val favorite = settings.value.favoriteModels.contains(model.id)
-                ModelItem(
-                    model = model,
-                    onSelect = onSelect,
-                    modifier = Modifier.animateItem(),
-                    providerSetting = providerSetting,
-                    select = currentModel == model.id,
-                    onDismiss = {
-                        onDismiss()
-                    },
-                    tail = {
-                        IconButton(
-                            onClick = {
-                                coroutineScope.launch {
-                                    settingsStore.update { settings ->
-                                        if (favorite) {
-                                            settings.copy(
-                                                favoriteModels = settings.favoriteModels.filter { it != model.id }
-                                            )
-
-                                        } else {
-                                            settings.copy(
-                                                favoriteModels = settings.favoriteModels + model.id
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        ) {
-                            if (favorite) {
-                                Icon(
-                                    HeartIcon,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = HugeIcons.Favourite,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                    }
-                )
-            }
-        }
-    }
-
-    // 供应商Badge行
-    val providerBadgeListState = rememberLazyListState()
-    LaunchedEffect(lazyListState) {
-        // 当LazyColumn滚动时，LazyRow也跟随滚动
-        snapshotFlow { lazyListState.firstVisibleItemIndex }
-            .distinctUntilChanged()
-            .debounce(100) // 防抖处理
-            .collect { index ->
-                if (index > 0) {
-                    val currentProvider = providerPositions.entries.findLast {
-                        index > it.value
-                    }
-                    val index = providers.indexOfFirst { it.id == currentProvider?.key }
-                    if (index >= 0) {
-                        providerBadgeListState.animateScrollToItem(index)
-                    } else {
-                        providerBadgeListState.requestScrollToItem(0)
-                    }
-                } else {
-                    providerBadgeListState.requestScrollToItem(0)
-                }
-            }
-    }
-    if (providers.isNotEmpty()) {
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 8.dp),
-            state = providerBadgeListState
-        ) {
-            items(providers) { provider ->
-                AssistChip(
-                    onClick = {
-                        val position = providerPositions[provider.id] ?: 0
-                        coroutineScope.launch {
-                            lazyListState.animateScrollToItem(position)
-                        }
-                    },
-                    label = {
-                        Text(provider.name)
-                    },
-                    leadingIcon = {
-                        AutoAIIcon(name = provider.name, modifier = Modifier.size(16.dp))
-                    },
-                    // 供应商胶囊是玻璃底
-                    colors = glassAssistChipColors(),
-                )
-            }
-        }
-    }
-}
-
+// 模型卡片：左侧图标方块，右侧名称、上下文水位和标签，tail 放收藏这类行尾操作
+// compact 给窄屏用，图标缩小、标签独占一行，名称就不会被行尾按钮挤没
 @Composable
 internal fun ModelItem(
     model: Model,
@@ -845,13 +414,27 @@ internal fun ModelItem(
     onSelect: (Model) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
     tail: @Composable RowScope.() -> Unit = {},
-    dragHandle: @Composable (RowScope.() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
-    footer: (@Composable () -> Unit)? = null,
+    subtitle: (@Composable () -> Unit)? = null,
 ) {
     val navController = LocalNavController.current
     val interactionSource = remember { MutableInteractionSource() }
+    val clickable = Modifier.combinedClickable(
+        enabled = true,
+        onLongClick = onLongClick ?: {
+            onDismiss()
+            navController.navigate(
+                Screen.SettingProviderDetail(
+                    providerSetting.id.toString()
+                )
+            )
+        },
+        onClick = { onSelect(model) },
+        interactionSource = interactionSource,
+        indication = LocalIndication.current
+    )
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(
@@ -860,73 +443,113 @@ internal fun ModelItem(
         )
     ) {
         Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 12.dp, horizontal = 16.dp)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .combinedClickable(
-                        enabled = true,
-                        onLongClick = onLongClick ?: {
-                            onDismiss()
-                            navController.navigate(
-                                Screen.SettingProviderDetail(
-                                    providerSetting.id.toString()
-                                )
-                            )
-                        },
-                        onClick = { onSelect(model) },
-                        interactionSource = interactionSource,
-                        indication = LocalIndication.current
-                    ),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    shape = MaterialTheme.shapes.small,
-                ) {
-                    AutoAIIcon(
-                        name = model.modelId,
-                        modifier = Modifier
-                            .padding(4.dp)
-                            .size(32.dp)
-                    )
-                }
+            if (compact) {
                 Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .then(clickable),
                 ) {
-                    Text(
-                        text = model.displayName,
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-
-                    FlowRow(
-                        modifier = Modifier
-                            .fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        ModelIconBadge(model = model, compact = true)
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            ModelName(model = model)
+                            subtitle?.invoke()
+                        }
+                    }
+                    ModelTags(model = model)
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .then(clickable),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    ModelIconBadge(model = model, compact = false)
+                    Column(
+                        modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        ModelTypeTag(model = model)
-
-                        ModelModalityTag(model = model)
-
-                        ModelAbilityTag(model = model)
+                        ModelName(model = model)
+                        subtitle?.invoke()
+                        ModelTags(model = model)
                     }
-
-                    footer?.invoke()
                 }
-                tail()
             }
-            dragHandle?.let { it() }
+            tail()
         }
+    }
+}
+
+@Composable
+private fun ModelName(model: Model) {
+    Text(
+        text = model.displayName,
+        style = MaterialTheme.typography.titleSmall,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+@Composable
+private fun ModelIconBadge(model: Model, compact: Boolean) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = MaterialTheme.shapes.small,
+    ) {
+        AutoAIIcon(
+            name = model.modelId,
+            modifier = Modifier
+                .padding(if (compact) 4.dp else 5.dp)
+                .size(if (compact) 26.dp else 36.dp),
+        )
+    }
+}
+
+@Composable
+private fun ModelTags(model: Model) {
+    FlowRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        ModelProviderOverrideTag(model = model)
+
+        ModelTypeTag(model = model)
+
+        ModelModalityTag(model = model)
+
+        ModelAbilityTag(model = model)
+    }
+}
+
+// 模型的供应商覆盖来自另一份配置，这里只露出它的类型名，跟供应商详情页的显示保持一致
+@Composable
+fun ModelProviderOverrideTag(model: Model) {
+    val providerOverwrite = model.providerOverwrite ?: return
+    Tag(
+        type = TagType.INFO
+    ) {
+        Text(
+            text = providerOverwrite.javaClass.simpleName ?: providerOverwrite.name,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

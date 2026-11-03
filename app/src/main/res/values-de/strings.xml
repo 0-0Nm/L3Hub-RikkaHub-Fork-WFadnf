@@ -2317,4 +2317,7 @@
   <string name="setting_palette_page_impact_hint">Magenta = Stellen, die von dieser Farbe betroffen sind</string>
   <string name="setting_palette_page_impact_none">Wird nirgendwo in der UI verwendet (aus Kompatibilität mit alten Konfigurationen beibehalten)</string>
   <string name="setting_palette_page_impact_unused">Erscheint nicht in der Vorschau (kann an anderen Stellen der UI verwendet werden — siehe Beschreibung oben)</string>
+  <string name="model_list_collapse_sidebar">Seitenleiste einklappen</string>
+  <string name="model_list_expand_sidebar">Seitenleiste ausklappen</string>
+  <string name="model_list_no_match">Keine passenden Modelle</string>
 </resources>
