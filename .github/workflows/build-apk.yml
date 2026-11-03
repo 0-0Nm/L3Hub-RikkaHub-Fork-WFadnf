@@ -24,7 +24,7 @@ on:
     tags: ['v*']
 
 concurrency:
-  group: build-apk-${{ github.ref }}
+  group: build-apk-${{ github.ref }}-${{ inputs.tag }}-${{ inputs.variant }}
   cancel-in-progress: false
 
 jobs:
@@ -36,6 +36,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # 手动触发填了 tag 时，要编的是那个 tag 的提交；否则会拿分支 HEAD 出的包挂到 tag 上
+          ref: ${{ inputs.tag || github.ref }}
           # 发布说明要用 git log 取出上一个 tag 到本 tag 的提交，浅克隆拿不到
           fetch-depth: 0
           submodules: recursive
@@ -90,35 +92,43 @@ jobs:
             echo "TAG=$tag"
             echo "IS_PRERELEASE=$is_pre"
           } >> "$GITHUB_ENV"
-          echo "artifact=L3Hub-${variant}" >> "$GITHUB_OUTPUT"
+          artifact="L3Hub-${variant}"
+          if [ -n "$tag" ]; then artifact="${artifact}-${tag}"; fi
+          echo "artifact=${artifact}" >> "$GITHUB_OUTPUT"
           echo "变体=$variant tag=${tag:-（无，只出 artifact）} prerelease=$is_pre"
 
       # 预览版用仓库里固定的 debug key（keystore/l3hub-debug.jks），正式版用 Secrets 里的
       # release key。build.gradle.kts 的 release 签名只认 local.properties，这里按变体写进去。
       - name: Restore signing keystore
         env:
-          ANDROID_DEBUG_KEYSTORE: ${{ secrets.ANDROID_DEBUG_KEYSTORE }}
           ANDROID_RELEASE_KEYSTORE: ${{ secrets.ANDROID_RELEASE_KEYSTORE }}
           ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
           ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
           ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -n "$ANDROID_DEBUG_KEYSTORE" ]; then
-            mkdir -p "$HOME/.android"
-            printf '%s' "$ANDROID_DEBUG_KEYSTORE" | base64 -d > "$HOME/.android/debug.keystore"
-            chmod 600 "$HOME/.android/debug.keystore"
-          fi
           if [ "$VARIANT" != "release" ]; then
+            echo "预览版签的是仓库里的 keystore/l3hub-debug.jks，不用还原密钥"
             exit 0
           fi
-          if [ -z "${ANDROID_RELEASE_KEYSTORE:-}" ]; then
-            echo "正式版缺少 ANDROID_RELEASE_KEYSTORE secret" >&2
+          # 四个都必须是真值：build.gradle.kts 只判 null，而 Properties.load 把「storePassword=」
+          # 读成空串，一路走到 validateSigning 才报「keystore 口令不对」，看不出是 secret 没配
+          for name in ANDROID_RELEASE_KEYSTORE ANDROID_RELEASE_STORE_PASSWORD \
+                      ANDROID_RELEASE_KEY_ALIAS ANDROID_RELEASE_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "缺少 secret：${name}" >&2
+              exit 1
+            fi
+          done
+          ks="$RUNNER_TEMP/l3hub-release.jks"
+          # 网页上粘 base64 常带换行，GNU base64 -d 遇到就 invalid input 退出，报错完全不提 secret
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE" | tr -d ' \t\r\n' | base64 -d > "$ks"
+          chmod 600 "$ks"
+          if ! keytool -list -keystore "$ks" -storepass "$ANDROID_RELEASE_STORE_PASSWORD" \
+               -alias "$ANDROID_RELEASE_KEY_ALIAS" >/dev/null 2>&1; then
+            echo "keystore 解不开：口令或 alias 和 secret 对不上" >&2
             exit 1
           fi
-          ks="$RUNNER_TEMP/l3hub-release.jks"
-          printf '%s' "$ANDROID_RELEASE_KEYSTORE" | base64 -d > "$ks"
-          chmod 600 "$ks"
           {
             echo "storeFile=$ks"
             echo "storePassword=$ANDROID_RELEASE_STORE_PASSWORD"
@@ -209,7 +219,17 @@ jobs:
             echo "没读到签名证书指纹，apksigner 输出格式变了？" >&2
             exit 1
           fi
+          cert=$(printf '%s' "$cert" | tr -d ':' | tr 'A-Z' 'a-z')
           echo "签名证书 SHA-256：${cert}"
+          if [ "$VARIANT" = "release" ]; then
+            # 正式版换密钥就等于换应用身份（老用户再也覆盖安装不了），指纹对不上要在这里红。
+            # 真要换密钥，连这一行和 FORK.md 里的指纹一起改。
+            want_cert=0ed133055246d7231888e72197f29fa616a65367de875042108f9d417b583542
+            if [ "$cert" != "$want_cert" ]; then
+              echo "正式版签名证书指纹不符：${cert} ≠ ${want_cert}" >&2
+              exit 1
+            fi
+          fi
           echo "CERT_SHA256=$cert" >> "$GITHUB_ENV"
 
       # Gradle 产出的名字是 app-github-arm64-v8a-release.apk，下载下来分不清版本。
@@ -237,7 +257,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.params.outputs.artifact }}
-          path: dist/*.apk
+          # 连 .sha256 一起带：手动触发只出包时也能拿到校验文件
+          path: dist/*
           if-no-files-found: error
 
       - name: Publish release
@@ -293,6 +314,13 @@ jobs:
             if [ "$IS_PRERELEASE" = "true" ]; then
               flags+=(--prerelease)
             fi
+            # --verify-tag：tag 不存在时直接报错，不要拿 GITHUB_SHA 现造一个，
+            # 否则「手动触发 + 打错 tag」会凭空多出一个和代码无关的版本
             gh release create "$TAG" dist/*.apk dist/*.sha256 \
-              --title "$TAG" --notes-file RELEASE_NOTES.md --target "$GITHUB_SHA" "${flags[@]}"
+              --title "$TAG" --notes-file RELEASE_NOTES.md --verify-tag "${flags[@]}"
           fi
+
+      # local.properties 里是明文口令，别留在工作区等后续步骤/缓存捡走
+      - name: Clear local.properties
+        if: always()
+        run: rm -f local.properties RELEASE_NOTES.md

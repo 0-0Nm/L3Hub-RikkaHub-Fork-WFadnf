@@ -548,7 +548,9 @@ debug 里 dex 有 38 个、release 压缩后只剩 2 个，差的就是 R8。上
 步骤：
 
 1. 改 `app/build.gradle.kts` 的 `versionCode` / `versionName`（每次各 +1，例如 280 / `L.3.1.1.102`），连同改动一起提交
-2. 打 tag 推上去：`git tag v3.1.1 && git push origin v3.1.1`（预览版就是 `v3.1.1-preview.102`）
+2. 打 tag 推上去：`git tag v3.1.1 && git push origin v3.1.1`（预览版就是 `v3.1.1-preview.102`）。
+   手动触发时如果填了 tag，checkout 用的就是这个 tag 的提交，不会拿分支 HEAD 出的包挂到 tag 上；
+   `gh release create` 带 `--verify-tag`，tag 不存在直接报错，不会现造一个
 3. `build-apk.yml` 自动跑：checkout（含子模块）→ pnpm 装 web-ui → `tools/build-apk.sh`
    （按 `VARIANT` 选 `:app:assembleGithubRelease` / `:app:assembleGithubDebug`，跳过 lint vital）→ 重命名产物 → 建 Release
 
@@ -570,10 +572,13 @@ GitHub 自带的 `--generate-notes` 只会给一行 Full Changelog。
 流程把 keystore 还原到 `$RUNNER_TEMP`，再把 `storeFile` / `storePassword` / `keyAlias` / `keyPassword`
 写进 `local.properties`——`app/build.gradle.kts` 的 release 签名只认这个文件。
 证书 SHA-256 指纹是 `0E:D1:33:05:52:46:D7:23:18:88:E7:21:97:F2:9F:A6:16:A6:53:67:DE:87:50:42:10:8F:9D:41:7B:58:35:42`，
-每次发版都会写进 Release notes，装之前可以核对。
+每次发版都会写进 Release notes，装之前可以核对。这个值也写死在 `build-apk.yml` 的 Verify APK 步骤里：
+正式版签名证书对不上就红，免得 secret 被换成别的 key 之后一路绿灯发出去。换密钥要同步改这一行。
 
 密钥丢了就再也发不出能覆盖安装的更新：本机备份在 `~/keystore-backup/`（jks + 口令），务必另外存一份。
-预览版不走这套：它用仓库里公开的 `keystore/l3hub-debug.jks`，泄露了也无所谓。
+预览版不走这套：它用仓库里公开的 `keystore/l3hub-debug.jks`，泄露了也无所谓，
+所以 `build-apk.yml` 的还原密钥那步对预览版是直接跳过的（早先那个 `ANDROID_DEBUG_KEYSTORE`
+secret 没人读，已经从流程里去掉，仓库设置里可以一并删掉）。
 
 几点：
 
