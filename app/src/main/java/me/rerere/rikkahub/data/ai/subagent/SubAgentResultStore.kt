@@ -30,7 +30,8 @@ internal data class PendingSubAgentResults(
  * 的做法落到独立文件：不进数据库，也不改变 [me.rerere.rikkahub.data.model.Conversation] 的落库语义。
  *
  * 写入先写 `<name>.tmp` 再 rename，任何时候被 kill 都不会留下半个 JSON。读失败的文件直接删掉，
- * 当作没有待投递结果——坏掉的一份结果不值得让整个会话再也开不了。
+ * 当作没有待投递结果——坏掉的一份结果不值得让整个会话再也开不了。写盘失败会记 error 并返回
+ * false：这一条只在本进程内能投出去，进程重启后就没有了，除此之外没有补偿手段。
  *
  * 投递用 [peek] + [drop] 两步：先取出一批，父会话收下之后再丢掉队首。投递被拒（上下文已满）
  * 或者进程在两步之间被杀，结果都还在文件里，下一轮会重新投递。
@@ -41,8 +42,12 @@ class SubAgentResultStore(
 ) {
     private val fileMutex = Mutex()
 
-    /** 追加一条结果；父会话的多条结果按到达顺序排队，投递时合并成一条消息 */
-    suspend fun append(conversationId: Uuid, result: String) = withContext(dispatcher) {
+    /**
+     * 追加一条结果；父会话的多条结果按到达顺序排队，投递时合并成一条消息。
+     *
+     * @return 是否落盘成功。false 表示这一条只在本进程里排队，进程被杀就没了
+     */
+    suspend fun append(conversationId: Uuid, result: String): Boolean = withContext(dispatcher) {
         fileMutex.withLock {
             write(conversationId, read(conversationId) + result)
         }
@@ -95,14 +100,15 @@ class SubAgentResultStore(
         return runCatching {
             JsonInstant.decodeFromString(PendingSubAgentResults.serializer(), file.readText()).results
         }.onFailure {
-            Log.w(TAG, "read: drop unreadable results of $conversationId", it)
+            // 解析失败意味着这一队结果一起没了，至少把丢掉的规模记下来
+            Log.e(TAG, "read: dropping unreadable results of $conversationId (${file.length()} bytes)", it)
             file.delete()
         }.getOrDefault(emptyList())
     }
 
-    private fun write(conversationId: Uuid, results: List<String>) {
+    private fun write(conversationId: Uuid, results: List<String>): Boolean {
         val target = file(conversationId)
-        runCatching {
+        return runCatching {
             val parent = target.parentFile
             if (parent != null && !parent.isDirectory) parent.mkdirs()
             val temp = tempFile(conversationId)
@@ -117,7 +123,9 @@ class SubAgentResultStore(
                 temp.copyTo(target, overwrite = true)
                 temp.delete()
             }
-        }.onFailure { Log.w(TAG, "write: failed for $conversationId", it) }
+        }.onFailure {
+            Log.e(TAG, "write: failed for $conversationId, ${results.size} result(s) not persisted", it)
+        }.isSuccess
     }
 
     private fun file(conversationId: Uuid): File = File(root, "$conversationId$RESULT_SUFFIX")

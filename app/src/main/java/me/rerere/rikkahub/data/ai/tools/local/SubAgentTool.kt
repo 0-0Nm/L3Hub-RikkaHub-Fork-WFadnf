@@ -22,7 +22,7 @@ internal fun buildSubAgentTool(
     runner: SubAgentRunner,
 ): Tool {
     val catalog = subAgents.joinToString(separator = "\n") { assistant ->
-        val name = assistant.name.ifBlank { assistant.id.toString() }
+        val name = subAgentLabel(assistant)
         val intro = assistant.systemPrompt.lineSequence().firstOrNull()?.trim()?.take(60).orEmpty()
         if (intro.isEmpty()) "- $name" else "- $name: $intro"
     }

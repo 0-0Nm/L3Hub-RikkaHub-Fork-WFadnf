@@ -83,11 +83,17 @@ class SubAgentRunner(
 
         val chatService = chatServiceProvider()
         try {
-            chatService.sendMessage(
+            // 新会话一般不会触到上下文上限；真被拒的话子会话会停在 running、父会话永远等不到结果，
+            // 所以这里按失败处理，至少任务树上能看到状态
+            val accepted = chatService.sendMessage(
                 conversationId = child.id,
                 content = listOf(UIMessagePart.Text(task)),
                 answer = true,
             )
+            if (!accepted) {
+                markFailed(chatService, child.id)
+                return "Sub-agent \"${subAgentLabel(candidate)}\" could not start: the conversation refused the message."
+            }
         } catch (e: Exception) {
             Log.w(TAG, "start sub agent failed", e)
             markFailed(chatService, child.id)

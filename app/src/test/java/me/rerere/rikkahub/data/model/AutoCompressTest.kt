@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.model
 
 import me.rerere.ai.ui.UIMessage
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import kotlin.uuid.Uuid
 
@@ -146,6 +147,52 @@ class AutoCompressTest {
                 keepTailNodes = null,
                 force = false,
                 limitTokens = 1_632,
+            ),
+        )
+    }
+
+    /**
+     * 回归：导入的长历史、换了窗口更小的模型时，占用可能是门限的好几倍。
+     * 只按占用的一半压，压完仍然在门限之上，下一轮接着压，每轮都是一次整段摘要请求。
+     */
+    @Test
+    fun `threshold caps the budget when usage is far beyond it`() {
+        // checkpoint + 8 条 204 token 的回复
+        val conversation = conversation(checkpoint(), *Array(8) { bigReply() })
+
+        // 占用 1632（还没到门限）：预算取 min(816, 1000) = 816，封顶不生效
+        assertEquals(
+            ContextTrim(nodeIndex = 5),
+            conversation.resolveAutoCompressTrim(
+                target = AutoCompressTarget.TOKENS,
+                targetValue = 1_000,
+                keepTailNodes = null,
+                force = false,
+                limitTokens = 1_632,
+                thresholdTokens = 2_000,
+            ),
+        )
+        // 占用 8000、门限 2000：只看占用的一半会取 4000，检查点之后的 1632 全都装得下，
+        // 于是「没有可压缩范围」——门限判定说超限，实际一条都没压掉
+        assertNull(
+            conversation.resolveAutoCompressTrim(
+                target = AutoCompressTarget.TOKENS,
+                targetValue = 1_000,
+                keepTailNodes = null,
+                force = false,
+                limitTokens = 8_000,
+            ),
+        )
+        // 封到门限的一半（1000）之后，一次切到第 4 条消息的正文处
+        assertEquals(
+            ContextTrim(nodeIndex = 4, partIndex = 0),
+            conversation.resolveAutoCompressTrim(
+                target = AutoCompressTarget.TOKENS,
+                targetValue = 1_000,
+                keepTailNodes = null,
+                force = false,
+                limitTokens = 8_000,
+                thresholdTokens = 2_000,
             ),
         )
     }
