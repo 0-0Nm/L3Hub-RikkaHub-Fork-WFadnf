@@ -259,6 +259,7 @@
   <string name="chat_page_compress_context_desc">將對話壓縮成摘要以節省 token</string>
   <string name="chat_page_compress_context_title">壓縮對話紀錄</string>
   <string name="chat_page_compressing">正在壓縮...</string>
+  <string name="chat_page_ocr_processing">正在辨識圖片 %1$d/%2$d…</string>
   <string name="chat_page_conversation_system_prompt">對話系統提示</string>
   <string name="chat_page_conversation_system_prompt_clear">清除</string>
   <string name="chat_page_conversation_system_prompt_hint">覆蓋此對話的助理系統提示</string>
@@ -746,7 +747,8 @@
   <string name="setting_model_page_chat_model_desc">全域預設聊天模型</string>
   <string name="setting_model_page_ocr_model">OCR 模型</string>
   <string name="setting_model_page_ocr_model_desc">用於圖片光學字元辨識的模型</string>
-  <string name="setting_model_page_ocr_prompt_vars">變數：圖片資料：{images}</string>
+  <string name="setting_model_page_ocr_model_missing">所選模型不支援圖片輸入，無法用於圖像辨識</string>
+  <string name="setting_model_page_ocr_prompt_vars">無變數：圖片會單獨傳送給模型</string>
   <string name="setting_model_page_prompt">提示詞</string>
   <string name="setting_model_page_reset_to_default">重置為預設值</string>
   <string name="setting_model_page_suggestion_model">聊天建議模型</string>

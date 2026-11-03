@@ -290,6 +290,7 @@
   <string name="chat_page_compress_context_desc">ضغط المحادثة إلى ملخص لتوفير Token</string>
   <string name="chat_page_compress_context_title">ضغط سجل المحادثة</string>
   <string name="chat_page_compressing">جارٍ الضغط...</string>
+  <string name="chat_page_ocr_processing">جارٍ التعرف على الصورة %1$d من %2$d…</string>
   <string name="chat_page_conversation_system_prompt">مطالبة نظام المحادثة</string>
   <string name="chat_page_conversation_system_prompt_clear">مسح</string>
   <string name="chat_page_conversation_system_prompt_hint">تجاوز مطالبة النظام الخاصة بالمساعد لهذه المحادثة</string>
@@ -885,7 +886,8 @@
   <string name="setting_model_page_fast_model_desc">النموذج المستخدم للعناوين واقتراحات الدردشة والمهام السريعة أو الخلفية الأخرى</string>
   <string name="setting_model_page_ocr_model">نموذج OCR</string>
   <string name="setting_model_page_ocr_model_desc">النموذج المستخدم للتعرّف الضوئي على الحروف في الصور</string>
-  <string name="setting_model_page_ocr_prompt_vars">المتغيرات: بيانات الصورة: {images}</string>
+  <string name="setting_model_page_ocr_model_missing">هذا النموذج لا يقرأ الصور، لذا لا يصلح للتعرف الضوئي</string>
+  <string name="setting_model_page_ocr_prompt_vars">لا متغيرات: تُرسل الصورة إلى النموذج بشكل منفصل</string>
   <string name="setting_model_page_prompt">المطالبة</string>
   <string name="setting_model_page_prompt_ocr">التعرف الضوئي على الحروف</string>
   <string name="setting_model_page_prompt_suggestion">اقتراحات ردود الدردشة</string>

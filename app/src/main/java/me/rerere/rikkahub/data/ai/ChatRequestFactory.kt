@@ -5,7 +5,6 @@ import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import me.rerere.ai.agent.AgentHooks
 import me.rerere.ai.agent.AgentRequest
-import me.rerere.ai.agent.RetryPolicy
 import me.rerere.ai.agent.StepRequest
 import me.rerere.ai.agent.withRetry
 import me.rerere.ai.core.ReasoningLevel
@@ -49,9 +48,7 @@ import me.rerere.rikkahub.data.model.getChatModelOf
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.data.repository.memoryId
-import java.io.IOException
 import kotlin.time.Clock
-import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatRequestFactory"
@@ -381,32 +378,6 @@ internal fun backgroundTextGenerationParams(
     customBody = model.customBodies,
     sessionId = sessionId.toString(),
 )
-
-internal fun Settings.retryPolicy(): RetryPolicy {
-    val network = networkSetting
-    if (!network.enableAutoRetry) return RetryPolicy.NONE
-    // 错误码以逗号分隔，允许中英文逗号、空格和分号
-    val errorCodes = network.retryErrorCodes
-        .split(',', '，', ';', '；', ' ', '\n')
-        .mapNotNull { it.trim().toIntOrNull() }
-        .toSet()
-    return RetryPolicy(
-        maxRetries = network.retryMaxCount.coerceIn(0, 64),
-        initialDelay = network.retryIntervalSeconds.coerceIn(1, 60).seconds,
-        exponentialBackoff = false,
-        retryOn = { error ->
-            error is IOException || errorCodes.any { error.hasStatusHint(it) }
-        },
-    )
-}
-
-/** 服务端错误多数把状态码写在异常文本里，按完整数字匹配，避免 500 命中 1500 */
-private fun Throwable.hasStatusHint(code: Int): Boolean =
-    generateSequence(this) { it.cause }.any { cause ->
-        cause.message?.let { message ->
-            Regex("(?<!\\d)$code(?!\\d)").containsMatchIn(message)
-        } == true
-    }
 
 // 旧会话只存了主工作区的一个 cwd，读的时候并进多工作区表
 private fun Conversation.effectiveWorkspaceCwds(assistant: Assistant): Map<String, String> {

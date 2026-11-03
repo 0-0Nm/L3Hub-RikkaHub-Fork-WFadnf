@@ -337,6 +337,7 @@
   <string name="chat_page_compress_context_desc">Komprimiere die Unterhaltung zu einer Zusammenfassung, um Tokens zu sparen</string>
   <string name="chat_page_compress_context_title">Unterhaltungsverlauf komprimieren</string>
   <string name="chat_page_compressing">Wird komprimiert...</string>
+  <string name="chat_page_ocr_processing">Bild wird gelesen %1$d von %2$d…</string>
   <string name="chat_page_conversation_system_prompt">Systemprompt der Unterhaltung</string>
   <string name="chat_page_conversation_system_prompt_clear">Leeren</string>
   <string name="chat_page_conversation_system_prompt_hint">Überschreibe den Systemprompt des Assistenten für diese Unterhaltung</string>
@@ -771,7 +772,8 @@
   <string name="setting_files_page_clean_failed_toast">Einige Dateien konnten nicht bereinigt werden</string>
   <string name="setting_files_page_clean_older_than_days">Älter als %1$d Tage</string>
   <string name="setting_model_page_ocr_model_desc">Modell für die optische Zeichenerkennung auf Bildern</string>
-  <string name="setting_model_page_ocr_prompt_vars">Variablen: Bilddaten: {images}</string>
+  <string name="setting_model_page_ocr_model_missing">Dieses Modell kann keine Bilder lesen und eignet sich nicht für OCR</string>
+  <string name="setting_model_page_ocr_prompt_vars">Keine Variablen: Das Bild wird separat an das Modell gesendet</string>
   <string name="setting_model_page_prompt">Prompt</string>
   <string name="setting_model_page_reset_to_default">Auf Standard zurücksetzen</string>
   <string name="setting_model_page_enable_suggestion">Chat-Vorschläge aktivieren</string>

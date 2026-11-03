@@ -255,6 +255,7 @@
   <string name="chat_page_compress_context_desc">会話を要約して圧縮し、トークンを節約します</string>
   <string name="chat_page_compress_context_title">会話履歴を圧縮</string>
   <string name="chat_page_compressing">圧縮中…</string>
+  <string name="chat_page_ocr_processing">画像を認識中 %1$d/%2$d…</string>
   <string name="chat_page_conversation_system_prompt">会話システムプロンプト</string>
   <string name="chat_page_conversation_system_prompt_clear">クリア</string>
   <string name="chat_page_conversation_system_prompt_hint">この会話でアシスタントのシステムプロンプトを上書き</string>
@@ -728,7 +729,8 @@
   <string name="setting_model_page_chat_model_desc">グローバルデフォルトチャットモデル</string>
   <string name="setting_model_page_ocr_model">OCRモデル</string>
   <string name="setting_model_page_ocr_model_desc">画像の光学文字認識に使用されるモデル</string>
-  <string name="setting_model_page_ocr_prompt_vars">変数: 画像データ: {images}</string>
+  <string name="setting_model_page_ocr_model_missing">このモデルは画像を読み取れないため、OCR には使えません</string>
+  <string name="setting_model_page_ocr_prompt_vars">変数なし: 画像は個別にモデルへ送信されます</string>
   <string name="setting_model_page_prompt">プロンプト</string>
   <string name="setting_model_page_reset_to_default">デフォルトにリセット</string>
   <string name="setting_model_page_suggestion_model">チャット提案モデル</string>

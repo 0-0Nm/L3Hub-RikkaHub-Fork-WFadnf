@@ -24,6 +24,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.ModelType
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.AiBrain01
@@ -263,6 +264,12 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
                     state = ocrModel,
                     iconContainerColor = containerColor,
                     iconContentColor = contentColor,
+                    // 只在明确选了一个看不了图的模型时提示；没配过 OCR 模型属于正常情况
+                    warning = if (ocrModel.currentModel?.inputModalities?.contains(Modality.IMAGE) == false) {
+                        stringResource(R.string.setting_model_page_ocr_model_missing)
+                    } else {
+                        null
+                    },
                 )
             }
         }
@@ -295,9 +302,15 @@ private fun CardGroupScope.modelItem(
     iconContentColor: Color,
     @StringRes placeholder: Int = R.string.model_list_select_model,
     onClear: (() -> Unit)? = null,
+    warning: String? = null,
 ) = formItem(
     headlineContent = { Text(stringResource(title)) },
-    supportingContent = { Text(stringResource(description)) },
+    supportingContent = {
+        Column {
+            Text(stringResource(description))
+            warning?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        }
+    },
     leadingContent = {
         CardGroupIcon(icon, containerColor = iconContainerColor, contentColor = iconContentColor)
     },

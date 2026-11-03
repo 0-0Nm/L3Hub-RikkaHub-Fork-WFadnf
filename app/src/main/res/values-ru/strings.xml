@@ -255,6 +255,7 @@
   <string name="chat_page_compress_context_desc">Сжать переписку в краткое резюме, чтобы сэкономить токены</string>
   <string name="chat_page_compress_context_title">Сжать историю чата</string>
   <string name="chat_page_compressing">Сжатие...</string>
+  <string name="chat_page_ocr_processing">Распознавание изображения %1$d из %2$d…</string>
   <string name="chat_page_conversation_system_prompt">Системный запрос для беседы</string>
   <string name="chat_page_conversation_system_prompt_clear">Очистить</string>
   <string name="chat_page_conversation_system_prompt_hint">Переопределить системный промпт ассистента для этого разговора</string>
@@ -730,7 +731,8 @@
   <string name="setting_model_page_chat_model_desc">Глобальная модель чата по умолчанию</string>
   <string name="setting_model_page_ocr_model">Модель OCR</string>
   <string name="setting_model_page_ocr_model_desc">Модель, используемая для оптического распознавания текста на изображениях</string>
-  <string name="setting_model_page_ocr_prompt_vars">Переменные: Данные изображения: {images}</string>
+  <string name="setting_model_page_ocr_model_missing">Эта модель не читает изображения и не подходит для OCR</string>
+  <string name="setting_model_page_ocr_prompt_vars">Без переменных: изображение отправляется модели отдельно</string>
   <string name="setting_model_page_prompt">Промпт</string>
   <string name="setting_model_page_reset_to_default">Сбросить до значения по умолчанию</string>
   <string name="setting_model_page_suggestion_model">Модель предложений чата</string>

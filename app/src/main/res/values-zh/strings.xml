@@ -264,6 +264,7 @@
   <string name="chat_page_compress_context_desc">将对话压缩为摘要以节省令牌</string>
   <string name="chat_page_compress_context_title">压缩对话历史</string>
   <string name="chat_page_compressing">正在压缩……</string>
+  <string name="chat_page_ocr_processing">正在识别图片 %1$d/%2$d…</string>
   <string name="chat_page_context_limit_reached">上下文已达上限，请压缩历史或新建对话</string>
   <string name="chat_page_context_meter_absolute">%1$s / %2$s</string>
   <string name="chat_page_context_meter_max">MAX</string>
@@ -810,7 +811,8 @@
   <string name="setting_model_page_chat_model_desc">全局默认的聊天模型</string>
   <string name="setting_model_page_ocr_model">OCR 模型</string>
   <string name="setting_model_page_ocr_model_desc">用于图像光学字符识别的模型</string>
-  <string name="setting_model_page_ocr_prompt_vars">变量：图像数据：{images}</string>
+  <string name="setting_model_page_ocr_model_missing">所选模型不支持图片输入，无法用于图像识别</string>
+  <string name="setting_model_page_ocr_prompt_vars">无变量：图片会单独发送给模型</string>
   <string name="setting_model_page_prompt">提示词</string>
   <string name="setting_model_page_reset_to_default">重置为默认</string>
   <string name="setting_model_page_suggestion_model">聊天建议模型</string>
