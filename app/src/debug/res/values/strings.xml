@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- 正式版和预览版同装在一台手机上时，桌面图标要能分开；主资源的 app_name 各语言都是 L3Hub，
+       这里每种语言都覆盖一遍，否则韩语/日语等设备上会回落到 values-xx 里的 L3Hub -->
+  <string name="app_name">L3Hub Preview</string>
+</resources>
