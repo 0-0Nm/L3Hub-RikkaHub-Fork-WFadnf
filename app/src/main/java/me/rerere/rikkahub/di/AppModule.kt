@@ -151,6 +151,7 @@ val appModule = module {
             filesManager = get(),
             folderRepository = get(),
             draftStore = get(),
+            subAgentResultStore = get(),
         )
     }
 

@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.ai.subagent
 import android.util.Log
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.getAssistantOf
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -14,8 +15,25 @@ const val SUB_AGENT_STATE_COMPLETED = "completed"
 const val SUB_AGENT_STATE_FAILED = "failed"
 
 private const val TAG = "SubAgentRunner"
+
 // 主代理 → 子代理 → 孙代理，最多三代；depthOf 返回祖先数量，父会话在第 2 层起拒绝继续派发
 private const val MAX_DEPTH = 2
+
+/** 子代理的显示名：名字没填时用 id，回复里不会出现一对空引号 */
+internal fun subAgentLabel(assistant: Assistant): String =
+    assistant.name.ifBlank { assistant.id.toString() }
+
+/**
+ * 派发目标匹配：助手名（忽略大小写）或 id。
+ *
+ * 工具层先用它筛一遍，[SubAgentRunner] 再用它做最终解析。两边规则必须一致，
+ * 否则会出现「工具说没有这个子代理，runner 其实能匹配上」这种自相矛盾的回复。
+ */
+internal fun Assistant.matchesSubAgentName(target: String): Boolean {
+    val name = target.trim()
+    if (name.isEmpty()) return false
+    return this.name.equals(name, ignoreCase = true) || id.toString().equals(name, ignoreCase = true)
+}
 
 /**
  * 把任务交给一个普通助手会话，复用 ChatService 的会话、流式状态和生成生命周期。
@@ -37,10 +55,7 @@ class SubAgentRunner(
     ): String {
         val settings = settingsStore.awaitLoaded()
         val candidate = settings.assistants.firstOrNull { assistant ->
-            assistant.isSubAgent && (
-                assistant.id.toString().equals(target.trim(), ignoreCase = true) ||
-                    assistant.name.equals(target.trim(), ignoreCase = true)
-                )
+            assistant.isSubAgent && assistant.matchesSubAgentName(target)
         } ?: return "No sub-agent named \"$target\". Use one of the names in the available sub-agent list."
 
         val parent = conversationRepository.getConversationById(parentConversationId)
@@ -76,10 +91,10 @@ class SubAgentRunner(
         } catch (e: Exception) {
             Log.w(TAG, "start sub agent failed", e)
             markFailed(chatService, child.id)
-            return "Sub-agent \"${candidate.name}\" failed to start: ${e.message ?: e::class.simpleName}"
+            return "Sub-agent \"${subAgentLabel(candidate)}\" failed to start: ${e.message ?: e::class.simpleName}"
         }
 
-        return "Sub-agent \"${candidate.name}\" is now running in parallel. Its result will be delivered back to this conversation automatically; open conversation ${child.id} to watch progress."
+        return "Sub-agent \"${subAgentLabel(candidate)}\" is now running in parallel. Its result will be delivered back to this conversation automatically; open conversation ${child.id} to watch progress."
     }
 
     private suspend fun markFailed(chatService: ChatService, conversationId: Uuid) {

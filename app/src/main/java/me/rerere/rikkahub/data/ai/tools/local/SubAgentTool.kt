@@ -9,6 +9,8 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.subagent.SubAgentRunner
+import me.rerere.rikkahub.data.ai.subagent.matchesSubAgentName
+import me.rerere.rikkahub.data.ai.subagent.subAgentLabel
 import me.rerere.rikkahub.data.model.Assistant
 import kotlin.uuid.Uuid
 
@@ -69,8 +71,9 @@ internal fun buildSubAgentTool(
             val result = when {
                 target.isEmpty() -> "Missing required parameter: assistant."
                 task.isEmpty() -> "Missing required parameter: task."
-                subAgents.none { it.name.equals(target, ignoreCase = true) || it.id.toString() == target } ->
-                    "No sub-agent named \"$target\". Available: ${subAgents.joinToString { it.name }}"
+                // 和 runner 用同一套匹配规则，避免工具层先一步否掉一个其实能派发的目标
+                subAgents.none { it.matchesSubAgentName(target) } ->
+                    "No sub-agent named \"$target\". Available: ${subAgents.joinToString { subAgentLabel(it) }}"
                 else -> runner.dispatch(conversationId, target, task)
             }
             listOf(UIMessagePart.Text(result))

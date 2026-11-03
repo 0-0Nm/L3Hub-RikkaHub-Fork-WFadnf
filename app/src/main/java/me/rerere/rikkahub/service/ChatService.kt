@@ -49,6 +49,7 @@ import me.rerere.rikkahub.data.ai.prompts.buildCompressPrompt
 import me.rerere.rikkahub.data.ai.subagent.SUB_AGENT_STATE_COMPLETED
 import me.rerere.rikkahub.data.ai.subagent.SUB_AGENT_STATE_FAILED
 import me.rerere.rikkahub.data.ai.subagent.SUB_AGENT_STATE_RUNNING
+import me.rerere.rikkahub.data.ai.subagent.SubAgentResultStore
 import me.rerere.rikkahub.data.ai.subagent.formatSubAgentRoundResult
 import me.rerere.rikkahub.data.ai.subagent.formatSubAgentResults
 import me.rerere.rikkahub.data.ai.tools.InvalidMcpServerNamesException
@@ -179,7 +180,16 @@ class ChatService(
     private val filesManager: FilesManager,
     private val folderRepository: FolderRepository,
     private val draftStore: DraftStore,
+    private val subAgentResultStore: SubAgentResultStore,
 ) {
+    init {
+        // 进程被杀时还有子代理结果没投递出去：启动后补投一次，否则整条子代理链会停在这一层
+        appScope.launch {
+            settingsStore.awaitLoaded()
+            resumePendingSubAgentResults()
+        }
+    }
+
     /** 一轮生成的结果 */
     private sealed interface TurnResult {
         data class Finished(val reason: AgentFinishReason) : TurnResult
@@ -532,6 +542,8 @@ class ChatService(
 
     /**
      * @param interject 强制插话：不等当前回复结束，直接打断并把这条消息插到队首
+     * @return 消息是否已被受理。上下文到达 MAX 又没开自动压缩、或者内容为空时返回 false，
+     * 调用方据此决定要不要把内容留着下次再送（子代理结果回投就是这么用的）
      */
     fun sendMessage(
         conversationId: Uuid,
@@ -539,13 +551,13 @@ class ChatService(
         answer: Boolean = true,
         interject: Boolean = false,
         notice: Boolean = false,
-    ) {
-        if (content.isEmptyInputMessage()) return
+    ): Boolean {
+        if (content.isEmptyInputMessage()) return false
         val session = sessionManager.getOrCreate(conversationId)
-        synchronized(session) {
+        return synchronized(session) {
             if (session.maxContextReached() && !autoCompressEnabled(session)) {
                 reportContextLimit(conversationId)
-                return
+                return@synchronized false
             }
             // 关掉消息队列后，生成期间发送的消息等价于插话
             val queueEnabled = settingsStore.settingsFlow.value.enableMessageQueue
@@ -559,11 +571,12 @@ class ChatService(
                 } else {
                     dispatchNextQueuedMessage(conversationId)
                 }
-                return
+                return@synchronized true
             }
             if (session.messageQueue.state.value.messages.isEmpty()) session.messageQueue.resume()
             session.messageQueue.enqueue(content, answer, notice = notice)
             dispatchNextQueuedMessage(conversationId)
+            return@synchronized true
         }
     }
 
@@ -599,8 +612,12 @@ class ChatService(
             return
         }
         setSubAgentState(session, SUB_AGENT_STATE_COMPLETED)
-        // 每轮开头都会追加一条用户消息，用它数这是第几轮：父会话靠这个数区分同一个子代理的多条结果
-        val round = conversation.currentMessages.count { it.role == MessageRole.USER }
+        // 每轮开头都会追加一条用户消息，用它数这是第几轮：父会话靠这个数区分同一个子代理的多条结果。
+        // 压缩检查点存的是一段摘要，角色同样是 USER，但它不是谁说的话，不能算进轮次，
+        // 否则子代理会话压过一次之后 round 会跳号
+        val round = conversation.currentMessages.count { message ->
+            message.role == MessageRole.USER && !message.isContextCheckpoint
+        }
         // 只有自动跑起来的轮次才回传：第一轮是派发出来的，之后的轮次由子代理回传的结果触发。
         // 用户在子会话里手动追问的那一轮只更新状态，不打扰父会话
         val triggeredAutomatically = round <= 1 ||
@@ -628,10 +645,8 @@ class ChatService(
 
     // ---- background 子代理的结果投递 ----
 
-    // 父会话正忙时先攒着，空闲后合并成一条输入投递，避免打断正在进行的回合
-    private val pendingSubAgentResults = mutableMapOf<Uuid, MutableList<String>>()
-
-    // 正在投递的会话：同一时刻只送一条，投递期间新到的结果留到下一轮再合并
+    // 待投递的结果落在 subAgentResultStore 里（父会话正忙、没打开、进程被杀都还在），
+    // 这里只记「谁正在投递」：同一时刻只送一条，投递期间新到的结果留到下一轮再合并
     private val deliveringSubAgentResults = mutableSetOf<Uuid>()
 
     /**
@@ -639,23 +654,35 @@ class ChatService(
      * 正在生成、停在工具审批上或还没打开时先攒着，等这一轮结束或下次打开会话时合并投递。
      */
     suspend fun deliverSubAgentResult(parentConversationId: Uuid, result: String) {
-        synchronized(pendingSubAgentResults) {
-            pendingSubAgentResults.getOrPut(parentConversationId) { mutableListOf() }.add(result)
-        }
+        subAgentResultStore.append(parentConversationId, result)
         flushSubAgentResults(parentConversationId)
     }
 
-    private suspend fun flushSubAgentResults(conversationId: Uuid) {
-        val hasPending = synchronized(pendingSubAgentResults) {
-            pendingSubAgentResults.containsKey(conversationId) && conversationId !in deliveringSubAgentResults
+    /**
+     * 进程重启后的补投。
+     *
+     * 待投递的结果已经从内存挪到文件里，重启后不会自己消失；这里按会话把它们再送一次，
+     * 否则中间层子代理收到孙代理结果也接不上下一轮，整条链停在那里。
+     * 普通会话仍然遵守「用户下次打开再送」，只有子代理会话会在这里真的开始生成。
+     */
+    private suspend fun resumePendingSubAgentResults() {
+        subAgentResultStore.listAll().forEach { conversationId ->
+            runCatching { flushSubAgentResults(conversationId) }
+                .onFailure { Log.w(TAG, "resume sub agent results failed: $conversationId", it) }
         }
-        if (!hasPending) return
-        val session = sessionManager.get(conversationId)
-        // 会话没打开时：子代理会话只能自己接着跑，普通会话等用户下次打开再送
-        val unopenedSubAgent = session == null && canDeliverToUnopened(conversationId)
-        val batch = synchronized(pendingSubAgentResults) {
-            if (!pendingSubAgentResults.containsKey(conversationId)) return
+    }
+
+    private suspend fun flushSubAgentResults(conversationId: Uuid) {
+        // 同一会话同一时刻只投递一批：投递期间新到的结果留到下一轮再合并
+        synchronized(deliveringSubAgentResults) {
             if (!deliveringSubAgentResults.add(conversationId)) return
+        }
+        try {
+            val batch = subAgentResultStore.peek(conversationId)
+            if (batch.isEmpty()) return
+            val session = sessionManager.get(conversationId)
+            // 会话没打开时：子代理会话只能自己接着跑，普通会话等用户下次打开再送
+            val unopenedSubAgent = session == null && canDeliverToUnopened(conversationId)
             // 上下文已满又没开自动压缩时也先留着，等用户压缩或删消息后再投递
             val canDeliver = if (session == null) {
                 unopenedSubAgent
@@ -664,22 +691,20 @@ class ChatService(
                     !session.state.value.isAwaitingToolApproval &&
                     !(session.maxContextReached() && !autoCompressEnabled(session))
             }
-            if (!canDeliver) {
-                deliveringSubAgentResults.remove(conversationId)
-                return
-            }
-            pendingSubAgentResults.remove(conversationId).orEmpty()
-        }
-        try {
+            if (!canDeliver) return
             // 系统通知：走 USER 角色进请求，界面和导出都按系统消息展示
-            sendMessage(
+            val accepted = sendMessage(
                 conversationId = conversationId,
                 content = listOf(UIMessagePart.Text(formatSubAgentResults(batch))),
                 answer = true,
                 notice = true,
             )
+            // 没被收下（判定和入队之间上下文刚好越过 MAX）：结果留在队首，等下次再送
+            if (!accepted) return
+            // 父会话收下了这一批：只丢掉送出去的条数，投递期间新到的还留在队尾
+            subAgentResultStore.drop(conversationId, batch.size)
         } finally {
-            synchronized(pendingSubAgentResults) { deliveringSubAgentResults.remove(conversationId) }
+            synchronized(deliveringSubAgentResults) { deliveringSubAgentResults.remove(conversationId) }
         }
     }
 
@@ -1337,6 +1362,8 @@ class ChatService(
             reservedTokens = reservedTokens,
             // 用门限判断实际用掉的那个数：两边尺子不一致会留出一段「判超限但没有可压范围」
             limitTokens = used,
+            // 压缩目标再按门限封顶，占用远超门限时不必连压几轮
+            thresholdTokens = limit,
         ) ?: run {
             Log.d(TAG, "autoCompress: no compressible range")
             return CompressAttempt.SKIPPED
@@ -1718,6 +1745,8 @@ class ChatService(
         }
         // 会话没了草稿也没用了，否则同一个 id 再打开会恢复出已经删掉的内容
         draftStore.clear(conversationId)
+        // 待投递的子代理结果没有接收方了
+        subAgentResultStore.clear(conversationId)
         draftRestored.remove(conversationId)
         sessionManager.removeIfIdle(session)
     }

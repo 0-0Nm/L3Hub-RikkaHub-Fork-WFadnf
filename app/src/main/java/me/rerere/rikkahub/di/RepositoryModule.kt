@@ -2,6 +2,7 @@ package me.rerere.rikkahub.di
 
 import android.content.Context
 import me.rerere.rikkahub.AppScope
+import me.rerere.rikkahub.data.ai.subagent.SubAgentResultStore
 import me.rerere.rikkahub.data.chat.DraftStore
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.data.files.FilesManager
@@ -113,6 +114,12 @@ val repositoryModule = module {
             root = File(context.filesDir, "drafts"),
             scope = get<AppScope>(),
         )
+    }
+
+    // 子代理完成、父会话还没接收的结果：独立文件，进程被杀后重启时补投
+    single {
+        val context: Context = get()
+        SubAgentResultStore(root = File(context.filesDir, "sub_agent_results"))
     }
 
     single {

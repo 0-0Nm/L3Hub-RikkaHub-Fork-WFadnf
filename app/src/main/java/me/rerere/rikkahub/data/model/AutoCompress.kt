@@ -189,6 +189,9 @@ fun Model.autoCompressLimit(threshold: AutoCompressThreshold): Int? {
  * [reservedTokens] 是压缩后依然占着上下文的那部分固定开销（摘要、systemPrompt 等）。
  * [limitTokens] 是门限判断实际用掉的那个占用值（真实 usage 与估算取大），压缩目标按它的
  * [AUTO_COMPRESS_TARGET_RATIO] 折算：压完留出余量，否则保留区贴着门限，下一轮立刻再压一次。
+ * [thresholdTokens] 是门限本身。占用远远超过门限时（导入的长历史、换了窗口更小的模型），
+ * 按占用的一半压完仍然在门限之上，下一轮接着压，要连压好几轮才进得去；所以再用门限的一半
+ * 封一次顶，一次压到门限以内。
  *
  * 循环压缩（[force] && [keepTailNodes]）优先保留末尾那条正在生成的回复；检查点之后只剩
  * 这几条时压缩范围为空，此时返回 null 放弃这一轮——硬压会把正在生成的回复也总结掉，
@@ -201,12 +204,21 @@ internal fun Conversation.resolveAutoCompressTrim(
     force: Boolean,
     reservedTokens: Int = 0,
     limitTokens: Int? = null,
+    thresholdTokens: Int? = null,
 ): ContextTrim? {
     val checkpointIndex = messageNodes.indexOfLast { it.currentMessage.isContextCheckpoint }
     if (messageNodes.size - checkpointIndex - 1 < 1) return null
 
-    // 压缩目标只取占用的一半：贴着实测占用压，下一轮加一条消息就又过线
-    val budget = limitTokens?.takeIf { it > 0 }?.let { (it * AUTO_COMPRESS_TARGET_RATIO).toInt() }
+    // 压缩目标只取占用的一半：贴着实测占用压，下一轮加一条消息就又过线。
+    // 再以「门限的一半」封顶：占用是门限好几倍时，只看占用的一半会把压缩拖成连续几轮，
+    // 每一轮都是一次整段摘要请求；封顶之后一次就压进门限以内。
+    // 占用没有明显超过门限时，占用的一半本就更小，封顶不生效，行为和原来的「按对半压」一致。
+    val budget = limitTokens?.takeIf { it > 0 }?.let { used ->
+        val halfUsage = (used * AUTO_COMPRESS_TARGET_RATIO).toInt()
+        val halfThreshold = thresholdTokens?.takeIf { it > 0 }
+            ?.let { (it * AUTO_COMPRESS_TARGET_RATIO).toInt() }
+        if (halfThreshold == null) halfUsage else minOf(halfUsage, halfThreshold)
+    }
 
     val preferred = if (keepTailNodes != null) {
         ContextTrim((messageNodes.size - keepTailNodes).coerceAtLeast(checkpointIndex + 1))
