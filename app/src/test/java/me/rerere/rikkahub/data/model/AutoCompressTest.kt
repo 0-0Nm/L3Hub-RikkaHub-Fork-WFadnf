@@ -172,12 +172,13 @@ class AutoCompressTest {
                 thresholdTokens = 2_000,
             ),
         )
-        // 占用 8000、门限 2000：只看占用的一半会取 4000，检查点之后的 1632 全都装得下，
-        // 于是「没有可压缩范围」——门限判定说超限，实际一条都没压掉
+        // 占用 8000、目标 8000：占用的一半（4000）才说了算，检查点之后的 1632 全都装得下，
+        // 于是「没有可压缩范围」——门限判定说超限，实际一条都没压掉。
+        // 目标填 1000 时预算还没被占用一半撑开，切到 (4, 0)，测不到这条路径
         assertNull(
             conversation.resolveAutoCompressTrim(
                 target = AutoCompressTarget.TOKENS,
-                targetValue = 1_000,
+                targetValue = 8_000,
                 keepTailNodes = null,
                 force = false,
                 limitTokens = 8_000,
