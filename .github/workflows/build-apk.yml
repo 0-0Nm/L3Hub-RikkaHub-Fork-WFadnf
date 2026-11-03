@@ -276,8 +276,9 @@ jobs:
             echo "## 本版改动"
             echo
             if [ -n "$prev" ]; then
+              # 只留改到应用本身的提交：ci / test 是仓库内部的事，读 Release 的人不关心
               git log --no-merges --pretty='- %s' "${prev}..${TAG}" \
-                | grep -v '^- build: 版本 ' || true
+                | grep -vE '^- (ci|test)(\(|:)|^- build: 版本 ' || true
               echo
               echo "**完整对比**：https://github.com/${GITHUB_REPOSITORY}/compare/${prev}...${TAG}"
             else
