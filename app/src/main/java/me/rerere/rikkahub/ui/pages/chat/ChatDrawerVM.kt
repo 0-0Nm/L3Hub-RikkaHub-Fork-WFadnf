@@ -63,8 +63,14 @@ class ChatDrawerVM(
     private val _selectedFolderId = MutableStateFlow<Uuid?>(null)
     val selectedFolderId: StateFlow<Uuid?> = _selectedFolderId.asStateFlow()
 
-    // 收起的日期分组。放在 activity 级 VM 里，切换会话、关闭侧栏后不会被重置
-    private val _collapsedDates = MutableStateFlow<Set<LocalDate>>(emptySet())
+    // 收起的日期分组。放在 activity 级 VM 里，切换会话、关闭侧栏后不会被重置；
+    // 同时写进 SavedStateHandle，进程重建后和滚动位置保持同一份生命周期
+    private val _collapsedDates = MutableStateFlow(
+        savedStateHandle.get<LongArray>(KEY_COLLAPSED_DATES)
+            ?.map { LocalDate.ofEpochDay(it) }
+            ?.toSet()
+            .orEmpty()
+    )
     val collapsedDates: StateFlow<Set<LocalDate>> = _collapsedDates.asStateFlow()
 
     // 当前助手的文件夹列表（Room Flow，增删改自动刷新）
@@ -89,7 +95,7 @@ class ChatDrawerVM(
                 val paging = if (folderId == null) {
                     conversationRepo.getUnfiledConversationsOfAssistantPaging(assistantId, sortOrder)
                 } else {
-                    conversationRepo.getConversationsOfFolderPaging(folderId, sortOrder)
+                    conversationRepo.getConversationsOfFolderPaging(assistantId, folderId, sortOrder)
                 }
                 paging.map { pagingData ->
                     pagingData
@@ -123,8 +129,9 @@ class ChatDrawerVM(
             }
             .cachedIn(viewModelScope)
 
-    val scrollIndex: Int get() = savedStateHandle["scrollIndex"] ?: 0
-    val scrollOffset: Int get() = savedStateHandle["scrollOffset"] ?: 0
+    // key 带 v2：早期版本存的是含 header 的绝对下标，语义变了，旧值直接丢弃
+    val scrollIndex: Int get() = savedStateHandle["scrollIndexV2"] ?: 0
+    val scrollOffset: Int get() = savedStateHandle["scrollOffsetV2"] ?: 0
 
     init {
         // 助手切换时重置文件夹筛选，回到「聊天」视图，
@@ -137,8 +144,8 @@ class ChatDrawerVM(
     }
 
     fun saveScrollPosition(index: Int, offset: Int) {
-        savedStateHandle["scrollIndex"] = index
-        savedStateHandle["scrollOffset"] = offset
+        savedStateHandle["scrollIndexV2"] = index
+        savedStateHandle["scrollOffsetV2"] = offset
     }
 
     fun selectFolder(folderId: Uuid?) {
@@ -149,6 +156,19 @@ class ChatDrawerVM(
         _collapsedDates.update { dates ->
             if (date in dates) dates - date else dates + date
         }
+        persistCollapsedDates()
+    }
+
+    /** 当前会话所在的周被收起时由列表回调，保证打开的会话不会藏在折叠组里。 */
+    fun expandDate(date: LocalDate) {
+        if (date !in _collapsedDates.value) return
+        _collapsedDates.update { it - date }
+        persistCollapsedDates()
+    }
+
+    private fun persistCollapsedDates() {
+        savedStateHandle[KEY_COLLAPSED_DATES] =
+            _collapsedDates.value.map { it.toEpochDay() }.toLongArray()
     }
 
     fun createFolder(name: String) {
@@ -202,6 +222,10 @@ class ChatDrawerVM(
 
     private fun LocalDate.weekStart(): LocalDate =
         with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+
+    private companion object {
+        const val KEY_COLLAPSED_DATES = "collapsedDates"
+    }
 
     private fun getWeekLabel(start: LocalDate): String {
         val thisWeek = LocalDate.now().weekStart()

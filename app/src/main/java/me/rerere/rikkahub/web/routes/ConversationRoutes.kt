@@ -106,6 +106,7 @@ fun Route.conversationRoutes(
                     )
 
                 else -> conversationRepo.getConversationsOfFolderPage(
+                    assistantId = settings.assistantId,
                     folderId = folderParam.toUuid("folderId"),
                     offset = offset,
                     limit = limit

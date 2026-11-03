@@ -128,6 +128,13 @@ private const val NEW_CHAT_PILL_SCALE = 0.8f
 // 底部用户头像（设置入口）整体缩放的倍数，锚点在自己的右下角
 private const val DRAWER_AVATAR_SCALE = 0.8f
 
+// 滚动停下后再写 SavedStateHandle，避免逐帧写
+private const val SCROLL_POSITION_SAVE_DELAY_MS = 300L
+
+// scrollIndex 存的是会话列表内的下标（不含 header 项），放回 LazyColumn 时要补上 header
+private fun Int.toListItemIndex(headerCount: Int): Int =
+    if (this <= 0) 0 else this + headerCount
+
 @Composable
 fun ChatDrawerContent(
     navController: Navigator,
@@ -152,20 +159,44 @@ fun ChatDrawerContent(
     val selectedFolderId by drawerVm.selectedFolderId.collectAsStateWithLifecycle()
     val memoryDreaming by drawerVm.memoryDreaming.collectAsStateWithLifecycle()
     val collapsedDates by drawerVm.collapsedDates.collectAsStateWithLifecycle()
+
+    // 矮屏（如手表、横屏手机）上顶部固定会把会话列表挤没，改为跟随列表一起滚动
+    val windowHeight = LocalWindowInfo.current.containerDpSize.height
+    val windowWidth = LocalWindowInfo.current.containerDpSize.width
+    val drawerWidth = minOf(DRAWER_WIDTH_BASE * DRAWER_WIDTH_SCALE, windowWidth)
+    val scrollableHeader = windowHeight < 640.dp
+    // header 是否占掉 LazyColumn 的第 0 位，决定保存/恢复滚动位置时要不要补一位
+    val listHeaderCount = if (scrollableHeader) 1 else 0
+
     val conversationListState = rememberLazyListState(
-        initialFirstVisibleItemIndex = drawerVm.scrollIndex,
+        initialFirstVisibleItemIndex = drawerVm.scrollIndex.toListItemIndex(listHeaderCount),
         initialFirstVisibleItemScrollOffset = drawerVm.scrollOffset,
     )
 
-    LaunchedEffect(conversationListState) {
+    LaunchedEffect(conversationListState, listHeaderCount) {
         snapshotFlow {
             conversationListState.firstVisibleItemIndex to
                 conversationListState.firstVisibleItemScrollOffset
         }
             .distinctUntilChanged()
             .collectLatest { (index, offset) ->
-                drawerVm.saveScrollPosition(index, offset)
+                delay(SCROLL_POSITION_SAVE_DELAY_MS)
+                drawerVm.saveScrollPosition(
+                    (index - listHeaderCount).coerceAtLeast(0),
+                    offset,
+                )
             }
+    }
+
+    // 切助手/切文件夹等于换了一份列表：回到顶部，多选由 ConversationList 按 scopeKey 重置
+    val listScopeKey = settings.assistantId to selectedFolderId
+    var lastListScopeKey by remember { mutableStateOf(listScopeKey) }
+    LaunchedEffect(listScopeKey) {
+        if (lastListScopeKey != listScopeKey) {
+            lastListScopeKey = listScopeKey
+            conversationListState.scrollToItem(0)
+            drawerVm.saveScrollPosition(0, 0)
+        }
     }
 
     val conversationJobs by vm.conversationJobs.collectAsStateWithLifecycle(
@@ -211,12 +242,6 @@ fun ChatDrawerContent(
             delay(minOf(remaining, 60 * 60 * 1_000L))
         }
     }
-
-    // 矮屏（如手表、横屏手机）上顶部固定会把会话列表挤没，改为跟随列表一起滚动
-    val windowHeight = LocalWindowInfo.current.containerDpSize.height
-    val windowWidth = LocalWindowInfo.current.containerDpSize.width
-    val drawerWidth = minOf(DRAWER_WIDTH_BASE * DRAWER_WIDTH_SCALE, windowWidth)
-    val scrollableHeader = windowHeight < 640.dp
 
     // 抽屉顶部：更新/备份提醒、用户信息、常用入口和文件夹栏
     val drawerHeader: @Composable () -> Unit = {
@@ -306,6 +331,8 @@ fun ChatDrawerContent(
                 listState = conversationListState,
                 collapsedDates = collapsedDates,
                 onToggleDate = drawerVm::toggleDateCollapsed,
+                onExpandDate = drawerVm::expandDate,
+                scopeKey = listScopeKey,
                 header = if (scrollableHeader) drawerHeader else null,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -322,7 +349,6 @@ fun ChatDrawerContent(
                 onDelete = {
                     scope.launch {
                         vm.deleteConversation(it).join()
-                        conversations.refresh()
                         if (it.id == current.id) {
                             navigateToChatPage(navController)
                         }
@@ -342,7 +368,6 @@ fun ChatDrawerContent(
                 onDeleteSelected = { list ->
                     scope.launch {
                         list.forEach { vm.deleteConversation(it).join() }
-                        conversations.refresh()
                         if (list.any { it.id == current.id }) {
                             navigateToChatPage(navController)
                         }
@@ -443,7 +468,6 @@ fun ChatDrawerContent(
                     folderSheetState.hide()
                     showMoveToFolderSheet = false
                     conversationToMoveFolder = null
-                    conversations.refresh()
                 }
             }
         }
@@ -605,7 +629,6 @@ fun ChatDrawerContent(
                     onClick = {
                         if (drawerVm.deleteFolder(folder.id)) {
                             folderToDelete = null
-                            conversations.refresh()
                         } else {
                             toaster.show(context.getString(R.string.chat_page_delete_folder_generating), type = ToastType.Warning)
                         }

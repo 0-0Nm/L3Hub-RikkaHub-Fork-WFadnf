@@ -105,6 +105,7 @@ class ConversationRepository(
     }
 
     fun getConversationsOfFolderPaging(
+        assistantId: Uuid,
         folderId: Uuid,
         sortOrder: ConversationSortOrder = ConversationSortOrder.UPDATE_TIME,
     ): Flow<PagingData<Conversation>> = Pager(
@@ -115,6 +116,7 @@ class ConversationRepository(
         ),
         pagingSourceFactory = {
             conversationDAO.getConversationsOfFolderPaging(
+                assistantId = assistantId.toString(),
                 folderId = folderId.toString(),
                 sortByCreateTime = sortOrder == ConversationSortOrder.CREATE_TIME,
             )
@@ -202,11 +204,16 @@ class ConversationRepository(
     )
 
     suspend fun getConversationsOfFolderPage(
+        assistantId: Uuid,
         folderId: Uuid,
         offset: Int,
         limit: Int,
     ): ConversationPageResult = loadConversationPage(
-        conversationDAO.getConversationsOfFolderPaging(folderId.toString(), sortByCreateTime = false),
+        conversationDAO.getConversationsOfFolderPaging(
+            assistantId = assistantId.toString(),
+            folderId = folderId.toString(),
+            sortByCreateTime = false,
+        ),
         offset,
         limit,
     )

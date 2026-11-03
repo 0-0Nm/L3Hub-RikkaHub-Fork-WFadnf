@@ -38,9 +38,10 @@ interface ConversationDAO {
     ): PagingSource<Int, LightConversationEntity>
 
     @Query(
-        "SELECT id, assistant_id as assistantId, title, is_pinned as isPinned, create_at as createAt, update_at as updateAt, folder_id as folderId FROM conversationentity WHERE folder_id = :folderId ORDER BY is_pinned DESC, CASE WHEN :sortByCreateTime THEN create_at ELSE update_at END DESC"
+        "SELECT id, assistant_id as assistantId, title, is_pinned as isPinned, create_at as createAt, update_at as updateAt, folder_id as folderId FROM conversationentity WHERE assistant_id = :assistantId AND folder_id = :folderId ORDER BY is_pinned DESC, CASE WHEN :sortByCreateTime THEN create_at ELSE update_at END DESC"
     )
     fun getConversationsOfFolderPaging(
+        assistantId: String,
         folderId: String,
         sortByCreateTime: Boolean,
     ): PagingSource<Int, LightConversationEntity>

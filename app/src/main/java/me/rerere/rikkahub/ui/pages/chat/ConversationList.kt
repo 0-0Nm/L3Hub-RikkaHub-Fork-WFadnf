@@ -35,6 +35,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.itemKey
+import kotlinx.coroutines.flow.collect
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowUp01
@@ -95,6 +97,9 @@ fun ColumnScope.ConversationList(
     listState: LazyListState,
     collapsedDates: Set<LocalDate> = emptySet(),
     onToggleDate: (LocalDate) -> Unit = {},
+    onExpandDate: (LocalDate) -> Unit = {},
+    // 换助手/换文件夹时列表其实是另一份数据，多选等列表内状态要跟着重置
+    scopeKey: Any? = null,
     modifier: Modifier = Modifier,
     header: (@Composable () -> Unit)? = null,
     onClick: (Conversation) -> Unit = {},
@@ -108,6 +113,8 @@ fun ColumnScope.ConversationList(
     onPinSelected: (List<Conversation>) -> Unit = {},
 ) {
     var hasScrolledToCurrent by remember(current.id) { mutableStateOf(false) }
+    // 列表滚过（用户拖动/滚轮/旋钮，或本页程序化回顶）以后就不再自动把视口拽到当前会话
+    var userScrolled by remember(current.id) { mutableStateOf(false) }
     // 多选：长按菜单里进入，点条目切换选中
     var selectionMode by remember { mutableStateOf(false) }
     val selectedIds = remember { mutableStateListOf<Uuid>() }
@@ -118,19 +125,89 @@ fun ColumnScope.ConversationList(
     // 列表顶部若放了 header，会话项在 LazyColumn 中的位置要往后挪一位
     val headerCount = if (header != null) 1 else 0
 
-    LaunchedEffect(current.id, conversations.itemCount, hasScrolledToCurrent) {
-        if (hasScrolledToCurrent) return@LaunchedEffect
+    // 换助手/换文件夹时旧的多选结果已经不在列表里，留着会让计数和实际删除数量对不上；
+    // 同时放弃「滚到当前会话」，否则分页数据异步到达后会把父级的回顶又推翻。
+    // 该放弃是 sticky 的（只在本列表实例内、current.id 不变时有效），切会话会随 remember 复位
+    var lastScopeKey by remember { mutableStateOf(scopeKey) }
+    LaunchedEffect(scopeKey) {
+        if (lastScopeKey == scopeKey) return@LaunchedEffect
+        lastScopeKey = scopeKey
+        selectionMode = false
+        selectedIds.clear()
+        hasScrolledToCurrent = true
+    }
+
+    // 每个下标属于哪一周，一趟算好；之前是每个可见项各自往回扫，长列表下接近 O(n²)
+    val sectionDates: List<LocalDate?> = remember(
+        conversations.itemCount,
+        conversations.itemSnapshotList,
+    ) {
+        var sectionDate: LocalDate? = null
+        conversations.itemSnapshotList.items.map { item ->
+            when (item) {
+                is ConversationListItem.DateHeader -> {
+                    sectionDate = item.date
+                    null
+                }
+
+                is ConversationListItem.PinnedHeader -> {
+                    sectionDate = null
+                    null
+                }
+
+                else -> sectionDate
+            }
+        }
+    }
+
+    // 列表一动过就不再自动拽到当前会话：拖动、滚轮、旋钮都算，避免用户浏览时被抢走视口。
+    // 换助手/文件夹/排序时的程序化回顶也会命中，这正好符合「换列表就停在顶部」的预期。
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
+            if (scrolling) userScrolled = true
+        }
+    }
+
+    // 折叠后看不见的会话不应该还留在选中集合里
+    LaunchedEffect(collapsedDates) {
+        if (selectedIds.isEmpty()) return@LaunchedEffect
+        val hiddenIds = conversations.itemSnapshotList.items.mapIndexedNotNull { index, item ->
+            val conversation = (item as? ConversationListItem.Item)?.conversation
+                ?: return@mapIndexedNotNull null
+            val hidden = sectionDates.getOrNull(index)?.let { it in collapsedDates } == true
+            if (hidden) conversation.id else null
+        }
+        if (hiddenIds.isNotEmpty()) {
+            selectedIds.removeAll(hiddenIds.toSet())
+        }
+    }
+
+    LaunchedEffect(
+        current.id,
+        conversations.itemCount,
+        sectionDates,
+        collapsedDates,
+        hasScrolledToCurrent,
+    ) {
+        if (hasScrolledToCurrent || userScrolled) return@LaunchedEffect
         val itemIndex = conversations.itemSnapshotList.items.indexOfFirst {
             (it as? ConversationListItem.Item)?.conversation?.id == current.id
         }
-        if (itemIndex >= 0) {
-            val currentIndex = itemIndex + headerCount
-            val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == currentIndex }
-            if (!isVisible) {
-                listState.scrollToItem(currentIndex)
-            }
-            hasScrolledToCurrent = true
+        if (itemIndex < 0) return@LaunchedEffect
+
+        // 当前会话所在的周被收起时先展开，否则滚动会落在一个 0 高度的项上，打开的会话反而看不见
+        val sectionDate = sectionDates.getOrNull(itemIndex)
+        if (sectionDate != null && sectionDate in collapsedDates) {
+            onExpandDate(sectionDate)
+            return@LaunchedEffect
         }
+
+        val currentIndex = itemIndex + headerCount
+        val isVisible = listState.layoutInfo.visibleItemsInfo.any { it.index == currentIndex }
+        if (!isVisible) {
+            listState.scrollToItem(currentIndex)
+        }
+        hasScrolledToCurrent = true
     }
 
     Column(modifier = modifier) {
@@ -201,18 +278,7 @@ fun ColumnScope.ConversationList(
             val item = conversations[index]
             // 已经收起的日期分组不渲染下面的会话；标题本身始终显示
             if (item is ConversationListItem.Item) {
-                var sectionDate: LocalDate? = null
-                for (i in index - 1 downTo 0) {
-                    when (val previous = conversations.itemSnapshotList.items.getOrNull(i)) {
-                        is ConversationListItem.DateHeader -> {
-                            sectionDate = previous.date
-                            break
-                        }
-
-                        is ConversationListItem.PinnedHeader -> break
-                        else -> Unit
-                    }
-                }
+                val sectionDate = sectionDates.getOrNull(index)
                 if (sectionDate != null && sectionDate in collapsedDates) {
                     return@items
                 }
