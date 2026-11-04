@@ -143,8 +143,8 @@ class SubAgentRunner(
             subAgentWaits.unregister(child.id, waiter)
             return "Sub-agent \"${subAgentLabel(candidate)}\" is still running after ${timeout.inWholeSeconds} seconds. Its result will be delivered back to this conversation when it finishes; do not wait for it again."
         }
-        // 工具调用已经拿到正文：把同一份从待投递队列里撤掉，别再当通知送一遍
-        chatService.acknowledgeSubAgentResult(parentConversationId, received)
+        // 落盘的那一份不在这里撤：工具输出还要经过 AgentLoop 才写进会话，这中间被掐断
+        // 就两头空。下一次投递会在会话里认出这条正文，再把它从队列里剔掉
         return received
     }
 

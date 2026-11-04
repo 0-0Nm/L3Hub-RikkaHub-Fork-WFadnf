@@ -36,6 +36,7 @@ internal fun buildSubAgentTool(
             Dispatch a self-contained task to a sub-agent. Sub-agents run in parallel in their own isolated context, so they do not consume this conversation's context.
             By default the call returns immediately. When the sub-agent finishes, its result is delivered back to this conversation automatically; do not poll for it and do not assume it has finished before the result arrives.
             Set wait=true only when you cannot continue without the result: the call then blocks until the sub-agent finishes its first round and returns that result directly, instead of delivering it later as a notice.
+            Tool calls in one step run one after another, so use wait=true for at most one sub-agent per turn; dispatch the rest in background or their waits add up.
             Never sleep, poll, or loop to wait for a sub-agent: either wait in this call, or end your turn and let the result arrive.
             Sub-agents can dispatch further sub-agents. Nesting is limited to three generations (main -> child -> grandchild); a dispatch from the third generation is rejected, so finish that work in the current conversation.
             Do not repeat a task after dispatching it, and do not run the same task yourself while a sub-agent is working on it.
@@ -48,7 +49,7 @@ internal fun buildSubAgentTool(
             ## Sub-agents
             When a task can be finished independently, needs multi-step research or heavy file/terminal work, or is unrelated to the current thread, prefer calling dispatch_sub_agent instead of doing everything step by step yourself.
             Every dispatch runs in parallel: the call returns immediately and the result is delivered back to this conversation automatically when the sub-agent finishes, even if this conversation is still busy (multiple results are merged and delivered once you are idle).
-            If you truly cannot continue without a result, dispatch with wait=true instead of sleeping or looping; that call blocks until the sub-agent's first round finishes and returns the result directly.
+            If you truly cannot continue without a result, dispatch with wait=true instead of sleeping or looping; that call blocks until the sub-agent's first round finishes and returns the result directly. Wait on at most one sub-agent per turn, since these calls run one after another.
             Sub-agents may dispatch their own sub-agents. Nesting stops after three generations (main -> child -> grandchild); at the deepest level finish the work yourself.
             Good candidates: research and comparison, batch file processing, independent code changes, summarizing long documents, and subtasks that can run in parallel. Dispatch several of them in one turn when the work splits cleanly.
             Not worth dispatching: one-line questions, tasks that need details of this conversation, or anything that needs the user's confirmation or approval.

@@ -516,10 +516,18 @@ class ChatService(
 
     fun resumeMessageQueue(conversationId: Uuid) {
         sessionManager.get(conversationId)?.messageQueue?.resume()
-        // 先把积压的子代理结果排到队尾再开跑：只 dispatch 的话它要等下一轮结束才轮得到
+        // 先把积压的子代理结果排到队尾再开跑：只 dispatch 的话它要等下一轮结束才轮得到。
+        // flush 抛异常也必须把队列开起来，否则 resume() 之后没有任何 job，界面像死了一样
         appScope.launch {
-            flushSubAgentResults(conversationId)
-            dispatchNextQueuedMessage(conversationId)
+            try {
+                flushSubAgentResults(conversationId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "flush sub agent results on resume failed: $conversationId", e)
+            } finally {
+                dispatchNextQueuedMessage(conversationId)
+            }
         }
     }
 
@@ -692,11 +700,6 @@ class ChatService(
         flushSubAgentResults(parentConversationId)
     }
 
-    /** wait=true 的工具调用已经拿到正文：把落盘的那一份撤掉，避免下一轮再当通知送一遍 */
-    suspend fun acknowledgeSubAgentResult(parentConversationId: Uuid, result: String) {
-        subAgentResultStore.remove(parentConversationId, result)
-    }
-
     /**
      * 进程重启后的补投。
      *
@@ -723,18 +726,21 @@ class ChatService(
             if (!deliveringSubAgentResults.add(conversationId)) return
         }
         try {
-            val batch = subAgentResultStore.peek(conversationId)
-            if (batch.isEmpty()) return
+            val pending = subAgentResultStore.peek(conversationId)
+            if (pending.isEmpty()) return
             val session = sessionManager.get(conversationId)
             // 会话没打开时：子代理会话只能自己接着跑，普通会话等用户下次打开再送。
             // 数据库里也没有这个会话，说明父会话已经被删了，结果没有接收方，顺手清掉，
             // 否则这文件会一直躺在磁盘上，每次启动都白扫一遍
-            val canDeliver = if (session == null) {
-                val conversation = conversationRepo.getConversationById(conversationId)
-                if (conversation == null) {
+            val conversation = if (session == null) {
+                conversationRepo.getConversationById(conversationId) ?: run {
                     subAgentResultStore.clear(conversationId)
                     return
                 }
+            } else {
+                session.state.value
+            }
+            val canDeliver = if (session == null) {
                 canDeliverToUnopened(conversation)
             } else {
                 // 上下文已满又没开自动压缩时先留着，等用户压缩或删消息后再投递
@@ -743,13 +749,22 @@ class ChatService(
                     !session.isGenerating &&
                     !session.state.value.isAwaitingToolApproval &&
                     // 队列里还压着用户消息时的暂停说明它们都不会执行，通知混进去只会一起搁着；
-                    // 队列空时这个暂停只是「上一轮被停掉」的残留，sendMessage 会自己恢复，
+                    // 队列空时这个暂停只是「上一轮被停掉或失败」的残留，sendMessage 会自己恢复，
                     // 不放开的话子代理结果会一直躺在盘上，直到用户再发一条并跑完一整轮
                     (!session.messageQueue.state.value.paused ||
                         session.messageQueue.state.value.messages.isEmpty()) &&
                     !(session.maxContextReached() && !autoCompressEnabled(session))
             }
             if (!canDeliver) return
+            // wait=true 的结果已经作为工具输出进了会话，不能再当通知送一遍。
+            // 这里按会话里有没有这条正文判断，而不是工具调用回来撤：撤销要发生在工具输出
+            // 落库之前，那两步之间被掐断就会把唯一一份删掉。
+            val delivered = conversation.toolOutputTexts()
+            val batch = pending.filterNot { it in delivered }
+            if (batch.isEmpty()) {
+                subAgentResultStore.drop(conversationId, pending.size)
+                return
+            }
             // 系统通知：走 USER 角色进请求，界面和导出都按系统消息展示
             val accepted = sendMessage(
                 conversationId = conversationId,
@@ -759,10 +774,11 @@ class ChatService(
             )
             // 没被收下（判定和入队之间上下文刚好越过 MAX）：结果留在队首，等下次再送
             if (!accepted) return
-            // 父会话收下了这一批：只丢掉送出去的条数，投递期间新到的还留在队尾。
-            // 从受理到消息真正落库（生成任务里 session.update + flush）之间被杀，这一批仍然会丢；
-            // 消息队列本身不持久化，这个窗口关不掉，这里只是把它缩到「已入队」为止
-            subAgentResultStore.drop(conversationId, batch.size)
+            // 父会话收下了这一批：丢掉 peek 到的条数（含刚被认出来的工具输出），
+            // 投递期间新到的还在队尾。从受理到消息真正落库（生成任务里 session.update + flush）
+            // 之间被杀，这一批仍然会丢；消息队列本身不持久化，这个窗口关不掉，
+            // 这里只是把它缩到「已入队」为止
+            subAgentResultStore.drop(conversationId, pending.size)
         } finally {
             synchronized(deliveringSubAgentResults) { deliveringSubAgentResults.remove(conversationId) }
         }
@@ -781,6 +797,19 @@ class ChatService(
         if (model?.enforceMaxContext == false) return true
         return !isContextLimitReached(conversation.lastContextTokens(), model?.maxContextTokens) ||
             settings.getAssistantOf(conversation).autoCompress
+    }
+
+    /** 会话里已经出现过的工具输出正文，用来认出 wait=true 已经拿走过的那一份 */
+    private fun Conversation.toolOutputTexts(): Set<String> = buildSet {
+        currentMessages.forEach { message ->
+            message.parts.forEach { part ->
+                if (part is UIMessagePart.Tool) {
+                    part.output.forEach { output ->
+                        if (output is UIMessagePart.Text) add(output.text)
+                    }
+                }
+            }
+        }
     }
 
     /** Enqueue immediately; the result belongs to this item even after edits or later turns. */
