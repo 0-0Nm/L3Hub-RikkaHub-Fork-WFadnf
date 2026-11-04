@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.chat
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -30,6 +31,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +42,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.uuid.Uuid
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
@@ -54,6 +57,7 @@ import me.rerere.rikkahub.ui.components.message.ChatMessage
 import org.koin.compose.koinInject
 
 private const val PREVIEW_REFRESH_MS = 1200L
+private const val EXIT_ANIMATION_MS = 180
 
 /**
  * 从任务树点开的子代理会话小窗：从屏幕上方滑下，占半屏，只读。
@@ -69,19 +73,43 @@ fun SubAgentConversationWindow(
     val settingsStore: SettingsStore = koinInject()
     val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
     var conversation by remember(conversationId) { mutableStateOf<Conversation?>(null) }
+    var loaded by remember(conversationId) { mutableStateOf(false) }
     var visible by remember { mutableStateOf(false) }
+    var dismissing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    // 先把小窗收上去再移除，不然退出动画永远看不见
+    fun dismiss() {
+        if (dismissing) return
+        dismissing = true
+        scope.launch {
+            visible = false
+            delay(EXIT_ANIMATION_MS.toLong())
+            onDismiss()
+        }
+    }
 
     LaunchedEffect(conversationId) {
         visible = true
+        var attempts = 0
         while (true) {
-            conversation = runCatching { chatService.getConversation(conversationId) }.getOrNull()
-            if (conversation?.subAgentState != SUB_AGENT_STATE_RUNNING) break
+            val fetched = runCatching { chatService.getConversation(conversationId) }.getOrNull()
+            conversation = fetched
+            attempts++
+            if (fetched != null) loaded = true
+            if (fetched?.subAgentState != SUB_AGENT_STATE_RUNNING) {
+                // 读失败先重试两次，别把瞬时失败当成「会话已不存在」
+                if (fetched != null || attempts >= 3) {
+                    loaded = true
+                    break
+                }
+            }
             delay(PREVIEW_REFRESH_MS)
         }
     }
 
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { dismiss() },
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
         val screenHeight = LocalConfiguration.current.screenHeightDp.dp
@@ -90,12 +118,12 @@ fun SubAgentConversationWindow(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f))
-                    .clickable(onClick = onDismiss),
+                    .clickable(onClick = { dismiss() }),
             )
             AnimatedVisibility(
                 visible = visible,
                 enter = slideInVertically(initialOffsetY = { -it }),
-                exit = slideOutVertically(targetOffsetY = { -it }),
+                exit = slideOutVertically(targetOffsetY = { -it }, animationSpec = tween(EXIT_ANIMATION_MS)),
                 modifier = Modifier.align(Alignment.TopCenter),
             ) {
                 Surface(
@@ -110,7 +138,9 @@ fun SubAgentConversationWindow(
                     if (current == null) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text(
-                                text = stringResource(R.string.task_tree_loading),
+                                text = stringResource(
+                                    if (loaded) R.string.task_tree_missing else R.string.task_tree_loading
+                                ),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -150,7 +180,7 @@ fun SubAgentConversationWindow(
                                     modifier = Modifier
                                         .padding(start = 8.dp)
                                         .size(20.dp)
-                                        .clickable(onClick = onDismiss),
+                                        .clickable(onClick = { dismiss() }),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }

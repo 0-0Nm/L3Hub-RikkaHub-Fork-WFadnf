@@ -16,9 +16,9 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.toMetadata
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.ExecutionPermission
+import me.rerere.rikkahub.data.model.WorkspaceCwd
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.data.workspace.ApplyOutcome
-import me.rerere.rikkahub.data.workspace.FileDiff
 import me.rerere.rikkahub.data.workspace.GitIgnoreMatcher
 import me.rerere.rikkahub.data.workspace.GitIgnoreRule
 import me.rerere.rikkahub.data.workspace.RepoMap
@@ -128,10 +128,10 @@ suspend fun createWorkspaceTools(
 
     return buildList {
         add(createReadFileTool(targets, workspaceRepository))
-        add(createListTool(targets, workspaceRepository))
-        add(createGlobTool(targets, workspaceRepository))
-        add(createGrepTool(targets, workspaceRepository))
-        add(createRepoMapTool(targets, workspaceRepository))
+        add(createListTool(targets, workspaceRepository, cwds))
+        add(createGlobTool(targets, workspaceRepository, cwds))
+        add(createGrepTool(targets, workspaceRepository, cwds))
+        add(createRepoMapTool(targets, workspaceRepository, cwds))
         val snapshots = conversationId?.let {
             runCatching { getKoin().get<WorkspaceSnapshotStore>() }.getOrNull()
         }
@@ -834,8 +834,9 @@ private fun createShellTool(
         val params = it.jsonObject
         val target = params.resolveWorkspace(targets)
         val command = params.string("command") ?: error("command is required")
-        val fallbackCwd = workspaceCwds[target.id].orEmpty()
-        val cwd = target.layout.relativeToWorkspace(params.string("cwd") ?: fallbackCwd)
+        // 会话里存的是相对路径（旧数据可能是绝对路径），归一化后再交给 shell
+        val fallbackCwd = WorkspaceCwd.normalize(target.layout.workspaceDir, workspaceCwds[target.id]).orEmpty()
+        val cwd = params.string("cwd")?.let { target.layout.relativeToWorkspace(it) } ?: fallbackCwd
         val timeoutMillis = params.string("timeout")?.toLongOrNull()
             ?.coerceIn(1L, SHELL_TIMEOUT_MAX_SECONDS)
             ?.times(1_000L)
@@ -1014,19 +1015,37 @@ private fun kotlinx.serialization.json.JsonElement.pathOutsideWritableRoots(
         !layout.isWritable(layout.normalizeWritePath(jsonObject.absolutePath(name)))
     }.getOrDefault(true)
 
-private fun JsonObjectBuilder.putPathProperty(layout: WorkspaceLayout, required: Boolean) {
+private fun JsonObjectBuilder.putPathProperty(
+    layout: WorkspaceLayout,
+    required: Boolean,
+    defaultHint: String? = null,
+) {
     put("path", buildJsonObject {
         put("type", "string")
         put(
             "description",
-            if (required) {
-                "Absolute path inside Rootfs. Use ${layout.workspaceDir} for the workspace files area."
-            } else {
-                "Optional absolute path inside Rootfs. Use ${layout.workspaceDir} for the workspace files area."
+            buildString {
+                append(
+                    if (required) {
+                        "Absolute path inside Rootfs. Use ${layout.workspaceDir} for the workspace files area."
+                    } else {
+                        "Optional absolute path inside Rootfs. Use ${layout.workspaceDir} for the workspace files area."
+                    }
+                )
+                if (!required && defaultHint != null) append(" Defaults to $defaultHint.")
             }
         )
     })
 }
+
+/** 没显式给 path 时从会话工作目录开始；没设就回工作区根 */
+private fun WorkspaceTarget.cwdRoot(cwds: Map<String, String>): String =
+    WorkspaceCwd.absolute(
+        workspaceDir = layout.workspaceDir,
+        relative = WorkspaceCwd.normalize(layout.workspaceDir, cwds[id]),
+    )
+
+private const val DEFAULT_PATH_HINT = "the session's current working directory for that workspace"
 
 private fun WorkspaceFileEntry.toJson() = buildJsonObject {
     put("path", path)
@@ -1184,19 +1203,21 @@ private suspend fun WorkspaceRepository.readTextForSearch(
 private fun createRepoMapTool(
     targets: List<WorkspaceTarget>,
     workspaceRepository: WorkspaceRepository,
+    cwds: Map<String, String> = emptyMap(),
 ) = Tool(
     name = "workspace_repo_map",
     description = """
         Build a compact map of the workspace: file tree grouped by directory with top-level symbols per file
         (Kotlin/Java/Python/TS/JS/Go/Rust/Swift/Ruby/C#/C++). Respects .gitignore.
         Use it before reading files in a large repository; pass path to map a subdirectory and max_files to bound the scan.
+        Defaults to the session's current working directory.
         ${targets.workspaceNote()}
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
                 putWorkspaceProperty(targets)
-                putPathProperty(targets.first().layout, required = false)
+                putPathProperty(targets.first().layout, required = false, defaultHint = DEFAULT_PATH_HINT)
                 put("max_files", buildJsonObject {
                     put("type", "integer")
                     put("description", "Maximum files to scan. Defaults to 300, max 800.")
@@ -1211,7 +1232,7 @@ private fun createRepoMapTool(
     execute = {
         val params = it.jsonObject
         val target = params.resolveWorkspace(targets)
-        val root = params.string("path")?.let { params.absolutePath("path") } ?: target.layout.workspaceDir
+        val root = params.string("path")?.let { params.absolutePath("path") } ?: target.cwdRoot(cwds)
         val maxFiles = params.string("max_files")?.toIntOrNull()?.coerceIn(1, MAX_REPO_MAP_FILES) ?: DEFAULT_REPO_MAP_FILES
         val prefix = target.layout.workspaceDir.trimEnd('/') + "/"
 
@@ -1260,18 +1281,19 @@ private fun String.isRepoMapSource(): Boolean =
 private fun createListTool(
     targets: List<WorkspaceTarget>,
     workspaceRepository: WorkspaceRepository,
+    cwds: Map<String, String> = emptyMap(),
 ) = Tool(
     name = "workspace_list",
     description = """
         List a directory in the assistant's bound workspace Rootfs. Paths must be absolute inside Rootfs.
-        Returns name, absolute path, type, size and mtime, directories first. Defaults to the workspace files area.
+        Returns name, absolute path, type, size and mtime, directories first. Defaults to the session's current working directory.
         ${targets.workspaceNote()}
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
                 putWorkspaceProperty(targets)
-                putPathProperty(targets.first().layout, required = false)
+                putPathProperty(targets.first().layout, required = false, defaultHint = DEFAULT_PATH_HINT)
             },
         )
     },
@@ -1282,7 +1304,7 @@ private fun createListTool(
     execute = {
         val params = it.jsonObject
         val target = params.resolveWorkspace(targets)
-        val path = params.string("path")?.let { params.absolutePath("path") } ?: target.layout.workspaceDir
+        val path = params.string("path")?.let { params.absolutePath("path") } ?: target.cwdRoot(cwds)
         val (area, relative) = resolveStorageArea(target.layout, path)
         val all = workspaceRepository.listFiles(target.id, area, relative)
             .sortedWith(compareByDescending<WorkspaceFileEntry> { it.isDirectory }.thenBy { it.name.lowercase() })
@@ -1313,12 +1335,13 @@ private fun createListTool(
 private fun createGlobTool(
     targets: List<WorkspaceTarget>,
     workspaceRepository: WorkspaceRepository,
+    cwds: Map<String, String> = emptyMap(),
 ) = Tool(
     name = "workspace_glob",
     description = """
         Find files by glob pattern inside the assistant's bound workspace Rootfs, for example `**/*.kt` or `src/**/*.md`.
         Skips .git, node_modules, build and other dependency or output directories.
-        Returns absolute paths. Defaults to the workspace files area; paths must be absolute inside Rootfs.
+        Returns absolute paths. Defaults to the session's current working directory; paths must be absolute inside Rootfs.
         ${targets.workspaceNote()}
     """.trimIndent().replace("\n", " "),
     parameters = {
@@ -1329,7 +1352,7 @@ private fun createGlobTool(
                     put("type", "string")
                     put("description", "Glob pattern matched against paths relative to `path`, e.g. **/*.kt")
                 })
-                putPathProperty(targets.first().layout, required = false)
+                putPathProperty(targets.first().layout, required = false, defaultHint = DEFAULT_PATH_HINT)
                 put("limit", buildJsonObject {
                     put("type", "integer")
                     put("description", "Maximum number of files to return. Defaults to $MAX_GLOB_RESULTS, max 2000.")
@@ -1347,7 +1370,7 @@ private fun createGlobTool(
         val target = params.resolveWorkspace(targets)
         val pattern = params.string("pattern")?.trim().orEmpty()
         require(pattern.isNotEmpty()) { "pattern is required" }
-        val root = params.string("path")?.let { params.absolutePath("path") } ?: target.layout.workspaceDir
+        val root = params.string("path")?.let { params.absolutePath("path") } ?: target.cwdRoot(cwds)
         val limit = (params.int("limit") ?: MAX_GLOB_RESULTS).coerceIn(1, 2000)
         val matcher = GlobMatcher(pattern)
         require(matcher.isValid) { "Invalid glob pattern: $pattern" }
@@ -1387,12 +1410,13 @@ private fun createGlobTool(
 private fun createGrepTool(
     targets: List<WorkspaceTarget>,
     workspaceRepository: WorkspaceRepository,
+    cwds: Map<String, String> = emptyMap(),
 ) = Tool(
     name = "workspace_grep",
     description = """
         Search file contents inside the assistant's bound workspace Rootfs. Returns absolute file path, 1-based line number and the matched line.
         Skips binary files, files larger than 512KB, and .git, node_modules, build and other dependency or output directories.
-        Use `include` to restrict file names, e.g. `*.kt`. Defaults to the workspace files area; paths must be absolute inside Rootfs.
+        Use `include` to restrict file names, e.g. `*.kt`. Defaults to the session's current working directory; paths must be absolute inside Rootfs.
         ${targets.workspaceNote()}
     """.trimIndent().replace("\n", " "),
     parameters = {
@@ -1403,7 +1427,7 @@ private fun createGrepTool(
                     put("type", "string")
                     put("description", "Text to search for, or a regular expression when regex=true")
                 })
-                putPathProperty(targets.first().layout, required = false)
+                putPathProperty(targets.first().layout, required = false, defaultHint = DEFAULT_PATH_HINT)
                 put("include", buildJsonObject {
                     put("type", "string")
                     put("description", "Only search files whose name matches this glob, e.g. *.kt")
@@ -1433,7 +1457,7 @@ private fun createGrepTool(
         val target = params.resolveWorkspace(targets)
         val query = params.string("query").orEmpty()
         require(query.isNotEmpty()) { "query is required" }
-        val root = params.string("path")?.let { params.absolutePath("path") } ?: target.layout.workspaceDir
+        val root = params.string("path")?.let { params.absolutePath("path") } ?: target.cwdRoot(cwds)
         val limit = (params.int("limit") ?: MAX_GREP_RESULTS).coerceIn(1, 1000)
         val include = params.string("include")?.trim()?.takeIf { it.isNotEmpty() }
         val includeMatcher = include?.let(::GlobMatcher)

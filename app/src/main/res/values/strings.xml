@@ -1503,6 +1503,9 @@
   <string name="workspace_cwd_select_directory">Select Working Directory</string>
   <string name="workspace_cwd_select_desc">Set the working directory for the current session</string>
   <string name="workspace_cwd_no_subdirectories">No subdirectories</string>
+  <string name="workspace_cwd_load_failed">Couldn\'t read this directory</string>
+  <string name="workspace_cwd_truncated">Showing the first %1$d entries</string>
+  <string name="workspace_cwd_root">Root</string>
   <string name="workspace_cwd_reset">Reset</string>
   <string name="workspace_cwd_set">Set as CWD</string>
   <string name="common_confirm">OK</string>
@@ -2127,12 +2130,10 @@
   <string name="task_tree_empty">No sub-agent tasks yet. Enable "Dispatch sub-agents" in the assistant\'s local tools and mark another assistant as a sub-agent</string>
   <string name="task_tree_open">Open conversation</string>
   <string name="task_tree_tools">Tool calls</string>
-  <string name="task_tree_tools_count">%1$d tools · %2$d sub-agents</string>
   <string name="task_tree_no_tools">No tool calls</string>
   <string name="task_tree_state_running">Running</string>
   <string name="task_tree_state_completed">Completed</string>
   <string name="task_tree_state_failed">Failed</string>
-  <string name="task_tree_sub_agent">Sub-agent</string>
 
   <string name="assistant_page_memory_auto_compress">Auto-compress</string>
   <string name="assistant_page_memory_auto_compress_desc">Compress the history before replying once context usage reaches the threshold; the result matches manual compression</string>
@@ -2300,6 +2301,7 @@
   <string name="memory_import_done">Memory imported</string>
   <string name="memory_import_failed">Failed to import memory</string>
   <string name="task_tree_loading">Loading conversation…</string>
+  <string name="task_tree_missing">This conversation no longer exists</string>
   <string name="task_tree_open_full">Open full conversation</string>
   <string name="close">Close</string>
   <string name="setting_media_page_asset_storage_s3">S3</string>

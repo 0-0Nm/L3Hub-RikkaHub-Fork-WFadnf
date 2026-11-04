@@ -42,6 +42,8 @@ export interface Conversation {
   config?: ConversationConfig | null;
   /** Absolute path inside the workspace rootfs */
   workspaceCwd?: string | null;
+  /** 多工作区会话目录：workspaceId -> 相对工作区文件区的路径（缺省 = 工作区根） */
+  workspaceCwds?: Record<string, string>;
   /** 所属文件夹（助手内分组），null 表示未归入任何文件夹 */
   folderId?: string | null;
   createAt: number;

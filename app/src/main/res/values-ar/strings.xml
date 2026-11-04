@@ -2261,11 +2261,9 @@
   <string name="task_tree_state_completed">مكتملة</string>
   <string name="task_tree_state_failed">فاشلة</string>
   <string name="task_tree_state_running">قيد التنفيذ</string>
-  <string name="task_tree_sub_agent">وكيل فرعي</string>
   <string name="task_tree_task">المهمة</string>
   <string name="task_tree_title">شجرة المهام</string>
   <string name="task_tree_tools">استدعاءات الأدوات</string>
-  <string name="task_tree_tools_count">%1$d أدوات · %2$d وكلاء فرعيون</string>
   <string name="workspace_detail_tool_apply_patch">تطبيق التصحيح</string>
   <string name="workspace_detail_tool_approval_permission_hint">هذه المفاتيح تعمل فقط في وضع «تأكيد كل إجراء»؛ والمساعد الحالي «%1$s»، ويُعتمد ذلك الوضع</string>
   <string name="workspace_detail_tool_git">مراجعة Git</string>

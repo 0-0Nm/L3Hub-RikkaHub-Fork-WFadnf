@@ -2264,11 +2264,9 @@
   <string name="task_tree_state_completed">Abgeschlossen</string>
   <string name="task_tree_state_failed">Fehlgeschlagen</string>
   <string name="task_tree_state_running">Läuft</string>
-  <string name="task_tree_sub_agent">Sub-Agent</string>
   <string name="task_tree_task">Aufgabe</string>
   <string name="task_tree_title">Aufgabenbaum</string>
   <string name="task_tree_tools">Tool-Aufrufe</string>
-  <string name="task_tree_tools_count">%1$d Tools · %2$d Sub-Agents</string>
   <string name="workspace_detail_tool_apply_patch">Patch anwenden</string>
   <string name="workspace_detail_tool_approval_permission_hint">Diese Schalter gelten nur im Modus „Einzeln bestätigen“; der aktuelle Assistent steht auf „%1$s“, dieser Modus hat Vorrang</string>
   <string name="workspace_detail_tool_git">Git-Prüfung</string>

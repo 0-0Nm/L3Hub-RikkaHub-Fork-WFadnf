@@ -2263,11 +2263,9 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="task_tree_state_completed">완료됨</string>
   <string name="task_tree_state_failed">실패</string>
   <string name="task_tree_state_running">진행 중</string>
-  <string name="task_tree_sub_agent">하위 에이전트</string>
   <string name="task_tree_task">작업</string>
   <string name="task_tree_title">작업 트리</string>
   <string name="task_tree_tools">도구 호출</string>
-  <string name="task_tree_tools_count">도구 %1$d · 하위 에이전트 %2$d</string>
   <string name="workspace_detail_tool_apply_patch">패치 적용</string>
   <string name="workspace_detail_tool_approval_permission_hint">이 스위치는 "항목별 확인" 단계에서만 적용됩니다. 현재 어시스턴트는 "%1$s"이므로 해당 단계가 우선합니다</string>
   <string name="workspace_detail_tool_git">Git 검토</string>

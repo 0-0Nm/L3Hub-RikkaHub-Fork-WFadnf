@@ -80,6 +80,7 @@ import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.WorkspaceCwd
 import me.rerere.rikkahub.data.model.effectiveContextWindow
 import me.rerere.rikkahub.data.model.lastContextTokens
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
@@ -297,8 +298,13 @@ internal fun FilesPicker(
                                         modifier = Modifier.weight(1f, fill = false),
                                     )
                                     Text(
-                                        text = conversation.workspaceCwds[workspace.id]
-                                            ?: workspace.workspaceDir(),
+                                        text = WorkspaceCwd.absolute(
+                                            workspace.workspaceDir(),
+                                            WorkspaceCwd.normalize(
+                                                workspace.workspaceDir(),
+                                                conversation.workspaceCwds[workspace.id],
+                                            ),
+                                        ),
                                         // 路径的末尾更有辨识度，放不下时省略开头
                                         maxLines = 1,
                                         overflow = TextOverflow.StartEllipsis,

@@ -464,6 +464,18 @@ class ConversationRepository(
             conversationEntityToConversation(entity, loadMessageNodes(entity.id))
         }
 
+    /** 只带会话本身（标题/状态/清单），不读消息：任务树轮询用 */
+    suspend fun getConversationSummary(uuid: Uuid): Conversation? {
+        val entity = conversationDAO.getConversationById(uuid.toString()) ?: return null
+        return conversationEntityToConversation(entity, emptyList())
+    }
+
+    /** 子会话摘要，同样不读消息 */
+    suspend fun getChildConversationSummaries(parentId: Uuid): List<Conversation> =
+        conversationDAO.getChildrenOf(parentId.toString()).map { entity ->
+            conversationEntityToConversation(entity, emptyList())
+        }
+
     fun getPinnedConversations(): Flow<List<Conversation>> {
         return conversationDAO
             .getPinnedConversations()

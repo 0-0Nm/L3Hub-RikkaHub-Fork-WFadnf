@@ -1191,6 +1191,9 @@
   <string name="workspace_cwd_select_directory">選擇工作目錄</string>
   <string name="workspace_cwd_select_desc">為當前會話設置工作目錄</string>
   <string name="workspace_cwd_no_subdirectories">沒有子目錄</string>
+  <string name="workspace_cwd_load_failed">無法讀取這個目錄</string>
+  <string name="workspace_cwd_truncated">僅顯示前 %1$d 項</string>
+  <string name="workspace_cwd_root">根目錄</string>
   <string name="workspace_cwd_reset">重置</string>
   <string name="workspace_cwd_set">設為CWD</string>
   <string name="common_confirm">確定</string>
@@ -1892,6 +1895,7 @@
   <string name="memory_import_done">記憶已匯入</string>
   <string name="memory_import_failed">匯入記憶失敗</string>
   <string name="task_tree_loading">正在讀取會話…</string>
+  <string name="task_tree_missing">這個會話已不存在</string>
   <string name="task_tree_open_full">開啟完整會話</string>
   <string name="close">關閉</string>
   <string name="setting_media_page_asset_storage_s3">S3</string>
@@ -2302,10 +2306,8 @@
   <string name="task_tree_state_completed">已完成</string>
   <string name="task_tree_state_failed">失敗</string>
   <string name="task_tree_state_running">進行中</string>
-  <string name="task_tree_sub_agent">子代理</string>
   <string name="task_tree_title">任務樹</string>
   <string name="task_tree_tools">工具呼叫</string>
-  <string name="task_tree_tools_count">工具 %1$d · 子代理 %2$d</string>
   <string name="workspace_detail_tool_approval_permission_hint">這些開關僅在「逐項確認」檔位生效；當前助手為「%1$s」，以該檔位為準</string>
   <string name="workspace_revert_nothing">無可還原的內容</string>
   <string name="workspace_ssh_editor_auth_failed_key">伺服器拒絕了該金鑰。請確認對應公鑰已寫入伺服器的 ~/.ssh/authorized_keys，且 ~/.ssh 許可權為 700、authorized_keys 為 600</string>

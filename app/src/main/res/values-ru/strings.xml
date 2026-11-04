@@ -2269,11 +2269,9 @@
   <string name="task_tree_state_completed">Выполнено</string>
   <string name="task_tree_state_failed">Ошибка</string>
   <string name="task_tree_state_running">Выполняется</string>
-  <string name="task_tree_sub_agent">Субагент</string>
   <string name="task_tree_task">Задача</string>
   <string name="task_tree_title">Дерево задач</string>
   <string name="task_tree_tools">Вызовы инструментов</string>
-  <string name="task_tree_tools_count">Инструментов: %1$d · субагентов: %2$d</string>
   <string name="workspace_detail_tool_apply_patch">Применение патча</string>
   <string name="workspace_detail_tool_approval_permission_hint">Эти переключатели действуют только в режиме «Запрашивать каждый раз»; текущий ассистент — «%1$s», и приоритет у этого режима</string>
   <string name="workspace_detail_tool_git">Обзор Git</string>

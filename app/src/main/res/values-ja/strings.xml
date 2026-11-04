@@ -2263,11 +2263,9 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="task_tree_state_completed">完了</string>
   <string name="task_tree_state_failed">失敗</string>
   <string name="task_tree_state_running">進行中</string>
-  <string name="task_tree_sub_agent">サブエージェント</string>
   <string name="task_tree_task">タスク</string>
   <string name="task_tree_title">タスクツリー</string>
   <string name="task_tree_tools">ツール呼び出し</string>
-  <string name="task_tree_tools_count">ツール %1$d · サブエージェント %2$d</string>
   <string name="workspace_detail_tool_apply_patch">パッチを適用</string>
   <string name="workspace_detail_tool_approval_permission_hint">これらのスイッチは「都度確認」モードでのみ有効です。現在のアシスタントは「%1$s」で、そのモードが優先されます</string>
   <string name="workspace_detail_tool_git">Git レビュー</string>

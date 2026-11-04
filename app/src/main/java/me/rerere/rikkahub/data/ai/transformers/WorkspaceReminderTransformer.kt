@@ -6,6 +6,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
+import me.rerere.rikkahub.data.model.WorkspaceCwd
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.workspace.WorkspaceLayout
 import me.rerere.workspace.WorkspaceManager
@@ -20,8 +21,8 @@ import java.util.concurrent.ConcurrentHashMap
  * 当助手绑定了一个 shell 已就绪的 workspace 时, 在系统提示词中追加一段引导,
  * 让模型了解 workspace 环境与 workspace_* 工具的使用方式。
  * 提示中包含实际使用的 shell 与发行版, 避免模型默认按 bash / apt 来写命令。
- * 本地工作区同时读取 ~/.agents、/workspace 和会话当前目录中的 AGENTS.md 作为工作区指令。
- * 远程工作区不读取 AGENTS.md, shell 与发行版读到一次后缓存 (见 [RemoteEnvironmentCache]),
+ * 本地与远程工作区都会把 ~/.agents、工作区根和会话当前目录中的 AGENTS.md 作为工作区指令。
+ * shell 与发行版读到一次后缓存 (见 [RemoteEnvironmentCache]),
  * 连不上时只注入一段说明, 不阻塞对话。
  */
 class WorkspaceReminderTransformer(
@@ -46,7 +47,10 @@ class WorkspaceReminderTransformer(
                     return@forEach
                 }
                 val layout = workspaceRepository.layout(workspaceId) ?: return@forEach
-                val cwd = ctx.workspaceCwds[workspaceId]?.ifBlank { null }
+                // 会话里存的是相对路径（旧数据可能是绝对路径）：提示词用绝对路径，AGENTS.md 用相对路径
+                val cwd = WorkspaceCwd.normalize(layout.workspaceDir, ctx.workspaceCwds[workspaceId])
+                // 没设置时提示词里不提工作目录；设置了才拼成执行环境里的绝对路径
+                val cwdPath = cwd?.let { WorkspaceCwd.absolute(layout.workspaceDir, it) }
 
                 val prompt = if (workspace.isSsh()) {
                     val environmentResult = remoteEnvironments.get(workspaceId, workspace.sshConfig) {
@@ -76,7 +80,7 @@ class WorkspaceReminderTransformer(
                         layout = layout,
                         shell = environment.shell,
                         distro = environment.distro,
-                        cwd = cwd,
+                        cwd = cwdPath,
                     ) + buildAgentsPrompt(
                         workspaceId,
                         remoteAgentsPaths(layout, cwd, environment.home),
@@ -86,7 +90,7 @@ class WorkspaceReminderTransformer(
                         workspace = workspace,
                         shell = workspaceRepository.shell(workspaceId),
                         distro = readDistroName(workspaceId),
-                        cwd = cwd,
+                        cwd = cwdPath,
                     ) + buildAgentsPrompt(workspaceId, localAgentsPaths(cwd))
                 }
                 add(workspace to prompt)
@@ -145,10 +149,8 @@ class WorkspaceReminderTransformer(
     /** 远程工作区：远程 home 下的用户级、工作区根、会话当前目录；读不到就是没有 */
     private fun remoteAgentsPaths(layout: WorkspaceLayout, cwd: String?, home: String?): List<String> {
         val base = layout.workspaceDir.trimEnd('/').ifBlank { "/" }
-        val workingDirectory = if (cwd.isNullOrBlank()) null else {
-            val relative = cwd.trim('/')
-            if (relative.isEmpty()) base else "$base/$relative"
-        }
+        // cwd 已经是相对工作区的路径，这里只负责拼回执行环境里的绝对路径
+        val workingDirectory = cwd?.let { WorkspaceCwd.absolute(layout.workspaceDir, it) }
         return listOfNotNull(
             home?.let { "$it/.agents/AGENTS.md" },
             "$base/AGENTS.md",

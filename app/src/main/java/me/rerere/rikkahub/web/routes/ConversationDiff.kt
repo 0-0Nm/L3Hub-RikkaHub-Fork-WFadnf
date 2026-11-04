@@ -22,6 +22,7 @@ internal fun ConversationDto.singleNodeDiffOrNull(current: ConversationDto): Nod
         lorebookIds != current.lorebookIds ||
         config != current.config ||
         workspaceCwd != current.workspaceCwd ||
+        workspaceCwds != current.workspaceCwds ||
         folderId != current.folderId
     ) {
         return null

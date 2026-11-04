@@ -1470,6 +1470,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_cwd_select_directory">选择工作目录</string>
   <string name="workspace_cwd_select_desc">为当前会话设置工作目录</string>
   <string name="workspace_cwd_no_subdirectories">没有子目录</string>
+  <string name="workspace_cwd_load_failed">无法读取这个目录</string>
+  <string name="workspace_cwd_truncated">仅显示前 %1$d 项</string>
+  <string name="workspace_cwd_root">根目录</string>
   <string name="workspace_cwd_reset">重置</string>
   <string name="workspace_cwd_set">设为CWD</string>
   <string name="common_confirm">确定</string>
@@ -2129,12 +2132,10 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="task_tree_empty">暂无子代理任务。请在助手的本地工具中开启「派发子代理」，并将另一助手设为子代理</string>
   <string name="task_tree_open">打开会话</string>
   <string name="task_tree_tools">工具调用</string>
-  <string name="task_tree_tools_count">工具 %1$d · 子代理 %2$d</string>
   <string name="task_tree_no_tools">无工具调用</string>
   <string name="task_tree_state_running">进行中</string>
   <string name="task_tree_state_completed">已完成</string>
   <string name="task_tree_state_failed">失败</string>
-  <string name="task_tree_sub_agent">子代理</string>
 
   <string name="assistant_page_memory_auto_compress">自动压缩</string>
   <string name="assistant_page_memory_auto_compress_desc">上下文占用达到阈值时，先压缩历史再回复，效果与手动压缩一致</string>
@@ -2302,6 +2303,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="memory_import_done">记忆已导入</string>
   <string name="memory_import_failed">导入记忆失败</string>
   <string name="task_tree_loading">正在读取会话…</string>
+  <string name="task_tree_missing">这个会话已不存在</string>
   <string name="task_tree_open_full">打开完整会话</string>
   <string name="close">关闭</string>
   <string name="setting_media_page_asset_storage_s3">S3</string>

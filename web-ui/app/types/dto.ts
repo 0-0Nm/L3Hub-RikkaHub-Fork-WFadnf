@@ -99,6 +99,7 @@ export interface ConversationDto {
   lorebookIds?: string[];
   config?: ConversationConfig | null;
   workspaceCwd?: string | null;
+  workspaceCwds?: Record<string, string>;
   folderId?: string | null;
   createAt: number;
   updateAt: number;
