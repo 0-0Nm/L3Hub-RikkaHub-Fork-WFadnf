@@ -24,8 +24,8 @@ android {
         applicationId = "com.rikkahub.l3hub.wfadnf"
         minSdk = 26
         targetSdk = 37
-        versionCode = 282
-        versionName = "L.3.1.3.104"
+        versionCode = 283
+        versionName = "L.3.1.4.105"
         buildConfigField("boolean", "UPDATE_CHECK_ENABLED", "false")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
