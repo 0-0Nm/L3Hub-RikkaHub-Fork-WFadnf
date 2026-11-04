@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.ai.subagent
 import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
+import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.model.Assistant
@@ -10,6 +11,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.getAssistantOf
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
 
@@ -129,7 +131,7 @@ class SubAgentRunner(
             return "Sub-agent \"${subAgentLabel(candidate)}\" is now running in parallel. Its result will be delivered back to this conversation automatically; open conversation ${child.id} to watch progress."
         }
 
-        val timeout = timeoutSeconds.coerceIn(MIN_WAIT_TIMEOUT_SECONDS, MAX_WAIT_TIMEOUT_SECONDS).seconds
+        val timeout = waitTimeout(timeoutSeconds)
         val result = try {
             withTimeoutOrNull(timeout) { waiter.await() }
         } catch (e: CancellationException) {
@@ -147,6 +149,64 @@ class SubAgentRunner(
         // 就两头空。下一次投递会在会话里认出这条正文，再把它从队列里剔掉
         return received
     }
+
+    /**
+     * 等一条已经派发出去的子会话，按「没有可等待对象」的几种情形依次处理：
+     *
+     * 1. 会话不存在（被删了）→ 直接说明；
+     * 2. 已经完成、结果还排在待投递队列里 → 直接返回那一份，不再等；
+     * 3. 已经完成、结果早就投递过 → 直接说明，不重复送；
+     * 4. 还在跑 → 注册等待者，和 `dispatch(wait=true)` 共用同一套叫醒逻辑；
+     * 5. 失败 → 直接返回失败说明。
+     *
+     * 先登记再查询：子代理可能正好在查询和登记之间跑完，先登记就不会漏掉那一轮。
+     * 队列里的正文只读不取——等工具输出真的写进会话后，投递时会按正文认出来再剔掉，
+     * 中途被掐断时那一份仍然会被当成通知补投。
+     */
+    suspend fun awaitResult(
+        parentConversationId: Uuid,
+        childConversationId: Uuid,
+        timeoutSeconds: Int = DEFAULT_SUB_AGENT_WAIT_SECONDS,
+    ): String {
+        val chatService = chatServiceProvider()
+        val child = chatService.getConversation(childConversationId)
+            ?: return "Sub-agent conversation $childConversationId no longer exists, so there is nothing to wait for."
+        if (child.parentConversationId != parentConversationId) {
+            return "Conversation $childConversationId is not a sub-agent of this conversation, so it cannot be awaited here."
+        }
+        val name = subAgentLabel(settingsStore.awaitLoaded().getAssistantOf(child))
+        val waiter = subAgentWaits.register(childConversationId)
+        try {
+            chatService.findPendingSubAgentResult(parentConversationId, childConversationId)
+                ?.let { return it }
+            // 登记和叫醒撞在同一刻：值已经在等待者里
+            if (waiter.isCompleted) return waiter.await()
+            val latest = chatService.getConversation(childConversationId)
+                ?: return "Sub-agent conversation $childConversationId no longer exists, so there is nothing to wait for."
+            val state = latest.subAgentState
+            if (state != SUB_AGENT_STATE_RUNNING) {
+                return if (state == SUB_AGENT_STATE_FAILED) {
+                    "Sub-agent \"$name\" (conversation $childConversationId) ended without a result. Do not wait for it again."
+                } else {
+                    val round = latest.currentMessages.count { message ->
+                        message.role == MessageRole.USER && !message.isContextCheckpoint
+                    }
+                    "Sub-agent \"$name\" (conversation $childConversationId) already finished round $round and has no undelivered result left; its output was delivered earlier. Do not wait for it again."
+                }
+            }
+            val timeout = waitTimeout(timeoutSeconds)
+            val received = withTimeoutOrNull(timeout) { waiter.await() }
+            // 超时和完成撞在同一刻时 withTimeoutOrNull 会返回 null，但值已经放进等待者里
+            val result = received ?: if (waiter.isCompleted && !waiter.isCancelled) waiter.await() else null
+            if (result != null) return result
+            return "Sub-agent \"$name\" is still running after ${timeout.inWholeSeconds} seconds. Its result will be delivered back to this conversation when it finishes; do not wait for it again."
+        } finally {
+            subAgentWaits.unregister(childConversationId, waiter)
+        }
+    }
+
+    private fun waitTimeout(timeoutSeconds: Int): Duration =
+        timeoutSeconds.coerceIn(MIN_WAIT_TIMEOUT_SECONDS, MAX_WAIT_TIMEOUT_SECONDS).seconds
 
     private suspend fun markFailed(chatService: ChatService, conversationId: Uuid) {
         runCatching {

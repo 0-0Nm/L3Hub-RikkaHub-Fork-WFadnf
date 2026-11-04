@@ -73,6 +73,7 @@ class LocalTools(
             val subAgents = dispatchableSubAgents(dispatcher, assistants)
             if (subAgents.isNotEmpty()) {
                 tools.add(buildSubAgentTool(conversationId, subAgents, subAgentRunner))
+                tools.add(buildSubAgentAwaitTool(conversationId, subAgentRunner))
             }
         }
         return tools

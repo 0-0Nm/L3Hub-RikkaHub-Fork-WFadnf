@@ -644,10 +644,13 @@ class ChatService(
         if (!triggeredAutomatically) return
         val assistantName = subAgentLabel(settingsStore.awaitLoaded().getStoredAssistantOf(conversation))
         val result = formatSubAgentRoundResult(assistantName, session.id, round, answer)
-        // 先落盘再叫醒等待者：反过来的话工具可能先跑回来撤，撤了个空，下一轮又当通知送一遍。
-        // 父回合此刻还在生成，flush 会直接让路；工具拿到正文后会撤掉这一份，
-        // 等待被掐断时这一份就是兜底，下一轮仍会当通知送到
-        deliverSubAgentResult(parentConversationId = parentConversationId, result = result)
+        // 先落盘再叫醒等待者：工具输出还要经过 AgentLoop 才写进会话，先保证磁盘上有兜底。
+        // 工具把正文写进会话后，下一次投递会按正文认出来把它剔掉；等待被掐断时这一份照常补投
+        deliverSubAgentResult(
+            parentConversationId = parentConversationId,
+            childConversationId = session.id,
+            result = result,
+        )
         subAgentWaits.complete(session.id, result)
     }
 
@@ -692,13 +695,28 @@ class ChatService(
      * background 子代理完成后调用：父会话空闲就立刻把结果当作一条用户消息投递；
      * 正在生成、停在工具审批上或还没打开时先攒着，等这一轮结束或下次打开会话时合并投递。
      */
-    suspend fun deliverSubAgentResult(parentConversationId: Uuid, result: String) {
-        if (!subAgentResultStore.append(parentConversationId, result)) {
+    suspend fun deliverSubAgentResult(
+        parentConversationId: Uuid,
+        childConversationId: Uuid,
+        result: String,
+    ) {
+        if (!subAgentResultStore.append(parentConversationId, childConversationId, result)) {
             // 没落盘：这一条只在本进程里能投出去，进程被杀就没了（write 里已经记过 error）
             Log.e(TAG, "deliver sub agent result: not persisted for $parentConversationId")
         }
         flushSubAgentResults(parentConversationId)
     }
+
+    /**
+     * await_sub_agent 用：某条子会话最早一份还没投递的结果。
+     *
+     * 只看不取：正文留在队列里，等工具输出真的写进会话后，投递时会按正文认出来再剔掉；
+     * 工具调用中途被掐断的话，这一份仍然会被当成通知补投，两头都不丢。
+     */
+    suspend fun findPendingSubAgentResult(
+        parentConversationId: Uuid,
+        childConversationId: Uuid,
+    ): String? = subAgentResultStore.findFor(parentConversationId, childConversationId)
 
     /**
      * 进程重启后的补投。
