@@ -7,6 +7,7 @@ import me.rerere.ai.agent.AgentHooks
 import me.rerere.ai.agent.AgentRequest
 import me.rerere.ai.agent.StepRequest
 import me.rerere.ai.agent.withRetry
+import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.Model
@@ -18,6 +19,8 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.limitContext
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.prompts.buildMemoryPrompt
+import me.rerere.rikkahub.data.ai.prompts.buildMergeCompressPrompt
+import me.rerere.rikkahub.data.ai.prompts.buildPartialCompressPrompt
 import me.rerere.rikkahub.data.ai.subagent.SUB_AGENT_NOTICE_FRAMING
 import me.rerere.rikkahub.data.ai.tools.ChatToolFactory
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
@@ -43,11 +46,16 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.TodoItem
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MemoryFile
+import me.rerere.rikkahub.data.model.chunkMessagesForCompression
+import me.rerere.rikkahub.data.model.effectiveContextWindow
+import me.rerere.rikkahub.data.model.estimateMessageTokens
+import me.rerere.rikkahub.data.model.estimateTokens
 import me.rerere.rikkahub.data.model.getAssistantOf
 import me.rerere.rikkahub.data.model.getChatModelOf
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.data.repository.memoryId
+import java.util.Locale
 import kotlin.time.Clock
 import kotlin.uuid.Uuid
 
@@ -94,6 +102,16 @@ class ChatRequestFactory(
         // 放在最后: 其它转换器可能插入消息, 清单要贴着最后一条真实 user 消息
         TodoStateTransformer,
     )
+
+    /**
+     * 分段压缩请求用的转换器：只保留把附件内容变成文本的那几个。
+     *
+     * 分段不追求提示词缓存，但文档正文和 OCR 文本必须进摘要——provider 不认识
+     * [UIMessagePart.Document]，跳过这部分等于把附件内容从历史里永久删掉。
+     * 时间提醒、注入、模板这类装饰性转换跳过，也不给分段预算添乱。
+     */
+    private val compressionContentTransformers: List<InputMessageTransformer> =
+        listOf(DocumentAsPromptTransformer, OcrTransformer)
 
     private val outputTransformers: List<OutputMessageTransformer> = listOf(
         ThinkTagTransformer,
@@ -189,15 +207,89 @@ class ChatRequestFactory(
      * 请求按正常对话组装（系统提示词、工具定义、参数和 sessionId 都相同），只在末尾追加压缩指令，
      * 前缀与上一轮对话一致，可以命中提示词缓存，模型也能看到工具调用和结果。
      * 工具定义必须保留：它属于请求前缀，去掉或改动 tool_choice 都会让缓存失效。
+     *
+     * 压缩范围本身也可能装不进模型窗口（这往往正是要压缩的原因）。这时分段摘要再合并：
+     * 把整段历史原样再发一次只会被同样拒绝，自动压缩就等于失效。
      */
     suspend fun generateCompressionSummary(
         turn: ChatTurnContext,
         messages: List<UIMessage>,
         compressPrompt: String,
     ): String {
+        val budget = turn.model.compressionInputBudget()
+        val chunks = if (budget == null) listOf(messages) else chunkMessagesForCompression(messages, budget)
+        val summary = if (chunks.size <= 1) {
+            // 用切完的那一份：单条消息自己超预算时会被截断，这里不能退回原文。
+            // 首条不是 user 的会话（比如助手预设消息开头的会话）同样要补一条，否则 Claude/Gemini 会拒绝
+            requestCompressionSummary(turn, chunks.single().withLeadingUserTurn(), compressPrompt)
+        } else {
+            Log.i(TAG, "generateCompressionSummary: split ${messages.size} messages into ${chunks.size} parts")
+            val partials = chunks.mapIndexed { index, chunk ->
+                requestCompressionSummary(
+                    turn = turn,
+                    messages = chunk.asCompressionChunk(),
+                    prompt = buildPartialCompressPrompt(
+                        part = index + 1,
+                        total = chunks.size,
+                        locale = Locale.getDefault().displayName,
+                    ),
+                    transformers = compressionContentTransformers,
+                )
+            }
+            // 合并阶段的内容是各段摘要，不是对话本身：一个转换器都不能过
+            requestCompressionSummary(
+                turn = turn,
+                messages = emptyList(),
+                prompt = buildMergeCompressPrompt(partials, compressPrompt),
+                transformers = emptyList(),
+                // 合并阶段只有摘要文本，不需要工具定义：省 token，也不给模型调工具的机会
+                includeTools = false,
+            )
+        }
+        // 模型拒绝或答非所问时不满足七段结构，宁可压缩失败也别拿无效文本替换历史
+        if (!summary.isUsableCompressionSummary()) {
+            error(context.getString(R.string.chat_page_compress_malformed))
+        }
+        return summary
+    }
+
+    /**
+     * 发一次摘要请求。
+     *
+     * `max_tokens` 同样占用窗口（Anthropic 按 输入 + max_tokens 校验），不能置空：
+     * 置空后 Claude 会兜底成 64k，把大上下文下的压缩请求自己顶出窗口。
+     * 其它 provider 不传时由服务端按剩余窗口分配，这里保持原来的行为。
+     */
+    private suspend fun requestCompressionSummary(
+        turn: ChatTurnContext,
+        messages: List<UIMessage>,
+        prompt: String,
+        transformers: List<InputMessageTransformer> = inputTransformers,
+        includeTools: Boolean = true,
+    ): String {
         // 压缩要看整段范围，不能再按条数截一次
-        val (requestMessages, params) = buildStep(turn, messages, respectMessageLimit = false)
-        // 压缩指令不经过输入转换器，模板转换器会把其中的花括号当成模板语法
+        val (requestMessages, params) = buildStep(
+            turn = turn,
+            messages = messages,
+            respectMessageLimit = false,
+            transformers = transformers,
+            includeTools = includeTools,
+        )
+        val inputTokens = requestMessages.sumOf { estimateMessageTokens(it) } + estimateTokens(prompt)
+        // 直连 Claude 时 SDK 对 null 兜底 64k，大上下文下会把 prompt + max_tokens 顶出窗口；
+        // 其它 provider 不传 max_tokens 时由服务端按剩余窗口分配，硬填反而可能超过模型自己的输出上限
+        val maxTokens = when (turn.providerSetting) {
+            is ProviderSetting.Claude -> turn.model.compressionMaxTokens(inputTokens)
+            else -> null
+        }
+        // 压缩范围经常以 user 消息结尾（保留区从下一条开始），再追加一条 user 会变成连续两条 user；
+        // 末尾是 user 时把指令并进那条消息，前缀不变，也避免 provider 的角色交替校验
+        val messagesWithPrompt = if (requestMessages.lastOrNull()?.role == MessageRole.USER) {
+            val last = requestMessages.last()
+            requestMessages.dropLast(1) + last.copy(parts = last.parts + UIMessagePart.Text(prompt))
+        } else {
+            requestMessages + UIMessage.user(prompt)
+        }
         val result = withRetry(
             policy = turn.settings.retryPolicy(),
             onRetry = { Log.w(TAG, "Compression request failed, retrying in ${it.delay}", it.cause) },
@@ -207,22 +299,16 @@ class ChatRequestFactory(
                 UsageTag(UsageSource.COMPRESSION, turn.assistant.id, turn.conversationId),
             ).generateText(
                 providerSetting = turn.providerSetting,
-                messages = requestMessages + UIMessage.user(compressPrompt),
-                // 助手的输出上限是给聊天回复定的，结构化摘要写不完会被截断；max_tokens 不属于请求前缀，改了不影响缓存
-                params = params.copy(maxTokens = null),
+                messages = messagesWithPrompt,
+                params = params.copy(maxTokens = maxTokens),
             )
         }
-        val summary = result.message.compressionSummaryOrNull()
-            ?: error(context.getString(R.string.chat_page_compress_tool_call_response))
         // 输出被截断时摘要只写到一半：当成完整摘要保存，后半段历史就对模型永久消失了
         if (result.finishReason.isTruncatedOutput()) {
             error(context.getString(R.string.chat_page_compress_truncated))
         }
-        // 模型拒绝或答非所问时不满足七段结构，宁可压缩失败也别拿无效文本替换历史
-        if (!summary.isUsableCompressionSummary()) {
-            error(context.getString(R.string.chat_page_compress_malformed))
-        }
-        return summary
+        return result.message.compressionSummaryOrNull()
+            ?: error(context.getString(R.string.chat_page_compress_tool_call_response))
     }
 
     /** 一步请求实际发出的消息和参数；正常对话和压缩共用，二者的请求前缀必须一致才能命中提示词缓存 */
@@ -231,9 +317,12 @@ class ChatRequestFactory(
         messages: List<UIMessage>,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
         respectMessageLimit: Boolean = true,
+        transformers: List<InputMessageTransformer> = inputTransformers,
+        includeTools: Boolean = true,
     ): StepRequest {
         val assistant = turn.assistant
-        val requestMessages = buildList {
+        val tools = if (includeTools) turn.tools else emptyList()
+        val baseMessages = buildList {
             val system = buildString {
                 val effectiveSystemPrompt =
                     if (assistant.allowConversationSystemPrompt && !turn.conversationSystemPrompt.isNullOrBlank()) {
@@ -260,7 +349,7 @@ class ChatRequestFactory(
                     append(buildMemoryPrompt(turn.memories))
                 }
                 // 工具prompt
-                turn.tools.forEach { tool ->
+                tools.forEach { tool ->
                     appendLine()
                     append(tool.systemPrompt(turn.model, messages))
                 }
@@ -283,22 +372,27 @@ class ChatRequestFactory(
                     )
                 }
             )
-        }.transforms(
-            transformers = inputTransformers,
-            context = context,
-            model = turn.model,
-            assistant = assistant,
-            settings = turn.settings,
-            processingStatus = processingStatus,
-            workspaceCwds = turn.workspaceCwds,
-            todos = turn.todos,
-        )
+        }
+        val requestMessages = if (transformers.isEmpty()) {
+            baseMessages
+        } else {
+            baseMessages.transforms(
+                transformers = transformers,
+                context = context,
+                model = turn.model,
+                assistant = assistant,
+                settings = turn.settings,
+                processingStatus = processingStatus,
+                workspaceCwds = turn.workspaceCwds,
+                todos = turn.todos,
+            )
+        }
         val params = TextGenerationParams(
             model = turn.model,
             temperature = assistant.temperature,
             topP = assistant.topP,
             maxTokens = assistant.maxTokens,
-            tools = turn.tools,
+            tools = tools,
             reasoningLevel = assistant.reasoningLevel,
             customHeaders = buildList {
                 addAll(assistant.customHeaders)
@@ -313,6 +407,70 @@ class ChatRequestFactory(
         return StepRequest(requestMessages, params)
     }
 }
+
+// 压缩请求的输出上限：够写七段摘要，又不至于把输入挤出窗口（max_tokens 也占窗口）
+private const val COMPRESSION_MAX_OUTPUT_TOKENS = 8_192
+private const val COMPRESSION_MIN_OUTPUT_TOKENS = 1_024
+// 摘要请求的固定开销：systemPrompt、工具定义与工具 prompt、压缩指令和估算误差
+private const val COMPRESSION_FIXED_INPUT_RESERVE = 12_288
+// 分段下限：预算再小也按这个切，否则会把历史切成几十段、每段一次请求
+private const val COMPRESSION_MIN_INPUT_BUDGET = 2_048
+
+/** 压缩请求每次最多输入多少 token；窗口未知时返回 null，表示不分段 */
+internal fun Model.compressionInputBudget(): Int? {
+    val window = compressionWindow() ?: return null
+    return (window - COMPRESSION_MAX_OUTPUT_TOKENS - COMPRESSION_FIXED_INPUT_RESERVE)
+        .coerceAtLeast(COMPRESSION_MIN_INPUT_BUDGET)
+}
+
+/** 摘要请求的 max_tokens：装得下就按输出上限，装不下就按窗口剩余空间收窄 */
+internal fun Model.compressionMaxTokens(inputTokens: Int): Int {
+    val window = compressionWindow() ?: return COMPRESSION_MAX_OUTPUT_TOKENS
+    val room = window - inputTokens - COMPRESSION_FIXED_INPUT_RESERVE
+    return room.coerceAtMost(COMPRESSION_MAX_OUTPUT_TOKENS).coerceAtLeast(COMPRESSION_MIN_OUTPUT_TOKENS)
+}
+
+/**
+ * 压缩可用的窗口。门限和 contextLength 都可能不准（门限可能比真实窗口大），
+ * 取两者里小的那个，宁可保守。
+ */
+private fun Model.compressionWindow(): Int? = listOfNotNull(
+    effectiveContextWindow,
+    contextLength.takeIf { it > 0 },
+).minOrNull()
+
+/**
+ * 分段可能从助手消息开始（按 token 预算切的消息边界），而 Anthropic 要求首条是 user；
+ * 一条超长消息按 part 拆开后还会出现连续同角色，Google 又要求 user/model 交替。
+ * 这里合并相邻同角色消息，再补开头的 user。
+ */
+private fun List<UIMessage>.asCompressionChunk(): List<UIMessage> {
+    val merged = buildList {
+        for (message in this@asCompressionChunk) {
+            val last = lastOrNull()
+            // 子代理通知有自己的 framing，并进普通用户消息会让两边都读错，当成边界
+            if (last != null && last.role == message.role &&
+                !last.isSubAgentNotice && !message.isSubAgentNotice
+            ) {
+                set(lastIndex, last.copy(parts = last.parts + message.parts))
+            } else {
+                add(message)
+            }
+        }
+    }
+    return merged.withLeadingUserTurn()
+}
+
+/**
+ * 首条不是 user 时补一条说明。单段压缩不做同角色合并——那会改动请求前缀，
+ * 丢掉这一路本来能命中的提示词缓存。
+ */
+private fun List<UIMessage>.withLeadingUserTurn(): List<UIMessage> =
+    if (firstOrNull()?.role == MessageRole.USER) this
+    else listOf(UIMessage.user(COMPRESSION_CHUNK_OPENING)) + this
+
+private const val COMPRESSION_CHUNK_OPENING =
+    "(Continuing an earlier conversation; the messages below start mid-thread.)"
 
 /**
  * 取出压缩请求回复里的摘要正文。

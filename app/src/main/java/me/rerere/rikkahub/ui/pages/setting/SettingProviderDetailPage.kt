@@ -103,6 +103,7 @@ import me.rerere.hugeicons.stroke.Tools
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.account.preserveCredential
 import me.rerere.rikkahub.data.model.ContextThresholdPresets
+import me.rerere.rikkahub.data.model.withResolvedContextLength
 import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
 import me.rerere.rikkahub.ui.components.ai.ModelAbilityTag
 import me.rerere.rikkahub.ui.components.ai.ModelModalityTag
@@ -1433,9 +1434,11 @@ private fun ModelContextThresholdFields(
             if (!model.contextThresholdsAuto) {
                 TextButton(
                     onClick = {
-                        val preset = ContextThresholdPresets.resolve(model.modelId)
+                        val resolved = model.withResolvedContextLength()
+                        val preset = ContextThresholdPresets.forModel(resolved)
                         onModelChange(
                             model.copy(
+                                contextLength = resolved.contextLength,
                                 warnContextTokens = preset.warn,
                                 maxContextTokens = preset.max,
                                 contextThresholdsAuto = true,

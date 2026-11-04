@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.service
 
 import android.app.Application
+import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.StringRes
 import androidx.core.net.toUri
@@ -25,6 +26,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.LocalDateTime
 import me.rerere.ai.agent.AgentEvent
 import me.rerere.ai.agent.AgentFinishReason
 import me.rerere.ai.agent.RetryAttempt
@@ -115,6 +117,10 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatService"
+private const val LOOP_COMPRESSION_CHECK_INTERVAL_MS = 1_000L
+
+// 只收能指向「上下文/输入超限」的说法。像 "payload too large" 和单独的「令牌数」这种
+// 更像网关的请求体大小限制或无关的 token 报错，匹配上会白跑一次付费压缩再失败。
 private val CONTEXT_OVERFLOW_HINTS = listOf(
     "context_length_exceeded",
     "maximum context length",
@@ -131,7 +137,6 @@ private val CONTEXT_OVERFLOW_HINTS = listOf(
     "context length exceeded",
     "input tokens exceed",
     "request too large",
-    "payload too large",
     "exceeds the context window",
     "maximum number of tokens",
     "input length",
@@ -142,7 +147,6 @@ private val CONTEXT_OVERFLOW_HINTS = listOf(
     "输入过长",
     "请求过长",
     "提示词过长",
-    "令牌数",
 )
 
 data class ChatError(
@@ -1074,6 +1078,11 @@ class ChatService(
         contextRetryCount: Int = 0,
     ): TurnResult {
         val conversationId = session.id
+        // 循环压缩的检查很重（要扫整个上下文），流式时按时间节流；
+        // 但每步结束（finishedAt 变化）必须检查一次，否则可能漏掉下一次请求前的超限
+        var lastLoopCompressionCheckAt = 0L
+        var lastStepFinishedAt: LocalDateTime? = null
+        var lastExecutedToolCount = -1
         // 先清理上一轮状态；确定历史后，仅为真正的续写恢复消息 ID。
         session.replyMessageId.value = null
         // 生成开始前失败时通知只用来取消 Live Update，用不到发送者名称
@@ -1136,7 +1145,21 @@ class ChatService(
                             appEventBus.tryEmit(
                                 AppEvent.ChatGenerationUpdate(conversationId, event.message, senderName)
                             )
-                            requestLoopCompressionIfNeeded(session, turn, event.message)
+                            // 这条检查要扫整个上下文，流式时每个 chunk 都跑会把主线程拖死；
+                            // 平时一秒一次，每步结束再补一次，保证下一次请求之前一定检查过
+                            val finishedAt = event.message.finishedAt
+                            val stepFinished = finishedAt != null && finishedAt != lastStepFinishedAt
+                            if (stepFinished) lastStepFinishedAt = finishedAt
+                            val executedToolCount = event.message.getTools().count { it.isExecuted }
+                            val toolsProgressed = executedToolCount != lastExecutedToolCount
+                            lastExecutedToolCount = executedToolCount
+                            val now = SystemClock.elapsedRealtime()
+                            if (stepFinished || toolsProgressed ||
+                                now - lastLoopCompressionCheckAt >= LOOP_COMPRESSION_CHECK_INTERVAL_MS
+                            ) {
+                                lastLoopCompressionCheckAt = now
+                                requestLoopCompressionIfNeeded(session, turn, event.message)
+                            }
                         }
 
                         is AgentEvent.Retrying -> {
@@ -1321,7 +1344,7 @@ class ChatService(
         conversationId: Uuid,
         additionalPrompt: String,
         keepRecentMessages: Int = 0,
-    ): Result<Unit> = runCatching {
+    ): Result<Unit> = try {
         withLoadedSession<Unit>(conversationId) { session ->
             // 生成中的回复还没写完，压缩不到它，检查点也不能插到它前面
             check(!session.isGenerating) { context.getString(R.string.chat_page_compress_blocked_generating) }
@@ -1335,9 +1358,20 @@ class ChatService(
                     requireIdle = true,
                 )
                 // 手动压过之后，自动压缩不该再为同一份上下文总结一遍
-                session.compressedNodeCount = session.state.value.messageNodes.size
+                session.markCompressed()
             }
         }
+        Result.success(Unit)
+    } catch (e: CancellationException) {
+        // 用户取消压缩不是失败：吞掉会继续跑到下一处挂起，还会弹一条「压缩失败」
+        throw e
+    } catch (e: Exception) {
+        Result.failure(e)
+    } finally {
+        // 压缩期间 dispatchNextQueuedMessage 会被 compressMutex 挡回去，这里补一次，
+        // 否则压缩中排进队列的消息会一直卡着。取消也一样：用户取消的是这次压缩，
+        // 队列里的消息仍然要按队列自己的暂停状态决定发不发
+        dispatchNextQueuedMessage(conversationId)
     }
 
     /**
@@ -1411,7 +1445,8 @@ class ChatService(
             return CompressAttempt.SKIPPED
         }
         return try {
-            if (!force && session.state.value.messageNodes.size == session.compressedNodeCount) {
+            // 节点数和末尾节点都没变，才是同一份上下文；只比条数会被「删一条再加一条」骗过去
+            if (!force && session.isCompressedContext()) {
                 Log.d(TAG, "autoCompress: context unchanged since last compression, skip")
                 CompressAttempt.SKIPPED
             } else {
@@ -1487,9 +1522,12 @@ class ChatService(
         session.processingStatus.value = context.getString(R.string.chat_page_compressing)
         return try {
             compressSession(session, additionalPrompt = "", trim = trim, requireIdle = false)
-            session.compressedNodeCount = session.state.value.messageNodes.size
+            session.markCompressed()
             Log.i(TAG, "autoCompress: compressed conversation=${session.id}")
             CompressAttempt.COMPRESSED
+        } catch (e: CancellationException) {
+            // 用户停止生成时压缩也会被取消，这不是失败：报错了还会挡住后面的收尾
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "autoCompress: failed", e)
             addError(

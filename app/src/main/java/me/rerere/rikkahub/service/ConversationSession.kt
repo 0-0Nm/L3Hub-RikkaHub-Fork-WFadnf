@@ -243,9 +243,26 @@ class ConversationSession(
     /** 自动压缩串行化：并发或连续触发时只让第一次真正跑 */
     internal val compressMutex = Mutex()
 
-    /** 上一次成功压缩后的节点数；节点数没变说明上下文没长，不必再总结一遍 */
+    /** 上一次成功压缩后的节点数；和 [compressedTailNodeId] 一起用来判断上下文有没有变过 */
     @Volatile
     internal var compressedNodeCount: Int = -1
+
+    /** 上一次成功压缩时的末尾节点：只比节点数会被「删一条再加一条」骗过去 */
+    @Volatile
+    internal var compressedTailNodeId: Uuid? = null
+
+    /** 记下这次压缩落在哪份上下文上 */
+    internal fun markCompressed() {
+        val nodes = state.value.messageNodes
+        compressedNodeCount = nodes.size
+        compressedTailNodeId = nodes.lastOrNull()?.id
+    }
+
+    /** 当前上下文是否就是上次压缩后的那一份 */
+    internal fun isCompressedContext(): Boolean {
+        val nodes = state.value.messageNodes
+        return nodes.size == compressedNodeCount && nodes.lastOrNull()?.id == compressedTailNodeId
+    }
 
     internal fun acquire(): Int = refCount.incrementAndGet().also {
         cancelIdleCheck()

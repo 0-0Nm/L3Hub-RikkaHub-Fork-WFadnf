@@ -294,3 +294,149 @@ private fun Conversation.estimateRetainedTokens(start: Int): Int {
     }
     return total
 }
+
+/**
+ * 把压缩范围切成每段不超过 [budgetTokens] 的若干段。
+ *
+ * 摘要请求必须装进模型窗口：超限时把整段历史原样再发一次，只会被同样拒绝，
+ * 自动压缩永远救不回这一轮。消息之间按整条切；单条自己就超预算时退到 part 边界，
+ * 单个 part 还超就截断正文——对摘要来说，丢掉末尾的一小段也比整段失败好。
+ */
+internal fun chunkMessagesForCompression(
+    messages: List<UIMessage>,
+    budgetTokens: Int,
+): List<List<UIMessage>> {
+    if (messages.isEmpty()) return listOf(messages)
+    val budget = budgetTokens.coerceAtLeast(1)
+    val chunks = mutableListOf<List<UIMessage>>()
+    val current = mutableListOf<UIMessage>()
+    var used = 0
+
+    fun flush() {
+        if (current.isEmpty()) return
+        chunks += current.toList()
+        current.clear()
+        used = 0
+    }
+
+    messages.forEach { message ->
+        val messageTokens = estimateMessageTokens(message)
+        if (messageTokens <= budget) {
+            if (used + messageTokens > budget) flush()
+            current += message
+            used += messageTokens
+            return@forEach
+        }
+        flush()
+        splitOversizedMessage(message, budget).forEach { piece ->
+            val pieceTokens = estimateMessageTokens(piece)
+            if (used + pieceTokens > budget) flush()
+            current += piece
+            used += pieceTokens
+        }
+    }
+    flush()
+    return chunks.ifEmpty { listOf(messages) }
+}
+
+/** 单条消息超过预算时按 part 边界拆开；单个 part 仍然超预算就截断它 */
+private fun splitOversizedMessage(message: UIMessage, budgetTokens: Int): List<UIMessage> {
+    if (message.parts.isEmpty()) return listOf(message)
+    val pieces = mutableListOf<UIMessage>()
+    val current = mutableListOf<UIMessagePart>()
+    var used = MESSAGE_TOKEN_OVERHEAD
+
+    fun flush() {
+        if (current.isEmpty()) return
+        pieces += message.copy(parts = current.toList())
+        current.clear()
+        used = MESSAGE_TOKEN_OVERHEAD
+    }
+
+    message.parts.forEach { part ->
+        val partTokens = estimatePartTokens(part)
+        if (used + partTokens <= budgetTokens) {
+            current += part
+            used += partTokens
+            return@forEach
+        }
+        flush()
+        val trimmed = truncatePart(part, budgetTokens - MESSAGE_TOKEN_OVERHEAD)
+        current += trimmed
+        used += estimatePartTokens(trimmed)
+    }
+    flush()
+    return pieces.ifEmpty { listOf(message) }
+}
+
+/** 把单个 part 截到大约 [maxTokens]；放得下就原样返回 */
+private fun truncatePart(part: UIMessagePart, maxTokens: Int): UIMessagePart {
+    val budget = maxTokens.coerceAtLeast(1)
+    if (estimatePartTokens(part) <= budget) return part
+    return when (part) {
+        is UIMessagePart.Text -> part.copy(text = part.text.truncateToTokens(budget))
+        is UIMessagePart.Reasoning -> part.copy(reasoning = part.reasoning.truncateToTokens(budget))
+        is UIMessagePart.Tool -> {
+            // 调用参数通常很短，也是继续对话要用的信息，截断它等于把这次调用抹成空参调用；
+            // 只有参数自己就超预算时（write_file 这类）才截，其余情况预算全给输出
+            val head = estimateTokens(part.toolName) + estimateTokens(part.input)
+            val input = if (head > budget) part.input.truncateToTokens(budget / 2) else part.input
+            val outputBudget = (budget - estimateTokens(part.toolName) - estimateTokens(input))
+                .coerceAtLeast(1)
+            val textOutputs = part.output.count { it is UIMessagePart.Text }.coerceAtLeast(1)
+            val each = (outputBudget / textOutputs).coerceAtLeast(1)
+            part.copy(
+                input = input,
+                output = part.output.map { output ->
+                    if (output is UIMessagePart.Text) {
+                        output.copy(text = output.text.truncateToTokens(each))
+                    } else {
+                        output
+                    }
+                },
+            )
+        }
+
+        is UIMessagePart.ToolCall -> part.copy(arguments = part.arguments.truncateToTokens(budget))
+        // 搜索/抓取这类服务端工具只保留文本形态：换掉整个 part 才不会留下半截
+        // server_tool_use / tool_result 配对，provider 回放时也不会拒绝
+        is UIMessagePart.ServerTool -> UIMessagePart.Text(
+            buildString {
+                append("[${part.toolName}] ")
+                part.input?.toString()?.let {
+                    append(it.truncateToTokens(budget / 2))
+                    append('\n')
+                }
+                part.output?.toString()?.let { append(it.truncateToTokens(budget / 2)) }
+            }
+        )
+
+        is UIMessagePart.ToolResult -> UIMessagePart.Text(
+            "[${part.toolName}] " + part.content.toString().truncateToTokens(budget)
+        )
+
+        else -> part
+    }
+}
+
+/**
+ * 按 [estimateTokens] 的口径把正文截到大约 [maxTokens]。
+ * 只用于摘要请求：单条消息自己就超过整段预算时，截断比整段失败好。
+ */
+internal fun String.truncateToTokens(maxTokens: Int): String {
+    if (maxTokens <= 0) return ""
+    var cjk = 0
+    var other = 0
+    var end = 0
+    for ((index, ch) in withIndex()) {
+        if (ch.code >= 0x2E80) cjk++ else other++
+        if (cjk + (other + 3) / 4 > maxTokens) break
+        end = index + 1
+    }
+    if (end >= length) return this
+    // 不要把代理对切成两半
+    if (end > 0 && this[end].isLowSurrogate()) end--
+    return substring(0, end) + TRUNCATED_MARKER
+}
+
+private const val TRUNCATED_MARKER = "\n[truncated]"
