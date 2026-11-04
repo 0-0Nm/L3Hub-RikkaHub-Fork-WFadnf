@@ -553,7 +553,7 @@ debug 里 dex 有 38 个、release 压缩后只剩 2 个，差的就是 R8。上
 
 步骤：
 
-1. 改 `app/build.gradle.kts` 的 `versionCode` / `versionName`（每次各 +1，例如 281 / `L.3.1.2.103`），连同改动一起提交
+1. 改 `app/build.gradle.kts` 的 `versionCode` / `versionName`（每次各 +1，例如 282 / `L.3.1.3.104`），连同改动一起提交
 2. 打 tag 推上去：`git tag v3.1.1 && git push origin v3.1.1`（预览版就是 `v3.1.1-preview.102`）。
    手动触发时如果填了 tag，checkout 用的就是这个 tag 的提交，不会拿分支 HEAD 出的包挂到 tag 上；
    `gh release create` 带 `--verify-tag`，tag 不存在直接报错，不会现造一个
