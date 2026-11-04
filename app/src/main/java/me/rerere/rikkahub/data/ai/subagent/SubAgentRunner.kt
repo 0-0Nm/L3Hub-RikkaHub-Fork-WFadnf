@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.data.ai.subagent
 
 import android.util.Log
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.model.Assistant
@@ -8,6 +10,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.getAssistantOf
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
+import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
 
 const val SUB_AGENT_STATE_RUNNING = "running"
@@ -18,6 +21,11 @@ private const val TAG = "SubAgentRunner"
 
 // 主代理 → 子代理 → 孙代理，最多三代；depthOf 返回祖先数量，父会话在第 2 层起拒绝继续派发
 private const val MAX_DEPTH = 2
+
+// wait=true 时最多让父回合等多久；超时后按后台任务处理，结果照常投递
+const val DEFAULT_SUB_AGENT_WAIT_SECONDS = 600
+private const val MIN_WAIT_TIMEOUT_SECONDS = 30
+private const val MAX_WAIT_TIMEOUT_SECONDS = 1800
 
 /** 子代理的显示名：名字没填时用 id，回复里不会出现一对空引号 */
 internal fun subAgentLabel(assistant: Assistant): String =
@@ -47,11 +55,14 @@ class SubAgentRunner(
     private val settingsStore: SettingsStore,
     private val conversationRepository: ConversationRepository,
     private val chatServiceProvider: () -> ChatService,
+    private val subAgentWaits: SubAgentWaits,
 ) {
     suspend fun dispatch(
         parentConversationId: Uuid,
         target: String,
         task: String,
+        wait: Boolean = false,
+        timeoutSeconds: Int = DEFAULT_SUB_AGENT_WAIT_SECONDS,
     ): String {
         val settings = settingsStore.awaitLoaded()
         val parent = conversationRepository.getConversationById(parentConversationId)
@@ -89,6 +100,8 @@ class SubAgentRunner(
         conversationRepository.insertConversation(child)
 
         val chatService = chatServiceProvider()
+        // 等待者要在启动子会话之前登记：子代理可能很快就跑完，先发后登记会错过这一轮
+        val waiter = if (wait) subAgentWaits.register(child.id) else null
         try {
             // 新会话一般不会触到上下文上限；真被拒的话子会话会停在 running、父会话永远等不到结果，
             // 所以这里按失败处理，至少任务树上能看到状态
@@ -99,15 +112,40 @@ class SubAgentRunner(
             )
             if (!accepted) {
                 markFailed(chatService, child.id)
+                waiter?.let { subAgentWaits.unregister(child.id, it) }
                 return "Sub-agent \"${subAgentLabel(candidate)}\" could not start: the conversation refused the message."
             }
+        } catch (e: CancellationException) {
+            waiter?.let { subAgentWaits.unregister(child.id, it) }
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "start sub agent failed", e)
             markFailed(chatService, child.id)
+            waiter?.let { subAgentWaits.unregister(child.id, it) }
             return "Sub-agent \"${subAgentLabel(candidate)}\" failed to start: ${e.message ?: e::class.simpleName}"
         }
 
-        return "Sub-agent \"${subAgentLabel(candidate)}\" is now running in parallel. Its result will be delivered back to this conversation automatically; open conversation ${child.id} to watch progress."
+        if (waiter == null) {
+            return "Sub-agent \"${subAgentLabel(candidate)}\" is now running in parallel. Its result will be delivered back to this conversation automatically; open conversation ${child.id} to watch progress."
+        }
+
+        val timeout = timeoutSeconds.coerceIn(MIN_WAIT_TIMEOUT_SECONDS, MAX_WAIT_TIMEOUT_SECONDS).seconds
+        val result = try {
+            withTimeoutOrNull(timeout) { waiter.await() }
+        } catch (e: CancellationException) {
+            // 父回合被掐断：等待者摘掉，让下一轮的结果走通知投递
+            subAgentWaits.unregister(child.id, waiter)
+            throw e
+        }
+        // 超时和完成撞在同一刻时 withTimeoutOrNull 会返回 null，但值已经放进等待者里
+        val received = result ?: if (waiter.isCompleted && !waiter.isCancelled) waiter.await() else null
+        if (received == null) {
+            subAgentWaits.unregister(child.id, waiter)
+            return "Sub-agent \"${subAgentLabel(candidate)}\" is still running after ${timeout.inWholeSeconds} seconds. Its result will be delivered back to this conversation when it finishes; do not wait for it again."
+        }
+        // 工具调用已经拿到正文：把同一份从待投递队列里撤掉，别再当通知送一遍
+        chatService.acknowledgeSubAgentResult(parentConversationId, received)
+        return received
     }
 
     private suspend fun markFailed(chatService: ChatService, conversationId: Uuid) {

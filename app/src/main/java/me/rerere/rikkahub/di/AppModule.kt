@@ -5,6 +5,7 @@ import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.ChatRequestFactory
 import me.rerere.rikkahub.data.ai.heartbeat.HeartbeatScheduler
 import me.rerere.rikkahub.data.ai.subagent.SubAgentRunner
+import me.rerere.rikkahub.data.ai.subagent.SubAgentWaits
 import me.rerere.rikkahub.data.ai.tools.ChatToolFactory
 import me.rerere.rikkahub.data.ai.tools.local.LocalTools
 import me.rerere.rikkahub.data.event.AppEventBus
@@ -32,10 +33,15 @@ val appModule = module {
     }
 
     single {
+        SubAgentWaits()
+    }
+
+    single {
         SubAgentRunner(
             settingsStore = get(),
             conversationRepository = get(),
             chatServiceProvider = { get() },
+            subAgentWaits = get(),
         )
     }
 
@@ -152,6 +158,7 @@ val appModule = module {
             folderRepository = get(),
             draftStore = get(),
             subAgentResultStore = get(),
+            subAgentWaits = get(),
         )
     }
 

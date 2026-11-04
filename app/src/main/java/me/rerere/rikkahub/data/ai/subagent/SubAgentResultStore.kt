@@ -76,6 +76,28 @@ class SubAgentResultStore(
         }
     }
 
+    /**
+     * 撤掉一份已经被工具调用拿走的结果。
+     *
+     * wait=true 的结果会先落盘再叫醒等待者，工具拿到正文后回来撤这一份；撤不掉（比如等待已经
+     * 被掐断、这一份已经被投递）就什么都不做，宁可重复也不能把没送到的结果删掉。
+     */
+    suspend fun remove(conversationId: Uuid, result: String) = withContext(dispatcher) {
+        fileMutex.withLock {
+            val results = read(conversationId)
+            val index = results.indexOf(result)
+            if (index < 0) return@withLock
+            val rest = results.toMutableList().apply { removeAt(index) }
+            if (rest.isEmpty()) {
+                file(conversationId).delete()
+                tempFile(conversationId).delete()
+            } else {
+                write(conversationId, rest)
+            }
+            Unit
+        }
+    }
+
     /** 会话被删除：这批结果已经没有接收方了 */
     suspend fun clear(conversationId: Uuid) = withContext(dispatcher) {
         fileMutex.withLock {

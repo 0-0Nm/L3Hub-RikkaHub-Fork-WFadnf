@@ -50,6 +50,7 @@ import me.rerere.rikkahub.data.ai.subagent.SUB_AGENT_STATE_COMPLETED
 import me.rerere.rikkahub.data.ai.subagent.SUB_AGENT_STATE_FAILED
 import me.rerere.rikkahub.data.ai.subagent.SUB_AGENT_STATE_RUNNING
 import me.rerere.rikkahub.data.ai.subagent.SubAgentResultStore
+import me.rerere.rikkahub.data.ai.subagent.SubAgentWaits
 import me.rerere.rikkahub.data.ai.subagent.subAgentLabel
 import me.rerere.rikkahub.data.ai.subagent.formatSubAgentRoundResult
 import me.rerere.rikkahub.data.ai.subagent.formatSubAgentResults
@@ -182,6 +183,7 @@ class ChatService(
     private val folderRepository: FolderRepository,
     private val draftStore: DraftStore,
     private val subAgentResultStore: SubAgentResultStore,
+    private val subAgentWaits: SubAgentWaits,
 ) {
     /** 一轮生成的结果 */
     private sealed interface TurnResult {
@@ -514,7 +516,11 @@ class ChatService(
 
     fun resumeMessageQueue(conversationId: Uuid) {
         sessionManager.get(conversationId)?.messageQueue?.resume()
-        dispatchNextQueuedMessage(conversationId)
+        // 先把积压的子代理结果排到队尾再开跑：只 dispatch 的话它要等下一轮结束才轮得到
+        appScope.launch {
+            flushSubAgentResults(conversationId)
+            dispatchNextQueuedMessage(conversationId)
+        }
     }
 
     /** 当前会话是否已经到达模型的 MAX 上下文门限 */
@@ -593,6 +599,10 @@ class ChatService(
         // 停止和中途出错都只留下半截回复，不把半截内容当成「子代理完成」
         if (cause != null) {
             setSubAgentState(session, SUB_AGENT_STATE_FAILED)
+            failSubAgentWaiter(
+                session,
+                if (cause is CancellationException) "it was stopped" else "generation failed",
+            )
             return
         }
         val answer = conversation.currentMessages
@@ -602,6 +612,14 @@ class ChatService(
             .orEmpty()
         if (conversation.isAwaitingToolApproval || answer.isBlank()) {
             setSubAgentState(session, SUB_AGENT_STATE_FAILED)
+            failSubAgentWaiter(
+                session,
+                if (conversation.isAwaitingToolApproval) {
+                    "it is waiting for a tool approval nobody will answer"
+                } else {
+                    "it produced no text"
+                },
+            )
             return
         }
         setSubAgentState(session, SUB_AGENT_STATE_COMPLETED)
@@ -617,9 +635,19 @@ class ChatService(
             conversation.currentMessages.lastOrNull { it.role == MessageRole.USER }?.isSubAgentNotice == true
         if (!triggeredAutomatically) return
         val assistantName = subAgentLabel(settingsStore.awaitLoaded().getStoredAssistantOf(conversation))
-        deliverSubAgentResult(
-            parentConversationId = parentConversationId,
-            result = formatSubAgentRoundResult(assistantName, session.id, round, answer),
+        val result = formatSubAgentRoundResult(assistantName, session.id, round, answer)
+        // 先落盘再叫醒等待者：反过来的话工具可能先跑回来撤，撤了个空，下一轮又当通知送一遍。
+        // 父回合此刻还在生成，flush 会直接让路；工具拿到正文后会撤掉这一份，
+        // 等待被掐断时这一份就是兜底，下一轮仍会当通知送到
+        deliverSubAgentResult(parentConversationId = parentConversationId, result = result)
+        subAgentWaits.complete(session.id, result)
+    }
+
+    /** 子代理没跑出结果：叫醒工具调用里的等待者，让他别再干等 */
+    private fun failSubAgentWaiter(session: ConversationSession, reason: String) {
+        subAgentWaits.complete(
+            session.id,
+            "Sub-agent conversation ${session.id} ended without a result: $reason. Do not wait for it again.",
         )
     }
 
@@ -664,6 +692,11 @@ class ChatService(
         flushSubAgentResults(parentConversationId)
     }
 
+    /** wait=true 的工具调用已经拿到正文：把落盘的那一份撤掉，避免下一轮再当通知送一遍 */
+    suspend fun acknowledgeSubAgentResult(parentConversationId: Uuid, result: String) {
+        subAgentResultStore.remove(parentConversationId, result)
+    }
+
     /**
      * 进程重启后的补投。
      *
@@ -705,11 +738,15 @@ class ChatService(
                 canDeliverToUnopened(conversation)
             } else {
                 // 上下文已满又没开自动压缩时先留着，等用户压缩或删消息后再投递
-                !session.isGenerating &&
+                // 会话刚被删除时 existsInDatabase 已经翻成 false，这时投递会把删掉的会话又写回来
+                session.existsInDatabase &&
+                    !session.isGenerating &&
                     !session.state.value.isAwaitingToolApproval &&
-                    // 队列被暂停（用户停止、MAX 暂停）时消息只会堆着不执行，
-                    // 这时把它算成已投递，等于把一个还没人读的通知从盘上删掉
-                    !session.messageQueue.state.value.paused &&
+                    // 队列里还压着用户消息时的暂停说明它们都不会执行，通知混进去只会一起搁着；
+                    // 队列空时这个暂停只是「上一轮被停掉」的残留，sendMessage 会自己恢复，
+                    // 不放开的话子代理结果会一直躺在盘上，直到用户再发一条并跑完一整轮
+                    (!session.messageQueue.state.value.paused ||
+                        session.messageQueue.state.value.messages.isEmpty()) &&
                     !(session.maxContextReached() && !autoCompressEnabled(session))
             }
             if (!canDeliver) return
@@ -1760,6 +1797,11 @@ class ChatService(
         }
         jobs.forEach { job -> runCatching { job.join() } }
         discardQueuedMessages(session)
+        // 有人在工具调用里等这个子代理的话，先告诉他会话没了，别干等到超时
+        subAgentWaits.complete(
+            conversationId,
+            "Sub-agent conversation $conversationId was deleted before it produced a result. Do not wait for it again.",
+        )
         session.replace(newConversation(conversationId), existsInDatabase = false) { previous ->
             conversationRepo.getConversationById(conversationId)?.let { conversationRepo.deleteConversation(it) }
             // 数据库那份不知道只在内存里出现过的附件
