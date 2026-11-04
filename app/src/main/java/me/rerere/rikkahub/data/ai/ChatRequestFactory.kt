@@ -445,7 +445,9 @@ private fun Model.compressionWindow(): Int? = listOfNotNull(
  * 这里合并相邻同角色消息，再补开头的 user。
  */
 private fun List<UIMessage>.asCompressionChunk(): List<UIMessage> {
-    val merged = buildList {
+    // 显式给出元素类型：buildList 的 builder 是 @BuilderInference，先读 lastOrNull()
+    // 时元素类型还没定下来，K2 会报「receiver 类型尚未推断」
+    val merged = buildList<UIMessage> {
         for (message in this@asCompressionChunk) {
             val last = lastOrNull()
             // 子代理通知有自己的 framing，并进普通用户消息会让两边都读错，当成边界
