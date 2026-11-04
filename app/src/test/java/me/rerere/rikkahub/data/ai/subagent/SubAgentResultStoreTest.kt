@@ -99,4 +99,45 @@ class SubAgentResultStoreTest {
 
         assertEquals(setOf(kept), store.listAll().toSet())
     }
+
+    @Test
+    fun `appending to an old file keeps ids aligned`() = runTest {
+        val store = SubAgentResultStore(temp.root, Dispatchers.IO)
+        val parent = Uuid.random()
+        val child = Uuid.random()
+        File(temp.root, "$parent.json").writeText("""{"results":["老结果"]}""")
+
+        store.append(parent, child, "新结果")
+
+        assertEquals(listOf("老结果", "新结果"), store.peek(parent))
+        assertNull(store.findFor(parent, Uuid.random()))
+        assertEquals("新结果", store.findFor(parent, child))
+    }
+
+    @Test
+    fun `drop keeps the remaining ids aligned`() = runTest {
+        val store = SubAgentResultStore(temp.root, Dispatchers.IO)
+        val parent = Uuid.random()
+        val first = Uuid.random()
+        val second = Uuid.random()
+        store.append(parent, first, "第一份")
+        store.append(parent, second, "第二份")
+
+        store.drop(parent, 1)
+
+        assertNull(store.findFor(parent, first))
+        assertEquals("第二份", store.findFor(parent, second))
+    }
+
+    @Test
+    fun `dropping more than queued is harmless`() = runTest {
+        val store = SubAgentResultStore(temp.root, Dispatchers.IO)
+        val parent = Uuid.random()
+        store.append(parent, Uuid.random(), "唯一一份")
+
+        store.drop(parent, 5)
+
+        assertTrue(store.peek(parent).isEmpty())
+        assertFalse(File(temp.root, "$parent.json").exists())
+    }
 }

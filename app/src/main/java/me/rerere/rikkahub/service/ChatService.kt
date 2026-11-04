@@ -641,16 +641,18 @@ class ChatService(
         // 用户在子会话里手动追问的那一轮只更新状态，不打扰父会话
         val triggeredAutomatically = round <= 1 ||
             conversation.currentMessages.lastOrNull { it.role == MessageRole.USER }?.isSubAgentNotice == true
-        if (!triggeredAutomatically) return
         val assistantName = subAgentLabel(settingsStore.awaitLoaded().getStoredAssistantOf(conversation))
         val result = formatSubAgentRoundResult(assistantName, session.id, round, answer)
-        // 先落盘再叫醒等待者：工具输出还要经过 AgentLoop 才写进会话，先保证磁盘上有兜底。
-        // 工具把正文写进会话后，下一次投递会按正文认出来把它剔掉；等待被掐断时这一份照常补投
-        deliverSubAgentResult(
-            parentConversationId = parentConversationId,
-            childConversationId = session.id,
-            result = result,
-        )
+        if (triggeredAutomatically) {
+            // 先落盘再叫醒等待者：工具输出还要经过 AgentLoop 才写进会话，先保证磁盘上有兜底。
+            // 工具把正文写进会话后，下一次投递会按正文认出来把它剔掉；等待被掐断时这一份照常补投
+            deliverSubAgentResult(
+                parentConversationId = parentConversationId,
+                childConversationId = session.id,
+                result = result,
+            )
+        }
+        // 有人在等就照样叫醒：手动追问的那一轮不投通知，但等的人要的就是这条回复
         subAgentWaits.complete(session.id, result)
     }
 

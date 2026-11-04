@@ -103,6 +103,7 @@ class SubAgentRunner(
 
         val chatService = chatServiceProvider()
         // 等待者要在启动子会话之前登记：子代理可能很快就跑完，先发后登记会错过这一轮
+        // register 在已经有人等同一条子会话时返回 null；新会话 id 不会撞上，真撞上就按后台模式返回
         val waiter = if (wait) subAgentWaits.register(child.id) else null
         try {
             // 新会话一般不会触到上下文上限；真被拒的话子会话会停在 running、父会话永远等不到结果，
@@ -176,23 +177,27 @@ class SubAgentRunner(
         }
         val name = subAgentLabel(settingsStore.awaitLoaded().getAssistantOf(child))
         val waiter = subAgentWaits.register(childConversationId)
+            ?: return "Sub-agent \"$name\" is already being awaited by another call; that call will receive the next result."
         try {
-            chatService.findPendingSubAgentResult(parentConversationId, childConversationId)
-                ?.let { return it }
             // 登记和叫醒撞在同一刻：值已经在等待者里
             if (waiter.isCompleted) return waiter.await()
             val latest = chatService.getConversation(childConversationId)
                 ?: return "Sub-agent conversation $childConversationId no longer exists, so there is nothing to wait for."
             val state = latest.subAgentState
+            // 还在跑就先等这一轮：队列里可能压着上一轮没投递的结果，但那是旧轮次，不能当成
+            // 「下一轮」返回；它会在本轮结束后照常当通知送到
             if (state != SUB_AGENT_STATE_RUNNING) {
-                return if (state == SUB_AGENT_STATE_FAILED) {
-                    "Sub-agent \"$name\" (conversation $childConversationId) ended without a result. Do not wait for it again."
-                } else {
-                    val round = latest.currentMessages.count { message ->
-                        message.role == MessageRole.USER && !message.isContextCheckpoint
-                    }
-                    "Sub-agent \"$name\" (conversation $childConversationId) already finished round $round and has no undelivered result left; its output was delivered earlier. Do not wait for it again."
+                val pending = chatService.findPendingSubAgentResult(parentConversationId, childConversationId)
+                if (pending != null) {
+                    return "This result was produced before the wait started and has not been delivered yet; it is from an earlier round, not a new one.\n\n$pending"
                 }
+                if (state == SUB_AGENT_STATE_FAILED) {
+                    return "Sub-agent \"$name\" (conversation $childConversationId) ended without a result. Do not wait for it again."
+                }
+                val round = latest.currentMessages.count { message ->
+                    message.role == MessageRole.USER && !message.isContextCheckpoint
+                }
+                return "Sub-agent \"$name\" (conversation $childConversationId) already finished round $round and has no undelivered result left. Do not wait for it again."
             }
             val timeout = waitTimeout(timeoutSeconds)
             val received = withTimeoutOrNull(timeout) { waiter.await() }

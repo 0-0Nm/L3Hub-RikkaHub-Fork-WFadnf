@@ -14,13 +14,17 @@ import kotlin.uuid.Uuid
 class SubAgentWaits {
     private val waiters = mutableMapOf<Uuid, CompletableDeferred<String>>()
 
-    /** 登记一个等待者；同一条子会话上残留的旧等待者立刻收到说明，不再留在表里 */
-    fun register(childConversationId: Uuid): CompletableDeferred<String> {
-        val deferred = CompletableDeferred<String>()
-        val replaced = synchronized(waiters) { waiters.put(childConversationId, deferred) }
-        // 在锁外叫醒旧等待者：它会接着跑工具调用，不该拿着这把锁
-        replaced?.complete("Another wait on this sub-agent replaced this one.")
-        return deferred
+    /**
+     * 登记一个等待者；已经有人在等同一条子会话时返回 null。
+     *
+     * 不替换：替换出来的那句说明会被调用方当成子代理正文返回给模型，读起来像一份结果。
+     * 两个等待本来也不该重叠——工具调用是串行的，真撞上说明该让先来的那个把结果带走。
+     */
+    fun register(childConversationId: Uuid): CompletableDeferred<String>? = synchronized(waiters) {
+        if (waiters.containsKey(childConversationId)) {
+            return@synchronized null
+        }
+        CompletableDeferred<String>().also { waiters[childConversationId] = it }
     }
 
     /**
