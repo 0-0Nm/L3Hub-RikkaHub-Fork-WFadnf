@@ -229,20 +229,19 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
                     onClear = { vm.updateSettings { latest -> latest.copy(memoryModelId = null) } },
                 )
                 // 没设置时推理强度也跟着快速模型
-                if (memoryModel.currentModel != null) {
-                    item(
-                        headlineContent = { Text(stringResource(R.string.assistant_page_thinking_budget)) },
-                        trailingContent = {
-                            ReasoningButton(
-                                reasoningLevel = settings.memoryModelReasoningLevel,
-                                onUpdateReasoningLevel = {
-                                    vm.updateSettings { latest -> latest.copy(memoryModelReasoningLevel = it) }
-                                },
-                                useL3HubStyle = settings.displaySetting.useL3HubReasoningStyle,
-                            )
-                        },
-                    )
-                }
+                item(
+                    visible = memoryModel.currentModel != null,
+                    headlineContent = { Text(stringResource(R.string.assistant_page_thinking_budget)) },
+                    trailingContent = {
+                        ReasoningButton(
+                            reasoningLevel = settings.memoryModelReasoningLevel,
+                            onUpdateReasoningLevel = {
+                                vm.updateSettings { latest -> latest.copy(memoryModelReasoningLevel = it) }
+                            },
+                            useL3HubStyle = settings.displaySetting.useL3HubReasoningStyle,
+                        )
+                    },
+                )
             }
         }
         item {
@@ -302,7 +301,7 @@ private fun CardGroupScope.modelItem(
     iconContentColor: Color,
     @StringRes placeholder: Int = R.string.model_list_select_model,
     onClear: (() -> Unit)? = null,
-    // 传 id 不传字符串：item(...) 的参数是在非 composable 的作用域里求值的
+    // 传 id 不传字符串：调用方要在这里拼 res 名，省得每个调用点各写一份
     @StringRes warning: Int? = null,
 ) = formItem(
     headlineContent = { Text(stringResource(title)) },

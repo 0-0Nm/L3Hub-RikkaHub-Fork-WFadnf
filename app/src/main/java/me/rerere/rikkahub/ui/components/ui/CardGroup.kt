@@ -1,7 +1,14 @@
 package me.rerere.rikkahub.ui.components.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -42,10 +49,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEachIndexed
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.context.LocalSettings
+import me.rerere.rikkahub.ui.hooks.heroSource
 import me.rerere.rikkahub.ui.terminal.Switch
 import me.rerere.rikkahub.ui.terminal.TopAppBar
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -54,10 +64,16 @@ import me.rerere.rikkahub.ui.theme.adaptiveCornerRadius
 private val CardGroupCorner = 20.dp
 private val CardGroupItemSpacing = 2.dp
 private val CardGroupInnerCorner = 4.dp
+// 附加选项拉出来时用的弹簧：阻尼比压到 0.62，高度过冲后回弹一下才停
+private val CardGroupExpandSpring = spring<IntSize>(dampingRatio = 0.72f, stiffness = 480f)
 
 private data class CardGroupItem(
     val onClick: (() -> Unit)?,
     val modifier: Modifier,
+    // 不为空时这一项点击后展开成对应页面；形状由条目自己算，中间项是 4dp 不是 20dp
+    val heroScreen: Screen? = null,
+    // false 时这一项收起成 0 高度，用来做「主选项打开后附加选项拉出来」
+    val visible: Boolean = true,
     val overlineContent: (@Composable () -> Unit)?,
     val headlineContent: (@Composable () -> Unit)?,
     val supportingContent: (@Composable () -> Unit)?,
@@ -76,6 +92,8 @@ interface CardGroupScope {
     fun item(
         onClick: (() -> Unit)? = null,
         modifier: Modifier = Modifier,
+        heroScreen: Screen? = null,
+        visible: Boolean = true,
         overlineContent: (@Composable () -> Unit)? = null,
         supportingContent: (@Composable () -> Unit)? = null,
         leadingContent: (@Composable () -> Unit)? = null,
@@ -87,6 +105,7 @@ interface CardGroupScope {
     // 表单项：标题行下方带一块自定义内容（输入框、滑块等），不传标题时整项都是自定义内容
     fun formItem(
         modifier: Modifier = Modifier,
+        visible: Boolean = true,
         headlineContent: (@Composable () -> Unit)? = null,
         supportingContent: (@Composable () -> Unit)? = null,
         leadingContent: (@Composable () -> Unit)? = null,
@@ -101,6 +120,8 @@ private class CardGroupScopeImpl : CardGroupScope {
     override fun item(
         onClick: (() -> Unit)?,
         modifier: Modifier,
+        heroScreen: Screen?,
+        visible: Boolean,
         overlineContent: (@Composable () -> Unit)?,
         supportingContent: (@Composable () -> Unit)?,
         leadingContent: (@Composable () -> Unit)?,
@@ -112,6 +133,8 @@ private class CardGroupScopeImpl : CardGroupScope {
             CardGroupItem(
                 onClick = onClick,
                 modifier = modifier,
+                heroScreen = heroScreen,
+                visible = visible,
                 overlineContent = overlineContent,
                 headlineContent = headlineContent,
                 supportingContent = supportingContent,
@@ -124,6 +147,7 @@ private class CardGroupScopeImpl : CardGroupScope {
 
     override fun formItem(
         modifier: Modifier,
+        visible: Boolean,
         headlineContent: (@Composable () -> Unit)?,
         supportingContent: (@Composable () -> Unit)?,
         leadingContent: (@Composable () -> Unit)?,
@@ -134,6 +158,7 @@ private class CardGroupScopeImpl : CardGroupScope {
             CardGroupItem(
                 onClick = null,
                 modifier = modifier,
+                visible = visible,
                 overlineContent = null,
                 headlineContent = headlineContent,
                 supportingContent = supportingContent,
@@ -151,6 +176,7 @@ fun CardGroupScope.switchItem(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    visible: Boolean = true,
     enabled: Boolean = true,
     supportingContent: (@Composable () -> Unit)? = null,
     leadingContent: (@Composable () -> Unit)? = null,
@@ -160,6 +186,7 @@ fun CardGroupScope.switchItem(
         { onCheckedChange(!checked) }
     } else null,
     modifier = modifier,
+    visible = visible,
     supportingContent = supportingContent,
     leadingContent = leadingContent,
     trailingContent = {
@@ -239,7 +266,27 @@ private fun CardGroupFormItem(
     count: Int,
     index: Int,
 ) {
-    val shape = cardGroupItemShape(index, count)
+    // 和 CardGroupListItem 一样走 animateDp：附加选项收起时 count 立刻变了，
+    // 静态形状会让这张卡的下圆角硬跳一下
+    val corner = adaptiveCornerRadius(CardGroupCorner)
+    val inner = adaptiveCornerRadius(CardGroupInnerCorner)
+    val topCorner by animateDpAsState(
+        targetValue = if (index == 0) corner else inner,
+        animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
+        label = "formTopCorner",
+    )
+    val bottomCorner by animateDpAsState(
+        targetValue = if (index == count - 1) corner else inner,
+        animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
+        label = "formBottomCorner",
+    )
+    // 弹簧会过冲，负半径会让 RoundedCornerShape 直接抛异常
+    val shape = RoundedCornerShape(
+        topStart = topCorner.coerceAtLeast(0.dp),
+        topEnd = topCorner.coerceAtLeast(0.dp),
+        bottomStart = bottomCorner.coerceAtLeast(0.dp),
+        bottomEnd = bottomCorner.coerceAtLeast(0.dp),
+    )
     val glass = LocalSettings.current.displaySetting.enableBlurEffect
     Surface(
         modifier = item.modifier
@@ -320,6 +367,9 @@ private fun CardGroupListItem(
         headlineContent = item.headlineContent ?: {},
         modifier = item.modifier
             .fillMaxWidth()
+            .then(
+                if (item.heroScreen != null) Modifier.heroSource(item.heroScreen, shape) else Modifier
+            )
             .clip(shape)
             .glassSurface(shape = shape, baseColor = MaterialTheme.colorScheme.surfaceBright)
             .then(
@@ -346,7 +396,8 @@ private fun CardGroupListItem(
 fun CardGroup(
     modifier: Modifier = Modifier,
     title: (@Composable () -> Unit)? = null,
-    content: CardGroupScope.() -> Unit,
+    // 标成 @Composable：条目要能挂 heroSource（容器变换），那是个 composable 扩展
+    content: @Composable CardGroupScope.() -> Unit,
 ) {
     val scope = CardGroupScopeImpl()
     scope.content()
@@ -361,16 +412,36 @@ fun CardGroup(
                 }
             }
         }
-        val count = scope.items.size
-        scope.items.fastForEachIndexed { index, item ->
-            val formContent = item.formContent
-            if (formContent != null) {
-                CardGroupFormItem(item = item, formContent = formContent, count = count, index = index)
-            } else {
-                CardGroupListItem(item = item, count = count, index = index)
-            }
-            if (index != count - 1) {
-                Spacer(modifier = Modifier.height(CardGroupItemSpacing))
+        // 关闭动效时直接跳到位，别让显式 spring 绕开这个开关
+        val expandSpec = if (LocalSettings.current.displaySetting.disableAnimations) {
+            snap<IntSize>()
+        } else {
+            CardGroupExpandSpring
+        }
+        val fadeSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
+        val count = scope.items.count { it.visible }
+        // 收起的条目不占位置，后面的往前挪一格；圆角靠条目自己的 animateDp 平滑跟过去
+        var visibleIndex = 0
+        scope.items.fastForEachIndexed { _, item ->
+            val index = if (item.visible) visibleIndex++ else (count - 1).coerceAtLeast(0)
+            AnimatedVisibility(
+                visible = item.visible,
+                // 从上一项下面拉出来，到位后回弹一下
+                enter = expandVertically(expandSpec) + fadeIn(fadeSpec),
+                exit = shrinkVertically(expandSpec) + fadeOut(fadeSpec),
+            ) {
+                Column {
+                    val formContent = item.formContent
+                    if (formContent != null) {
+                        CardGroupFormItem(item = item, formContent = formContent, count = count, index = index)
+                    } else {
+                        CardGroupListItem(item = item, count = count, index = index)
+                    }
+                    // 间距跟着条目一起收起，不然会留一道 2dp 的缝
+                    if (item.visible && index != count - 1) {
+                        Spacer(modifier = Modifier.height(CardGroupItemSpacing))
+                    }
+                }
             }
         }
     }

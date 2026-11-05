@@ -429,6 +429,36 @@ CompositionLocal，页面只读它，不各自去判断 `Settings`。
 默认关闭，打开后仍然保留的内边距（有意为之）：气泡内部文字 10dp、输入框内部的 `inputPadding`、
 `CardGroup` 每项内部的 16dp、对话框按钮区。这些是内容离组件边缘的距离，不是组件边缘离屏幕的距离。
 
+## 页面容器变换（fork 新增）
+
+页面切换不再整页横移，改成「容器变换」：点的那一行（设置里的分组卡片、助手卡片、列表项）自己展开成整页，
+返回时收回那一行里。位移交给 `SharedTransitionLayout` 里的 hero 容器演，`NavDisplay` 的
+`transitionSpec` / `popTransitionSpec` / `predictivePopTransitionSpec` 只留淡入淡出，两层动画不再打架。
+
+- 目标页：`RouteActivity.kt` 里绝大多数 `entry<T>` 换成 `heroEntry<T>`，把页面包进
+  `HeroPage(key.heroKey())`；页面到位后圆角从 20dp 收到直角，退场时再长回去
+- 源条目：`Modifier.heroSource(screen, shape)`，圆角默认取 `HeroSourceCorner`（20dp）；
+  全宽组件模式下两边一起归零（都走 `adaptiveCornerRadius`），否则展开的第一帧会对不上
+- 两边的 key 都由 `Screen.heroKey()` 算：`Screen` 是 sealed 接口，新增条目时 `when` 少一条编译不过，
+  正好挡住「两个页面共用一个 key、容器变换串台」
+- `Screen.Setting` 没套容器变换：切配色时会 `popUpTo` 原地重进，新旧两页会同时在组合里
+- 助手列表头像原来的 `heroAnimation` 去掉了，整卡已经是容器变换，两层叠加互相打架
+- `Screen.MediaCreation` 复用 `mediaCreationHeroKey()`，和会话列表那侧同一个 key
+
+`CardGroup` 跟着加了两样：
+
+- `item(heroScreen = ...)`：这一行点击后展开成对应页面，形状由条目自己算（中间项是 4dp 不是 20dp）
+- `item(visible = ...)` / `formItem(visible = ...)` / `switchItem(visible = ...)`：条件项不再写成
+  `if (cond) { switchItem(...) }`，而是挂在条目上，收起/展开走 `expandVertically` + `shrinkVertically`
+  （弹簧过冲后回弹），后面的条目连同圆角一起挪过去；关掉动效时用 `snap` 直接到位
+
+| 文件 | 说明 |
+|---|---|
+| `ui/hooks/HeroAnimation.kt` | 新增 `HeroPage`、`heroSource`、`Screen.heroKey()`、`HeroSourceCorner` |
+| `RouteActivity.kt` | `heroEntry` 扩展；`transitionSpec` 只留淡入淡出 |
+| `ui/components/ui/CardGroup.kt` | `heroScreen` / `visible` 参数、展开收起动画、`content` 改成 `@Composable` |
+| 各 `*Page.kt` | 入口条目补 `heroScreen`、列表项补 `heroSource`；原来的条件项改用 `visible` |
+
 ## 模型选择弹窗（fork 改版）
 
 所有选模型的入口（聊天输入框、默认模型设置、助手、心跳、记忆整理、图像生成、翻译、连通性测试）共用

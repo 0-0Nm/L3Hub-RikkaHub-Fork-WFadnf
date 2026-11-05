@@ -72,7 +72,7 @@ import me.rerere.rikkahub.ui.components.ui.shadow.Button
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.EditState
 import me.rerere.rikkahub.ui.hooks.EditStateContent
-import me.rerere.rikkahub.ui.hooks.heroAnimation
+import me.rerere.rikkahub.ui.hooks.heroSource
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantImporter
 import me.rerere.rikkahub.ui.terminal.Card
@@ -216,6 +216,9 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                         AssistantItem(
                             assistant = assistant,
                             settings = settings,
+                            modifier = Modifier.heroSource(
+                                Screen.AssistantDetail(id = assistant.id.toString())
+                            ),
                             memories = memories,
                             onEdit = {
                                 navController.navigate(Screen.AssistantDetail(id = assistant.id.toString()))
@@ -440,9 +443,8 @@ private fun AssistantItem(
             UIAvatar(
                 name = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
                 value = assistant.avatar,
-                modifier = Modifier
-                    .size(48.dp)
-                    .heroAnimation("assistant_${assistant.id}")
+                // 头像的 sharedElement 交给整卡的容器变换，两层一起上会互相打架
+                modifier = Modifier.size(48.dp)
             )
 
             Column(

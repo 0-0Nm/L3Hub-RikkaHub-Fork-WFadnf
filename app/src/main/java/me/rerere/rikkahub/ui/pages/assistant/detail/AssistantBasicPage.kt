@@ -201,14 +201,15 @@ internal fun AssistantBasicContent(
                 headlineContent = { Text(stringResource(R.string.assistant_page_sub_agent)) },
             )
             // 计划模式和执行权限都只对工作区工具有意义，没绑工作区就不显示，免得纯聊天助手看到一堆无用开关
-            if (assistant.allWorkspaceIds.isNotEmpty()) {
-                switchItem(
-                    checked = assistant.planMode,
-                    onCheckedChange = { onUpdate(assistant.copy(planMode = it)) },
-                    supportingContent = { Text(stringResource(R.string.assistant_page_plan_mode_desc)) },
-                    headlineContent = { Text(stringResource(R.string.assistant_page_plan_mode)) },
-                )
-                formItem(
+            switchItem(
+                visible = assistant.allWorkspaceIds.isNotEmpty(),
+                checked = assistant.planMode,
+                onCheckedChange = { onUpdate(assistant.copy(planMode = it)) },
+                supportingContent = { Text(stringResource(R.string.assistant_page_plan_mode_desc)) },
+                headlineContent = { Text(stringResource(R.string.assistant_page_plan_mode)) },
+            )
+            formItem(
+                visible = assistant.allWorkspaceIds.isNotEmpty(),
                 headlineContent = { Text(stringResource(R.string.assistant_page_execution_permission)) },
                 supportingContent = { Text(stringResource(R.string.assistant_page_execution_permission_desc)) },
             ) {
@@ -224,7 +225,6 @@ internal fun AssistantBasicContent(
                                 text = stringResource(permission.labelRes()),
                                 maxLines = 1,
                             )
-                        }
                         }
                     }
                 }
@@ -565,76 +565,75 @@ internal fun AssistantBasicContent(
                 headlineContent = { Text(stringResource(R.string.assistant_page_gradient_background)) },
             )
 
-            if (!assistant.useGradientBackground) {
-                formItem(
-                    headlineContent = { Text(stringResource(R.string.assistant_page_chat_background)) },
-                    supportingContent = { Text(stringResource(R.string.assistant_page_chat_background_desc)) },
-                ) {
-                    BackgroundPicker(
-                        background = assistant.background,
-                        backgroundOpacity = assistant.backgroundOpacity,
-                        onUpdate = { background ->
-                            onUpdate(
-                                assistant.copy(
-                                    background = background
-                                )
+            formItem(
+                visible = !assistant.useGradientBackground,
+                headlineContent = { Text(stringResource(R.string.assistant_page_chat_background)) },
+                supportingContent = { Text(stringResource(R.string.assistant_page_chat_background_desc)) },
+            ) {
+                BackgroundPicker(
+                    background = assistant.background,
+                    backgroundOpacity = assistant.backgroundOpacity,
+                    onUpdate = { background ->
+                        onUpdate(
+                            assistant.copy(
+                                background = background
                             )
-                        }
-                    )
-                }
+                        )
+                    }
+                )
             }
 
-            if (!assistant.useGradientBackground && assistant.background != null) {
-                val backgroundOpacity = assistant.backgroundOpacity.coerceIn(0f, 1f)
-                formItem(
-                    headlineContent = { Text(stringResource(R.string.assistant_page_background_opacity)) },
-                    supportingContent = { Text(stringResource(R.string.assistant_page_background_opacity_desc)) },
-                    trailingContent = {
-                        Text(
-                            text = stringResource(
-                                R.string.assistant_page_background_opacity_value,
-                                (backgroundOpacity * 100).roundToInt()
-                            ),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    },
-                ) {
-                    Slider(
-                        value = backgroundOpacity,
-                        onValueChange = {
-                            onUpdate(
-                                assistant.copy(
-                                    backgroundOpacity = it.toFixed(2).toFloatOrNull()?.coerceIn(0f, 1f) ?: 1.0f
-                                )
+            val backgroundOpacity = assistant.backgroundOpacity.coerceIn(0f, 1f)
+            formItem(
+                visible = !assistant.useGradientBackground && assistant.background != null,
+                headlineContent = { Text(stringResource(R.string.assistant_page_background_opacity)) },
+                supportingContent = { Text(stringResource(R.string.assistant_page_background_opacity_desc)) },
+                trailingContent = {
+                    Text(
+                        text = stringResource(
+                            R.string.assistant_page_background_opacity_value,
+                            (backgroundOpacity * 100).roundToInt()
+                        ),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                },
+            ) {
+                Slider(
+                    value = backgroundOpacity,
+                    onValueChange = {
+                        onUpdate(
+                            assistant.copy(
+                                backgroundOpacity = it.toFixed(2).toFloatOrNull()?.coerceIn(0f, 1f) ?: 1.0f
                             )
-                        },
-                        valueRange = 0f..1f,
-                        steps = 19,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                formItem(
-                    headlineContent = { Text(stringResource(R.string.assistant_page_background_blur)) },
-                    supportingContent = { Text(stringResource(R.string.assistant_page_background_blur_desc)) },
-                    trailingContent = {
-                        Text(
-                            text = "${(assistant.backgroundBlur.coerceIn(0f, 1f) * 100).roundToInt()}%",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
                         )
                     },
-                ) {
-                    Slider(
-                        value = assistant.backgroundBlur.coerceIn(0f, 1f),
-                        onValueChange = {
-                            onUpdate(assistant.copy(backgroundBlur = it))
-                        },
-                        valueRange = 0f..1f,
-                        steps = 19,
-                        modifier = Modifier.fillMaxWidth()
+                    valueRange = 0f..1f,
+                    steps = 19,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            formItem(
+                visible = !assistant.useGradientBackground && assistant.background != null,
+                headlineContent = { Text(stringResource(R.string.assistant_page_background_blur)) },
+                supportingContent = { Text(stringResource(R.string.assistant_page_background_blur_desc)) },
+                trailingContent = {
+                    Text(
+                        text = "${(assistant.backgroundBlur.coerceIn(0f, 1f) * 100).roundToInt()}%",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
                     )
-                }
+                },
+            ) {
+                Slider(
+                    value = assistant.backgroundBlur.coerceIn(0f, 1f),
+                    onValueChange = {
+                        onUpdate(assistant.copy(backgroundBlur = it))
+                    },
+                    valueRange = 0f..1f,
+                    steps = 19,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }

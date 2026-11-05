@@ -69,6 +69,8 @@ fun MediaGenerationProviderBasicConfigure(
     onValueChange: (MediaGenerationProviderSetting) -> Unit
 ) {
     ConfigureColumn(modifier) {
+        // 先窄化，lambda 体里要用 Aliyun 的 workspaceId；只在 visible 里做 is 判断带不出 smart cast
+        val aliyun = setting as? MediaGenerationProviderSetting.Aliyun
         CardGroup {
             // 类型在新建时选定，之后不能改
             item(
@@ -105,21 +107,22 @@ fun MediaGenerationProviderBasicConfigure(
                 )
             }
 
-            if (setting is MediaGenerationProviderSetting.Aliyun) {
-                formItem(
-                    headlineContent = { Text(stringResource(R.string.setting_media_page_workspace_id)) },
-                    supportingContent = {
-                        Text(
-                            stringResource(
-                                R.string.setting_media_page_workspace_id_desc,
-                                MediaGenerationProviderSetting.Aliyun.WORKSPACE_PLACEHOLDER,
-                            )
+            formItem(
+                visible = aliyun != null,
+                headlineContent = { Text(stringResource(R.string.setting_media_page_workspace_id)) },
+                supportingContent = {
+                    Text(
+                        stringResource(
+                            R.string.setting_media_page_workspace_id_desc,
+                            MediaGenerationProviderSetting.Aliyun.WORKSPACE_PLACEHOLDER,
                         )
-                    }
-                ) {
+                    )
+                }
+            ) {
+                if (aliyun != null) {
                     OutlinedTextField(
-                        value = setting.workspaceId,
-                        onValueChange = { onValueChange(setting.copy(workspaceId = it.trim())) },
+                        value = aliyun.workspaceId,
+                        onValueChange = { onValueChange(aliyun.copy(workspaceId = it.trim())) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )

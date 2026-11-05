@@ -62,12 +62,14 @@ fun SettingPreferencesThemePage(embedded: Boolean = false, vm: SettingVM = koinV
                 )
                 item(
                     onClick = { navController.navigate(Screen.SettingTheme) },
+                    heroScreen = Screen.SettingTheme,
                     headlineContent = { Text(stringResource(R.string.setting_page_theme_setting)) },
                     supportingContent = { Text(stringResource(R.string.setting_page_theme_setting_desc)) },
                     trailingContent = { Icon(HugeIcons.ArrowRight01, contentDescription = null) },
                 )
                 item(
                     onClick = { navController.navigate(Screen.SettingPalette) },
+                    heroScreen = Screen.SettingPalette,
                     headlineContent = { Text(stringResource(R.string.setting_page_palette)) },
                     supportingContent = { Text(stringResource(R.string.setting_page_palette_desc)) },
                     trailingContent = { Icon(HugeIcons.ArrowRight01, contentDescription = null) },

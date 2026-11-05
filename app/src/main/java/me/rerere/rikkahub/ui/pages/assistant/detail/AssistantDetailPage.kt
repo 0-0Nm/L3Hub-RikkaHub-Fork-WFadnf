@@ -129,12 +129,14 @@ fun AssistantDetailPage(id: String) {
                 CardGroup {
                     item(
                         onClick = { navController.navigate(Screen.AssistantBasic(id)) },
+                        heroScreen = Screen.AssistantBasic(id),
                         leadingContent = { CardGroupIcon(HugeIcons.Settings03, containerColor = containerColor, contentColor = contentColor) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_basic_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_basic)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.AssistantPrompt(id)) },
+                        heroScreen = Screen.AssistantPrompt(id),
                         leadingContent = { CardGroupIcon(HugeIcons.Message02, containerColor = containerColor, contentColor = contentColor) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_prompt_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_prompt)) },
@@ -148,30 +150,35 @@ fun AssistantDetailPage(id: String) {
                 CardGroup {
                     item(
                         onClick = { navController.navigate(Screen.AssistantInjections(id)) },
+                        heroScreen = Screen.AssistantInjections(id),
                         leadingContent = { CardGroupIcon(HugeIcons.Puzzle, containerColor = containerColor, contentColor = contentColor) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_extensions_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_extensions)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.AssistantMemory(id)) },
+                        heroScreen = Screen.AssistantMemory(id),
                         leadingContent = { CardGroupIcon(HugeIcons.Brain02, containerColor = containerColor, contentColor = contentColor) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_memory_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_memory)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.AssistantMcp(id)) },
+                        heroScreen = Screen.AssistantMcp(id),
                         leadingContent = { CardGroupIcon(HugeIcons.McpServer, containerColor = containerColor, contentColor = contentColor) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_mcp_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_mcp)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.AssistantLocalTool(id)) },
+                        heroScreen = Screen.AssistantLocalTool(id),
                         leadingContent = { CardGroupIcon(HugeIcons.Wrench01, containerColor = containerColor, contentColor = contentColor) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_local_tools_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_local_tools)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.AssistantHeartbeat(id)) },
+                        heroScreen = Screen.AssistantHeartbeat(id),
                         leadingContent = { CardGroupIcon(HugeIcons.Clock01, containerColor = containerColor, contentColor = contentColor) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_heartbeat_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_heartbeat)) },
@@ -183,6 +190,7 @@ fun AssistantDetailPage(id: String) {
                 CardGroup {
                     item(
                         onClick = { navController.navigate(Screen.AssistantRequest(id)) },
+                        heroScreen = Screen.AssistantRequest(id),
                         leadingContent = { CardGroupIcon(HugeIcons.Code) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_request_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_request)) },

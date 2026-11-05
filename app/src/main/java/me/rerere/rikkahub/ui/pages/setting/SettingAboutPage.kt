@@ -223,6 +223,7 @@ fun SettingAboutPage() {
                         )
                         item(
                             onClick = { navController.navigate(Screen.SettingDonate) },
+                            heroScreen = Screen.SettingDonate,
                             leadingContent = { CardGroupIcon(HugeIcons.InLove, containerColor = containerColor, contentColor = contentColor) },
                             supportingContent = { Text(stringResource(R.string.about_page_sponsor_desc)) },
                             headlineContent = { Text(stringResource(R.string.about_page_sponsor)) },

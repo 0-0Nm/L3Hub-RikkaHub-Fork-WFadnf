@@ -76,6 +76,7 @@ import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.shadow.Button
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.hooks.heroSource
 import me.rerere.rikkahub.ui.terminal.Card
 import me.rerere.rikkahub.ui.terminal.IconButton
 import me.rerere.rikkahub.ui.terminal.TextButton
@@ -170,7 +171,9 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
                                 )
                             }
                         },
-                        modifier = Modifier.animateItem()
+                        modifier = Modifier
+                            .animateItem()
+                            .heroSource(Screen.SettingMcpDetail(serverId = mcpConfig.id.toString())),
                     )
                 }
             }

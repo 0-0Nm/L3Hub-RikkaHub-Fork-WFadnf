@@ -323,55 +323,56 @@ fun SettingPreferencesNetworkPage(embedded: Boolean = false, vm: SettingVM = koi
                         Text(stringResource(R.string.setting_page_preferences_network_auto_retry))
                     },
                 )
-                if (settings.networkSetting.enableAutoRetry) {
-                    formItem(
-                        headlineContent = {
-                            Text(stringResource(R.string.setting_page_preferences_network_retry_count))
+                formItem(
+                    visible = settings.networkSetting.enableAutoRetry,
+                    headlineContent = {
+                        Text(stringResource(R.string.setting_page_preferences_network_retry_count))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.setting_page_preferences_network_retry_count_desc))
+                    },
+                ) {
+                    NumberSlider(
+                        value = settings.networkSetting.retryMaxCount,
+                        onValueChange = { count ->
+                            updateNetworkSetting { it.copy(retryMaxCount = count) }
                         },
-                        supportingContent = {
-                            Text(stringResource(R.string.setting_page_preferences_network_retry_count_desc))
+                        valueRange = 0..64,
+                    )
+                }
+                formItem(
+                    visible = settings.networkSetting.enableAutoRetry,
+                    headlineContent = {
+                        Text(stringResource(R.string.setting_page_preferences_network_retry_interval))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.setting_page_preferences_network_retry_interval_desc))
+                    },
+                ) {
+                    NumberSlider(
+                        value = settings.networkSetting.retryIntervalSeconds,
+                        onValueChange = { seconds ->
+                            updateNetworkSetting { it.copy(retryIntervalSeconds = seconds) }
                         },
-                    ) {
-                        NumberSlider(
-                            value = settings.networkSetting.retryMaxCount,
-                            onValueChange = { count ->
-                                updateNetworkSetting { it.copy(retryMaxCount = count) }
-                            },
-                            valueRange = 0..64,
-                        )
-                    }
-                    formItem(
-                        headlineContent = {
-                            Text(stringResource(R.string.setting_page_preferences_network_retry_interval))
+                        valueRange = 1..60,
+                        suffix = "s",
+                    )
+                }
+                formItem(
+                    visible = settings.networkSetting.enableAutoRetry,
+                    headlineContent = {
+                        Text(stringResource(R.string.setting_page_preferences_network_retry_codes))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.setting_page_preferences_network_retry_codes_desc))
+                    },
+                ) {
+                    RetryErrorCodePicker(
+                        selected = settings.networkSetting.retryErrorCodes,
+                        onValueChange = { codes ->
+                            updateNetworkSetting { it.copy(retryErrorCodes = codes) }
                         },
-                        supportingContent = {
-                            Text(stringResource(R.string.setting_page_preferences_network_retry_interval_desc))
-                        },
-                    ) {
-                        NumberSlider(
-                            value = settings.networkSetting.retryIntervalSeconds,
-                            onValueChange = { seconds ->
-                                updateNetworkSetting { it.copy(retryIntervalSeconds = seconds) }
-                            },
-                            valueRange = 1..60,
-                            suffix = "s",
-                        )
-                    }
-                    formItem(
-                        headlineContent = {
-                            Text(stringResource(R.string.setting_page_preferences_network_retry_codes))
-                        },
-                        supportingContent = {
-                            Text(stringResource(R.string.setting_page_preferences_network_retry_codes_desc))
-                        },
-                    ) {
-                        RetryErrorCodePicker(
-                            selected = settings.networkSetting.retryErrorCodes,
-                            onValueChange = { codes ->
-                                updateNetworkSetting { it.copy(retryErrorCodes = codes) }
-                            },
-                        )
-                    }
+                    )
                 }
             }
 

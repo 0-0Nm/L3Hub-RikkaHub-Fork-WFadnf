@@ -52,41 +52,41 @@ fun ReminderTab(vm: BackupVM) {
                 headlineContent = { Text(stringResource(R.string.backup_page_reminder_enable)) },
             )
 
-            if (config.enabled) {
-                formItem(
-                    headlineContent = { Text(stringResource(R.string.backup_page_reminder_interval)) },
-                    trailingContent = {
-                        CardGroupValue(
-                            stringResource(R.string.backup_page_reminder_interval_days, config.intervalDays)
-                        )
-                    },
-                ) {
-                    // 五个按钮并排，按钮里只放数字，带单位的完整取值显示在标题行右侧
-                    ConnectedChoiceButtons(
-                        options = ReminderIntervals,
-                        selected = config.intervalDays,
-                        onSelect = { updateConfig(config.copy(intervalDays = it)) },
-                    ) { days, selected ->
-                        ConnectedChoiceLabel(text = days.toString(), selected = selected)
-                    }
+            formItem(
+                visible = config.enabled,
+                headlineContent = { Text(stringResource(R.string.backup_page_reminder_interval)) },
+                trailingContent = {
+                    CardGroupValue(
+                        stringResource(R.string.backup_page_reminder_interval_days, config.intervalDays)
+                    )
+                },
+            ) {
+                // 五个按钮并排，按钮里只放数字，带单位的完整取值显示在标题行右侧
+                ConnectedChoiceButtons(
+                    options = ReminderIntervals,
+                    selected = config.intervalDays,
+                    onSelect = { updateConfig(config.copy(intervalDays = it)) },
+                ) { days, selected ->
+                    ConnectedChoiceLabel(text = days.toString(), selected = selected)
                 }
-
-                item(
-                    headlineContent = {
-                        Text(
-                            if (config.lastBackupTime == 0L) {
-                                stringResource(R.string.backup_page_reminder_no_record)
-                            } else {
-                                stringResource(
-                                    R.string.backup_page_reminder_last_time,
-                                    Instant.ofEpochMilli(config.lastBackupTime).toLocalDateTime()
-                                )
-                            }
-                        )
-                    },
-                    leadingContent = { CardGroupIcon(HugeIcons.Clock01) },
-                )
             }
+
+            item(
+                visible = config.enabled,
+                headlineContent = {
+                    Text(
+                        if (config.lastBackupTime == 0L) {
+                            stringResource(R.string.backup_page_reminder_no_record)
+                        } else {
+                            stringResource(
+                                R.string.backup_page_reminder_last_time,
+                                Instant.ofEpochMilli(config.lastBackupTime).toLocalDateTime()
+                            )
+                        }
+                    )
+                },
+                leadingContent = { CardGroupIcon(HugeIcons.Clock01) },
+            )
         }
     }
 }

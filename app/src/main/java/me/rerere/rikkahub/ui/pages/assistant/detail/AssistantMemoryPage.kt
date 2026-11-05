@@ -253,6 +253,7 @@ fun AssistantMemoryPage(id: String) {
             ) { page ->
                 when (MemoryTab.entries[page]) {
                     MemoryTab.FILES -> MemoryFilesTab(
+                        memoryId = vm.memoryId,
                         memories = memories,
                         consolidation = consolidation.takeIf { assistant.enableMemory },
                         onOrganizeMemory = { vm.organizeMemory() },
@@ -524,51 +525,52 @@ private fun MemorySettingsTab(
                 supportingContent = { Text(stringResource(R.string.assistant_page_memory_auto_compress_desc)) },
                 headlineContent = { Text(stringResource(R.string.assistant_page_memory_auto_compress)) },
             )
-            if (assistant.autoCompress) {
-                switchItem(
-                    checked = assistant.autoCompressLoop,
-                    onCheckedChange = {
-                        onUpdateAssistant(assistant.copy(autoCompressLoop = it))
-                    },
-                    supportingContent = {
-                        Text(stringResource(R.string.assistant_page_memory_auto_compress_loop_desc))
-                    },
-                    headlineContent = { Text(stringResource(R.string.assistant_page_memory_auto_compress_loop)) },
-                )
-                item(
-                    headlineContent = { Text(stringResource(R.string.assistant_page_memory_auto_compress_threshold)) },
-                    supportingContent = { Text(stringResource(R.string.assistant_page_memory_auto_compress_threshold_desc)) },
-                    trailingContent = {
-                        Text(
-                            text = assistant.autoCompressThreshold.name,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    },
-                    onClick = { showAutoCompressThresholdDialog = true },
-                )
-                item(
-                    headlineContent = { Text(stringResource(R.string.assistant_page_memory_auto_compress_target)) },
-                    supportingContent = { Text(stringResource(R.string.assistant_page_memory_auto_compress_target_desc)) },
-                    trailingContent = {
-                        Text(
-                            text = stringResource(
-                                R.string.assistant_page_memory_auto_compress_messages,
-                                assistant.autoCompressKeepMessages,
-                            ),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    },
-                    onClick = {
-                        // 上限是后加的：存量配置可能已经越界，打开时先夹进区间，
-                        // 否则输入框一进来就是错误态、保存键禁用，用户不改数字就退不出去
-                        autoCompressTargetInput =
-                            assistant.autoCompressKeepMessages.coerceIn(1, 500).toString()
-                        showAutoCompressTargetDialog = true
-                    },
-                )
-            }
+            switchItem(
+                visible = assistant.autoCompress,
+                checked = assistant.autoCompressLoop,
+                onCheckedChange = {
+                    onUpdateAssistant(assistant.copy(autoCompressLoop = it))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_memory_auto_compress_loop_desc))
+                },
+                headlineContent = { Text(stringResource(R.string.assistant_page_memory_auto_compress_loop)) },
+            )
+            item(
+                visible = assistant.autoCompress,
+                headlineContent = { Text(stringResource(R.string.assistant_page_memory_auto_compress_threshold)) },
+                supportingContent = { Text(stringResource(R.string.assistant_page_memory_auto_compress_threshold_desc)) },
+                trailingContent = {
+                    Text(
+                        text = assistant.autoCompressThreshold.name,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                },
+                onClick = { showAutoCompressThresholdDialog = true },
+            )
+            item(
+                visible = assistant.autoCompress,
+                headlineContent = { Text(stringResource(R.string.assistant_page_memory_auto_compress_target)) },
+                supportingContent = { Text(stringResource(R.string.assistant_page_memory_auto_compress_target_desc)) },
+                trailingContent = {
+                    Text(
+                        text = stringResource(
+                            R.string.assistant_page_memory_auto_compress_messages,
+                            assistant.autoCompressKeepMessages,
+                        ),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                },
+                onClick = {
+                    // 上限是后加的：存量配置可能已经越界，打开时先夹进区间，
+                    // 否则输入框一进来就是错误态、保存键禁用，用户不改数字就退不出去
+                    autoCompressTargetInput =
+                        assistant.autoCompressKeepMessages.coerceIn(1, 500).toString()
+                    showAutoCompressTargetDialog = true
+                },
+            )
         }
 
         CardGroup {
@@ -584,32 +586,32 @@ private fun MemorySettingsTab(
                 supportingContent = { Text(stringResource(R.string.assistant_page_time_reminder_desc)) },
                 headlineContent = { Text(stringResource(R.string.assistant_page_time_reminder)) },
             )
-            if (assistant.enableTimeReminder) {
-                item(
-                    headlineContent = { Text(stringResource(R.string.assistant_page_time_reminder_interval)) },
-                    supportingContent = { Text(stringResource(R.string.assistant_page_time_reminder_interval_desc)) },
-                    trailingContent = {
-                        Text(
-                            text = stringResource(
-                                R.string.assistant_page_time_reminder_interval_value,
-                                assistant.timeReminderIntervalMinutes
-                            ),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    },
-                    onClick = {
-                        timeReminderIntervalInput = assistant.timeReminderIntervalMinutes.toString()
-                        showTimeReminderIntervalDialog = true
-                    },
-                )
-            }
+            item(
+                visible = assistant.enableTimeReminder,
+                headlineContent = { Text(stringResource(R.string.assistant_page_time_reminder_interval)) },
+                supportingContent = { Text(stringResource(R.string.assistant_page_time_reminder_interval_desc)) },
+                trailingContent = {
+                    Text(
+                        text = stringResource(
+                            R.string.assistant_page_time_reminder_interval_value,
+                            assistant.timeReminderIntervalMinutes
+                        ),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                },
+                onClick = {
+                    timeReminderIntervalInput = assistant.timeReminderIntervalMinutes.toString()
+                    showTimeReminderIntervalDialog = true
+                },
+            )
         }
     }
 }
 
 @Composable
 private fun MemoryFilesTab(
+    memoryId: String,
     memories: List<MemoryFile>,
     // 为 null 时不显示整理入口
     consolidation: MemoryConsolidationStatus?,
@@ -675,6 +677,7 @@ private fun MemoryFilesTab(
                 files.fastForEach { memory ->
                     item(
                         onClick = { onOpenMemory(memory.path) },
+                        heroScreen = Screen.MemoryFile(memoryId, memory.path),
                         trailingContent = {
                             ItemActionMenu(
                                 actions = listOf(

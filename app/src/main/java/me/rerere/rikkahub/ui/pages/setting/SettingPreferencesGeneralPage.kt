@@ -216,14 +216,13 @@ fun SettingPreferencesGeneralPage(embedded: Boolean = false, vm: SettingVM = koi
                     supportingContent = { Text(stringResource(R.string.setting_display_page_show_message_jumper_desc)) },
                     headlineContent = { Text(stringResource(R.string.setting_display_page_show_message_jumper_title)) },
                 )
-                if (displaySetting.showMessageJumper) {
-                    switchItem(
-                        checked = displaySetting.messageJumperOnLeft,
-                        onCheckedChange = { updateDisplaySetting(displaySetting.copy(messageJumperOnLeft = it)) },
-                        supportingContent = { Text(stringResource(R.string.setting_display_page_message_jumper_position_desc)) },
-                        headlineContent = { Text(stringResource(R.string.setting_display_page_message_jumper_position_title)) },
-                    )
-                }
+                switchItem(
+                    visible = displaySetting.showMessageJumper,
+                    checked = displaySetting.messageJumperOnLeft,
+                    onCheckedChange = { updateDisplaySetting(displaySetting.copy(messageJumperOnLeft = it)) },
+                    supportingContent = { Text(stringResource(R.string.setting_display_page_message_jumper_position_desc)) },
+                    headlineContent = { Text(stringResource(R.string.setting_display_page_message_jumper_position_title)) },
+                )
                 switchItem(
                     checked = displaySetting.messageNavOnLeft,
                     onCheckedChange = { updateDisplaySetting(displaySetting.copy(messageNavOnLeft = it)) },
@@ -265,41 +264,39 @@ fun SettingPreferencesGeneralPage(embedded: Boolean = false, vm: SettingVM = koi
                         )
                     }
                 }
-                if (displaySetting.effectiveBackgroundEffect == BackgroundEffectType.BLUR) {
-                    formItem(
-                        headlineContent = { Text(stringResource(R.string.setting_display_page_blur_opacity_title)) },
-                        supportingContent = { Text(stringResource(R.string.setting_display_page_blur_opacity_desc)) },
-                        trailingContent = {
-                            CardGroupValue("${(displaySetting.blurOpacity * 100).roundToInt()}%")
+                formItem(
+                    visible = displaySetting.effectiveBackgroundEffect == BackgroundEffectType.BLUR,
+                    headlineContent = { Text(stringResource(R.string.setting_display_page_blur_opacity_title)) },
+                    supportingContent = { Text(stringResource(R.string.setting_display_page_blur_opacity_desc)) },
+                    trailingContent = {
+                        CardGroupValue("${(displaySetting.blurOpacity * 100).roundToInt()}%")
+                    },
+                ) {
+                    Slider(
+                        value = displaySetting.blurOpacity,
+                        onValueChange = {
+                            updateDisplaySetting(displaySetting.copy(blurOpacity = it))
                         },
-                    ) {
-                        Slider(
-                            value = displaySetting.blurOpacity,
-                            onValueChange = {
-                                updateDisplaySetting(displaySetting.copy(blurOpacity = it))
-                            },
-                            valueRange = 0f..1f,
-                            steps = 19,
-                        )
-                    }
+                        valueRange = 0f..1f,
+                        steps = 19,
+                    )
                 }
-                if (displaySetting.enableBlurEffect) {
-                    formItem(
-                        headlineContent = { Text(stringResource(R.string.setting_display_page_glass_opacity_title)) },
-                        supportingContent = { Text(stringResource(R.string.setting_display_page_glass_opacity_desc)) },
-                        trailingContent = {
-                            CardGroupValue("${(displaySetting.glassOpacity * 100).roundToInt()}%")
+                formItem(
+                    visible = displaySetting.enableBlurEffect,
+                    headlineContent = { Text(stringResource(R.string.setting_display_page_glass_opacity_title)) },
+                    supportingContent = { Text(stringResource(R.string.setting_display_page_glass_opacity_desc)) },
+                    trailingContent = {
+                        CardGroupValue("${(displaySetting.glassOpacity * 100).roundToInt()}%")
+                    },
+                ) {
+                    Slider(
+                        value = displaySetting.glassOpacity,
+                        onValueChange = {
+                            updateDisplaySetting(displaySetting.copy(glassOpacity = it))
                         },
-                    ) {
-                        Slider(
-                            value = displaySetting.glassOpacity,
-                            onValueChange = {
-                                updateDisplaySetting(displaySetting.copy(glassOpacity = it))
-                            },
-                            valueRange = 0f..1f,
-                            steps = 19,
-                        )
-                    }
+                        valueRange = 0f..1f,
+                        steps = 19,
+                    )
                 }
                 switchItem(
                     checked = displaySetting.fullWidthComponents,
@@ -350,19 +347,18 @@ fun SettingPreferencesGeneralPage(embedded: Boolean = false, vm: SettingVM = koi
                     supportingContent = { Text(stringResource(R.string.setting_display_page_paste_long_text_as_file_desc)) },
                     headlineContent = { Text(stringResource(R.string.setting_display_page_paste_long_text_as_file_title)) },
                 )
-                if (displaySetting.pasteLongTextAsFile) {
-                    formItem(
-                        headlineContent = { Text(stringResource(R.string.setting_display_page_paste_long_text_threshold_title)) },
-                        trailingContent = { CardGroupValue("${displaySetting.pasteLongTextThreshold}") },
-                    ) {
-                        NumberSlider(
-                            value = displaySetting.pasteLongTextThreshold,
-                            onValueChange = {
-                                updateDisplaySetting(displaySetting.copy(pasteLongTextThreshold = it))
-                            },
-                            valueRange = 100..10_000,
-                        )
-                    }
+                formItem(
+                    visible = displaySetting.pasteLongTextAsFile,
+                    headlineContent = { Text(stringResource(R.string.setting_display_page_paste_long_text_threshold_title)) },
+                    trailingContent = { CardGroupValue("${displaySetting.pasteLongTextThreshold}") },
+                ) {
+                    NumberSlider(
+                        value = displaySetting.pasteLongTextThreshold,
+                        onValueChange = {
+                            updateDisplaySetting(displaySetting.copy(pasteLongTextThreshold = it))
+                        },
+                        valueRange = 100..10_000,
+                    )
                 }
             }
 
@@ -373,21 +369,20 @@ fun SettingPreferencesGeneralPage(embedded: Boolean = false, vm: SettingVM = koi
                     supportingContent = { Text(stringResource(R.string.setting_display_page_volume_key_scroll_desc)) },
                     headlineContent = { Text(stringResource(R.string.setting_display_page_volume_key_scroll_title)) },
                 )
-                if (displaySetting.enableVolumeKeyScroll) {
-                    formItem(
-                        headlineContent = { Text(stringResource(R.string.setting_display_page_volume_key_scroll_ratio)) },
-                        trailingContent = { CardGroupValue("${(displaySetting.volumeKeyScrollRatio * 100).toInt()}%") },
-                    ) {
-                        Slider(
-                            value = displaySetting.volumeKeyScrollRatio,
-                            onValueChange = {
-                                updateDisplaySetting(displaySetting.copy(volumeKeyScrollRatio = it))
-                            },
-                            valueRange = 0.25f..1.0f,
-                            steps = 2,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
+                formItem(
+                    visible = displaySetting.enableVolumeKeyScroll,
+                    headlineContent = { Text(stringResource(R.string.setting_display_page_volume_key_scroll_ratio)) },
+                    trailingContent = { CardGroupValue("${(displaySetting.volumeKeyScrollRatio * 100).toInt()}%") },
+                ) {
+                    Slider(
+                        value = displaySetting.volumeKeyScrollRatio,
+                        onValueChange = {
+                            updateDisplaySetting(displaySetting.copy(volumeKeyScrollRatio = it))
+                        },
+                        valueRange = 0.25f..1.0f,
+                        steps = 2,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
             }
 
@@ -453,27 +448,26 @@ fun SettingPreferencesGeneralPage(embedded: Boolean = false, vm: SettingVM = koi
                     supportingContent = { Text(stringResource(R.string.setting_app_lock_desc)) },
                     headlineContent = { Text(stringResource(R.string.setting_app_lock_switch)) },
                 )
-                if (settings.appLockEnabled) {
-                    formItem(
-                        headlineContent = { Text(stringResource(R.string.setting_app_lock_timeout)) },
-                        supportingContent = { Text(stringResource(R.string.setting_app_lock_timeout_desc)) },
-                    ) {
-                        ConnectedChoiceButtons(
-                            options = listOf(0, 1, 5, 15),
-                            selected = settings.appLockTimeoutMinutes,
-                            onSelect = { minutes ->
-                                vm.updateSettings { it.copy(appLockTimeoutMinutes = minutes) }
+                formItem(
+                    visible = settings.appLockEnabled,
+                    headlineContent = { Text(stringResource(R.string.setting_app_lock_timeout)) },
+                    supportingContent = { Text(stringResource(R.string.setting_app_lock_timeout_desc)) },
+                ) {
+                    ConnectedChoiceButtons(
+                        options = listOf(0, 1, 5, 15),
+                        selected = settings.appLockTimeoutMinutes,
+                        onSelect = { minutes ->
+                            vm.updateSettings { it.copy(appLockTimeoutMinutes = minutes) }
+                        },
+                    ) { minutes, selected ->
+                        ConnectedChoiceLabel(
+                            text = if (minutes == 0) {
+                                stringResource(R.string.setting_app_lock_immediately)
+                            } else {
+                                stringResource(R.string.setting_app_lock_minutes, minutes)
                             },
-                        ) { minutes, selected ->
-                            ConnectedChoiceLabel(
-                                text = if (minutes == 0) {
-                                    stringResource(R.string.setting_app_lock_immediately)
-                                } else {
-                                    stringResource(R.string.setting_app_lock_minutes, minutes)
-                                },
-                                selected = selected,
-                            )
-                        }
+                            selected = selected,
+                        )
                     }
                 }
             }

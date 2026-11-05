@@ -252,51 +252,50 @@ private fun AssistantLocalToolContent(
             )
             // 开了派发工具，或者它自己是子代理（子代理会话会自动拿到派发工具）时，
             // 这个范围都可能生效
-            if (assistant.localTools.contains(LocalToolOption.SubAgent) || assistant.isSubAgent) {
-                item(
-                    onClick = if (subAgentCandidates.isNotEmpty() || assistant.allowedSubAgentIds.isNotEmpty()) {
-                        { showSubAgentPicker = true }
-                    } else {
-                        null
-                    },
-                    leadingContent = {
-                        CardGroupIcon(
-                            icon = HugeIcons.Flowchart01,
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                        )
-                    },
-                    supportingContent = {
-                        Text(
-                            text = when {
-                                subAgentCandidates.isEmpty() -> stringResource(
-                                    R.string.assistant_page_allowed_sub_agents_empty
-                                )
-                                assistant.allowedSubAgentIds.isEmpty() -> stringResource(
-                                    R.string.assistant_page_allowed_sub_agents_summary_all
-                                )
-                                allowedSubAgentCount == 0 -> stringResource(
-                                    R.string.assistant_page_allowed_sub_agents_missing
-                                )
-                                else -> stringResource(
-                                    R.string.assistant_page_allowed_sub_agents_summary_selected,
-                                    allowedSubAgentCount,
-                                )
-                            }
-                        )
-                    },
-                    headlineContent = {
-                        Text(stringResource(R.string.assistant_page_allowed_sub_agents))
-                    },
-                    trailingContent = {
-                        Icon(
-                            imageVector = HugeIcons.ArrowRight01,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                )
-            }
+            item(
+                visible = assistant.localTools.contains(LocalToolOption.SubAgent) || assistant.isSubAgent,
+                onClick = if (subAgentCandidates.isNotEmpty() || assistant.allowedSubAgentIds.isNotEmpty()) {
+                    { showSubAgentPicker = true }
+                } else {
+                    null
+                },
+                leadingContent = {
+                    CardGroupIcon(
+                        icon = HugeIcons.Flowchart01,
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        text = when {
+                            subAgentCandidates.isEmpty() -> stringResource(
+                                R.string.assistant_page_allowed_sub_agents_empty
+                            )
+                            assistant.allowedSubAgentIds.isEmpty() -> stringResource(
+                                R.string.assistant_page_allowed_sub_agents_summary_all
+                            )
+                            allowedSubAgentCount == 0 -> stringResource(
+                                R.string.assistant_page_allowed_sub_agents_missing
+                            )
+                            else -> stringResource(
+                                R.string.assistant_page_allowed_sub_agents_summary_selected,
+                                allowedSubAgentCount,
+                            )
+                        }
+                    )
+                },
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_allowed_sub_agents))
+                },
+                trailingContent = {
+                    Icon(
+                        imageVector = HugeIcons.ArrowRight01,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
+            )
         }
     }
 

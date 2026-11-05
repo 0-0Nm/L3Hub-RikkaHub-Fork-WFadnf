@@ -48,6 +48,7 @@ import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.longPressReorder
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.hooks.heroSource
 import me.rerere.rikkahub.ui.terminal.Card
 import me.rerere.rikkahub.ui.terminal.IconButton
 import me.rerere.rikkahub.ui.terminal.TextButton
@@ -138,6 +139,7 @@ fun SettingSearchPage(vm: SettingVM = koinViewModel()) {
                         modifier = Modifier
                             .animateItem()
                             .then(longPressReorder(isDragging))
+                            .heroSource(Screen.SettingSearchDetail(service.id.toString()))
                     )
                 }
             }

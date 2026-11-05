@@ -14,10 +14,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -54,6 +50,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
@@ -91,6 +88,8 @@ import me.rerere.rikkahub.ui.context.LocalSharedTransitionScope
 import me.rerere.rikkahub.ui.context.LocalTTSState
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
+import me.rerere.rikkahub.ui.hooks.HeroPage
+import me.rerere.rikkahub.ui.hooks.heroKey
 import me.rerere.rikkahub.ui.hooks.readBooleanPreference
 import me.rerere.rikkahub.ui.hooks.readStringPreference
 import me.rerere.rikkahub.ui.hooks.rememberCustomAsrState
@@ -471,21 +470,10 @@ class RouteActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         // 同一帧内连续两次返回时 NavDisplay 的返回状态还没更新，会多回调一次，不加判断会把栈弹空
                         onBack = { if (backStack.size > 1) backStack.removeLastOrNull() },
-                        transitionSpec = {
-                            if (backStack.size == 1) fadeIn() togetherWith fadeOut()
-                            else {
-                                slideInHorizontally { it } togetherWith
-                                    slideOutHorizontally { -it / 2 } + scaleOut(targetScale = 0.7f) + fadeOut()
-                            }
-                        },
-                        popTransitionSpec = {
-                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
-                                slideOutHorizontally { it }
-                        },
-                        predictivePopTransitionSpec = {
-                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
-                                slideOutHorizontally { it }
-                        },
+                        // 位移交给源条目/目标页的容器变换去演（heroContainer），这里只留淡入淡出，免得两层动画打架
+                        transitionSpec = { fadeIn() togetherWith fadeOut() },
+                        popTransitionSpec = { fadeIn() togetherWith fadeOut() },
+                        predictivePopTransitionSpec = { fadeIn() togetherWith fadeOut() },
                         entryProvider = entryProvider {
                             entry<Screen.Chat>(
                                 metadata = NavDisplay.transitionSpec { fadeIn() togetherWith fadeOut() }
@@ -499,82 +487,83 @@ class RouteActivity : ComponentActivity() {
                                 )
                             }
 
-                            entry<Screen.ShareHandler> { key ->
+                            heroEntry<Screen.ShareHandler> { key ->
                                 ShareHandlerPage(
                                     text = key.text,
                                     image = key.streamUri
                                 )
                             }
 
-                            entry<Screen.History> {
+                            heroEntry<Screen.History> {
                                 HistoryPage()
                             }
 
-                            entry<Screen.Favorite> {
+                            heroEntry<Screen.Favorite> {
                                 FavoritePage()
                             }
 
-                            entry<Screen.Assistant> {
+                            heroEntry<Screen.Assistant> {
                                 AssistantPage()
                             }
 
-                            entry<Screen.AssistantDetail> { key ->
+                            heroEntry<Screen.AssistantDetail> { key ->
                                 AssistantDetailPage(key.id)
                             }
 
-                            entry<Screen.AssistantBasic> { key ->
+                            heroEntry<Screen.AssistantBasic> { key ->
                                 AssistantBasicPage(key.id)
                             }
 
-                            entry<Screen.AssistantPrompt> { key ->
+                            heroEntry<Screen.AssistantPrompt> { key ->
                                 AssistantPromptPage(key.id)
                             }
 
-                            entry<Screen.AssistantMemory> { key ->
+                            heroEntry<Screen.AssistantMemory> { key ->
                                 AssistantMemoryPage(key.id)
                             }
 
-                            entry<Screen.MemoryFile> { key ->
+                            heroEntry<Screen.MemoryFile> { key ->
                                 MemoryFilePage(memoryId = key.memoryId, path = key.path)
                             }
 
-                            entry<Screen.AssistantRequest> { key ->
+                            heroEntry<Screen.AssistantRequest> { key ->
                                 AssistantRequestPage(key.id)
                             }
 
-                            entry<Screen.AssistantHeartbeat> { key ->
+                            heroEntry<Screen.AssistantHeartbeat> { key ->
                                 AssistantHeartbeatPage(key.id)
                             }
 
-                            entry<Screen.AssistantMcp> { key ->
+                            heroEntry<Screen.AssistantMcp> { key ->
                                 AssistantMcpPage(key.id)
                             }
 
-                            entry<Screen.AssistantLocalTool> { key ->
+                            heroEntry<Screen.AssistantLocalTool> { key ->
                                 AssistantLocalToolPage(key.id)
                             }
 
-                            entry<Screen.AssistantInjections> { key ->
+                            heroEntry<Screen.AssistantInjections> { key ->
                                 AssistantExtensionsPage(key.id)
                             }
 
-                            entry<Screen.Translator> {
+                            heroEntry<Screen.Translator> {
                                 TranslatorPage()
                             }
 
+                            // 切换配色时会 popUpTo 原地重进，同一个 heroKey 新旧两页同时在组合里，这页不套容器变换
                             entry<Screen.Setting> {
                                 SettingPage()
                             }
 
-                            entry<Screen.Backup> {
+                            heroEntry<Screen.Backup> {
                                 BackupPage()
                             }
 
-                            entry<Screen.ImageGen> {
+                            heroEntry<Screen.ImageGen> {
                                 ImageGenPage()
                             }
 
-                            entry<Screen.MediaCreationSessions> {
+                            heroEntry<Screen.MediaCreationSessions> {
                                 MediaCreationSessionsPage()
                             }
 
@@ -587,141 +576,141 @@ class RouteActivity : ComponentActivity() {
                                 MediaCreationPage(key.id)
                             }
 
-                            entry<Screen.WebView> { key ->
+                            heroEntry<Screen.WebView> { key ->
                                 WebViewPage(key.url, key.contentId)
                             }
 
-                            entry<Screen.SettingTheme> {
+                            heroEntry<Screen.SettingTheme> {
                                 SettingThemePage()
                             }
 
-                            entry<Screen.SettingPalette> {
+                            heroEntry<Screen.SettingPalette> {
                                 SettingPalettePage()
                             }
 
-                            entry<Screen.SettingPreferences> {
+                            heroEntry<Screen.SettingPreferences> {
                                 SettingPreferencesPage()
                             }
 
-                            entry<Screen.SettingPreferencesTheme> {
+                            heroEntry<Screen.SettingPreferencesTheme> {
                                 SettingPreferencesThemePage()
                             }
 
-                            entry<Screen.SettingPreferencesNotification> {
+                            heroEntry<Screen.SettingPreferencesNotification> {
                                 SettingPreferencesNotificationPage()
                             }
 
-                            entry<Screen.SettingPreferencesGeneral> {
+                            heroEntry<Screen.SettingPreferencesGeneral> {
                                 SettingPreferencesGeneralPage()
                             }
 
-                            entry<Screen.SettingPreferencesUI> {
+                            heroEntry<Screen.SettingPreferencesUI> {
                                 SettingPreferencesUIPage()
                             }
 
-                            entry<Screen.SettingPreferencesNetwork> {
+                            heroEntry<Screen.SettingPreferencesNetwork> {
                                 SettingPreferencesNetworkPage()
                             }
 
-                            entry<Screen.SettingProvider> {
+                            heroEntry<Screen.SettingProvider> {
                                 SettingProviderPage()
                             }
 
-                            entry<Screen.SettingProviderDetail> { key ->
+                            heroEntry<Screen.SettingProviderDetail> { key ->
                                 val id = Uuid.parse(key.providerId)
                                 SettingProviderDetailPage(id = id, focusModelId = key.modelId)
                             }
 
-                            entry<Screen.SettingModels> {
+                            heroEntry<Screen.SettingModels> {
                                 SettingModelPage()
                             }
 
-                            entry<Screen.SettingAbout> {
+                            heroEntry<Screen.SettingAbout> {
                                 SettingAboutPage()
                             }
 
-                            entry<Screen.SettingSearch> {
+                            heroEntry<Screen.SettingSearch> {
                                 SettingSearchPage()
                             }
 
-                            entry<Screen.SettingSearchDetail> { key ->
+                            heroEntry<Screen.SettingSearchDetail> { key ->
                                 val id = Uuid.parse(key.serviceId)
                                 SettingSearchDetailPage(id)
                             }
 
-                            entry<Screen.SettingSpeech> {
+                            heroEntry<Screen.SettingSpeech> {
                                 SettingSpeechPage()
                             }
 
-                            entry<Screen.SettingMedia> {
+                            heroEntry<Screen.SettingMedia> {
                                 SettingMediaPage()
                             }
 
-                            entry<Screen.SettingMediaProviderDetail> { key ->
+                            heroEntry<Screen.SettingMediaProviderDetail> { key ->
                                 SettingMediaProviderDetailPage(id = Uuid.parse(key.providerId))
                             }
 
-                            entry<Screen.SettingMcp> {
+                            heroEntry<Screen.SettingMcp> {
                                 SettingMcpPage()
                             }
 
-                            entry<Screen.SettingMcpDetail> { key ->
+                            heroEntry<Screen.SettingMcpDetail> { key ->
                                 SettingMcpDetailPage(id = Uuid.parse(key.serverId))
                             }
 
-                            entry<Screen.SettingDonate> {
+                            heroEntry<Screen.SettingDonate> {
                                 SettingDonatePage()
                             }
 
-                            entry<Screen.SettingFiles> {
+                            heroEntry<Screen.SettingFiles> {
                                 SettingFilesPage()
                             }
 
-                            entry<Screen.SettingWeb> {
+                            heroEntry<Screen.SettingWeb> {
                                 SettingWebPage()
                             }
 
-                            entry<Screen.Debug> {
+                            heroEntry<Screen.Debug> {
                                 DebugPage()
                             }
 
-                            entry<Screen.Log> {
+                            heroEntry<Screen.Log> {
                                 LogPage()
                             }
 
-                            entry<Screen.Extensions> {
+                            heroEntry<Screen.Extensions> {
                                 ExtensionsPage()
                             }
 
-                            entry<Screen.QuickMessages> {
+                            heroEntry<Screen.QuickMessages> {
                                 QuickMessagesPage()
                             }
 
-                            entry<Screen.Prompts> {
+                            heroEntry<Screen.Prompts> {
                                 PromptPage()
                             }
 
-                            entry<Screen.Skills> {
+                            heroEntry<Screen.Skills> {
                                 SkillsPage()
                             }
 
-                            entry<Screen.Workspaces> {
+                            heroEntry<Screen.Workspaces> {
                                 WorkspacePage()
                             }
 
-                            entry<Screen.WorkspaceDetail> { key ->
+                            heroEntry<Screen.WorkspaceDetail> { key ->
                                 WorkspaceDetailPage(key.id)
                             }
 
-                            entry<Screen.WorkspaceTerminal> { key ->
+                            heroEntry<Screen.WorkspaceTerminal> { key ->
                                 WorkspaceTerminalPage(key.id)
                             }
 
-                            entry<Screen.WorkspaceSshEditor> { key ->
+                            heroEntry<Screen.WorkspaceSshEditor> { key ->
                                 WorkspaceSshEditorPage(key.id)
                             }
 
-                            entry<Screen.WorkspaceFileEditor> { key ->
+                            heroEntry<Screen.WorkspaceFileEditor> { key ->
                                 WorkspaceFileEditorPage(
                                     id = key.id,
                                     area = WorkspaceStorageArea.valueOf(key.area),
@@ -729,15 +718,15 @@ class RouteActivity : ComponentActivity() {
                                 )
                             }
 
-                            entry<Screen.SkillDetail> { key ->
+                            heroEntry<Screen.SkillDetail> { key ->
                                 SkillDetailPage(skillName = key.skillName)
                             }
 
-                            entry<Screen.MessageSearch> {
+                            heroEntry<Screen.MessageSearch> {
                                 SearchPage()
                             }
 
-                            entry<Screen.Stats> {
+                            heroEntry<Screen.Stats> {
                                 StatsPage()
                             }
                         }
@@ -790,6 +779,20 @@ class RouteActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * 带容器变换的 entry：页面从触发它的条目展开，返回时收回条目里。
+ * 条目那一侧用 Modifier.heroSource(同一个 Screen)，两边靠 heroKey() 对上。
+ */
+private inline fun <reified K : Screen> EntryProviderScope<NavKey>.heroEntry(
+    noinline content: @Composable (K) -> Unit,
+) {
+    entry<K> { key ->
+        HeroPage(key.heroKey()) {
+            content(key)
         }
     }
 }

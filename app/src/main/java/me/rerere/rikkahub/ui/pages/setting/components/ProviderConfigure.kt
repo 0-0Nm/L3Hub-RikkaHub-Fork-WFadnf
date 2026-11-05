@@ -652,23 +652,22 @@ private fun ProviderConfigureClaude(
             onCheckedChange = { onEdit(provider.copy(promptCaching = it)) },
             headlineContent = { Text(stringResource(R.string.setting_provider_page_claude_prompt_caching)) },
         )
-        if (provider.promptCaching) {
-            formItem(
-                headlineContent = { Text(stringResource(R.string.setting_provider_page_claude_prompt_cache_ttl)) },
-            ) {
-                ConnectedChoiceButtons(
-                    options = ClaudePromptCacheTtl.entries,
-                    selected = provider.promptCacheTtl,
-                    onSelect = { onEdit(provider.copy(promptCacheTtl = it)) },
-                ) { ttl, selected ->
-                    ConnectedChoiceLabel(
-                        text = when (ttl) {
-                            ClaudePromptCacheTtl.FIVE_MINUTES -> stringResource(R.string.setting_provider_page_claude_prompt_cache_ttl_5m)
-                            ClaudePromptCacheTtl.ONE_HOUR -> stringResource(R.string.setting_provider_page_claude_prompt_cache_ttl_1h)
-                        },
-                        selected = selected,
-                    )
-                }
+        formItem(
+            visible = provider.promptCaching,
+            headlineContent = { Text(stringResource(R.string.setting_provider_page_claude_prompt_cache_ttl)) },
+        ) {
+            ConnectedChoiceButtons(
+                options = ClaudePromptCacheTtl.entries,
+                selected = provider.promptCacheTtl,
+                onSelect = { onEdit(provider.copy(promptCacheTtl = it)) },
+            ) { ttl, selected ->
+                ConnectedChoiceLabel(
+                    text = when (ttl) {
+                        ClaudePromptCacheTtl.FIVE_MINUTES -> stringResource(R.string.setting_provider_page_claude_prompt_cache_ttl_5m)
+                        ClaudePromptCacheTtl.ONE_HOUR -> stringResource(R.string.setting_provider_page_claude_prompt_cache_ttl_1h)
+                    },
+                    selected = selected,
+                )
             }
         }
     }

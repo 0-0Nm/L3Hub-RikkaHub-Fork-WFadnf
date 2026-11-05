@@ -185,16 +185,15 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
                     supportingContent = { Text(stringResource(R.string.setting_display_page_notification_message_generated_desc)) },
                     headlineContent = { Text(stringResource(R.string.setting_display_page_notification_message_generated)) },
                 )
-                if (displaySetting.enableNotificationOnMessageGeneration) {
-                    switchItem(
-                        checked = displaySetting.enableLiveUpdateNotification,
-                        onCheckedChange = {
-                            updateDisplaySetting(displaySetting.copy(enableLiveUpdateNotification = it))
-                        },
-                        supportingContent = { Text(stringResource(R.string.setting_display_page_live_update_notification_desc)) },
-                        headlineContent = { Text(stringResource(R.string.setting_display_page_live_update_notification)) },
-                    )
-                }
+                switchItem(
+                    visible = displaySetting.enableNotificationOnMessageGeneration,
+                    checked = displaySetting.enableLiveUpdateNotification,
+                    onCheckedChange = {
+                        updateDisplaySetting(displaySetting.copy(enableLiveUpdateNotification = it))
+                    },
+                    supportingContent = { Text(stringResource(R.string.setting_display_page_live_update_notification_desc)) },
+                    headlineContent = { Text(stringResource(R.string.setting_display_page_live_update_notification)) },
+                )
                 switchItem(
                     checked = displaySetting.enableFloatingChatWindow,
                     onCheckedChange = {
@@ -206,94 +205,95 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
                     },
                     headlineContent = { Text(stringResource(R.string.setting_page_preferences_notification_floating_window)) },
                 )
-                if (displaySetting.enableFloatingChatWindow) {
-                    item(
-                        onClick = { showFloatingIconPicker = true },
-                        leadingContent = {
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.secondaryContainer),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                FloatingBubbleIconThumb(
-                                    icon = displaySetting.floatingBubbleIcon,
-                                    size = 20.dp,
-                                )
-                            }
+                item(
+                    visible = displaySetting.enableFloatingChatWindow,
+                    onClick = { showFloatingIconPicker = true },
+                    leadingContent = {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.secondaryContainer),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            FloatingBubbleIconThumb(
+                                icon = displaySetting.floatingBubbleIcon,
+                                size = 20.dp,
+                            )
+                        }
+                    },
+                    headlineContent = { Text(stringResource(R.string.floating_bubble_icon_title)) },
+                    supportingContent = { Text(stringResource(R.string.floating_bubble_icon_desc)) },
+                    trailingContent = { Icon(HugeIcons.ArrowRight01, contentDescription = null) },
+                )
+                formItem(
+                    visible = displaySetting.enableFloatingChatWindow,
+                    headlineContent = { Text(stringResource(R.string.floating_panel_width)) },
+                    trailingContent = {
+                        CardGroupValue(FloatingPanelSizing.percentLabel(draftPanelWidth))
+                    },
+                ) {
+                    Slider(
+                        value = draftPanelWidth,
+                        onValueChange = { draftPanelWidth = FloatingPanelSizing.clampWidthRatio(it) },
+                        onValueChangeFinished = {
+                            updateDisplaySetting(displaySetting.copy(floatingPanelWidthRatio = draftPanelWidth))
                         },
-                        headlineContent = { Text(stringResource(R.string.floating_bubble_icon_title)) },
-                        supportingContent = { Text(stringResource(R.string.floating_bubble_icon_desc)) },
-                        trailingContent = { Icon(HugeIcons.ArrowRight01, contentDescription = null) },
+                        valueRange = FloatingPanelSizing.MIN_WIDTH_RATIO..FloatingPanelSizing.MAX_WIDTH_RATIO,
+                        modifier = Modifier.fillMaxWidth(),
                     )
-                    formItem(
-                        headlineContent = { Text(stringResource(R.string.floating_panel_width)) },
-                        trailingContent = {
-                            CardGroupValue(FloatingPanelSizing.percentLabel(draftPanelWidth))
+                }
+                formItem(
+                    visible = displaySetting.enableFloatingChatWindow,
+                    headlineContent = { Text(stringResource(R.string.floating_panel_height)) },
+                    trailingContent = {
+                        CardGroupValue(FloatingPanelSizing.percentLabel(draftPanelHeight))
+                    },
+                ) {
+                    Slider(
+                        value = draftPanelHeight,
+                        onValueChange = { draftPanelHeight = FloatingPanelSizing.clampHeightRatio(it) },
+                        onValueChangeFinished = {
+                            updateDisplaySetting(displaySetting.copy(floatingPanelHeightRatio = draftPanelHeight))
                         },
-                    ) {
-                        Slider(
-                            value = draftPanelWidth,
-                            onValueChange = { draftPanelWidth = FloatingPanelSizing.clampWidthRatio(it) },
-                            onValueChangeFinished = {
-                                updateDisplaySetting(displaySetting.copy(floatingPanelWidthRatio = draftPanelWidth))
-                            },
-                            valueRange = FloatingPanelSizing.MIN_WIDTH_RATIO..FloatingPanelSizing.MAX_WIDTH_RATIO,
-                            modifier = Modifier.fillMaxWidth(),
+                        valueRange = FloatingPanelSizing.MIN_HEIGHT_RATIO..FloatingPanelSizing.MAX_HEIGHT_RATIO,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                formItem(
+                    visible = displaySetting.enableFloatingChatWindow,
+                    headlineContent = { Text(stringResource(R.string.floating_preview_height)) },
+                    trailingContent = {
+                        CardGroupValue(
+                            stringResource(R.string.floating_size_dp, draftPreviewHeight.roundToInt())
                         )
-                    }
-                    formItem(
-                        headlineContent = { Text(stringResource(R.string.floating_panel_height)) },
-                        trailingContent = {
-                            CardGroupValue(FloatingPanelSizing.percentLabel(draftPanelHeight))
-                        },
-                    ) {
-                        Slider(
-                            value = draftPanelHeight,
-                            onValueChange = { draftPanelHeight = FloatingPanelSizing.clampHeightRatio(it) },
-                            onValueChangeFinished = {
-                                updateDisplaySetting(displaySetting.copy(floatingPanelHeightRatio = draftPanelHeight))
-                            },
-                            valueRange = FloatingPanelSizing.MIN_HEIGHT_RATIO..FloatingPanelSizing.MAX_HEIGHT_RATIO,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                    formItem(
-                        headlineContent = { Text(stringResource(R.string.floating_preview_height)) },
-                        trailingContent = {
-                            CardGroupValue(
-                                stringResource(R.string.floating_size_dp, draftPreviewHeight.roundToInt())
+                    },
+                ) {
+                    Slider(
+                        value = draftPreviewHeight,
+                        onValueChange = { draftPreviewHeight = it },
+                        onValueChangeFinished = {
+                            updateDisplaySetting(
+                                displaySetting.copy(
+                                    floatingPreviewMaxHeight =
+                                        FloatingPanelSizing.clampPreviewHeight(draftPreviewHeight.roundToInt()),
+                                )
                             )
                         },
-                    ) {
-                        Slider(
-                            value = draftPreviewHeight,
-                            onValueChange = { draftPreviewHeight = it },
-                            onValueChangeFinished = {
-                                updateDisplaySetting(
-                                    displaySetting.copy(
-                                        floatingPreviewMaxHeight =
-                                            FloatingPanelSizing.clampPreviewHeight(draftPreviewHeight.roundToInt()),
-                                    )
-                                )
-                            },
-                            valueRange = FloatingPanelSizing.MIN_PREVIEW_HEIGHT_DP.toFloat()..
-                                FloatingPanelSizing.MAX_PREVIEW_HEIGHT_DP.toFloat(),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                }
-                if (displaySetting.enableFloatingChatWindow && !canDrawOverlays) {
-                    item(
-                        onClick = ::requestOverlayPermission,
-                        headlineContent = { Text(stringResource(R.string.setting_page_preferences_notification_overlay_permission)) },
-                        supportingContent = { Text(stringResource(R.string.setting_page_preferences_notification_overlay_permission_desc)) },
-                        trailingContent = {
-                            Icon(HugeIcons.ArrowRight01, contentDescription = null)
-                        },
+                        valueRange = FloatingPanelSizing.MIN_PREVIEW_HEIGHT_DP.toFloat()..
+                            FloatingPanelSizing.MAX_PREVIEW_HEIGHT_DP.toFloat(),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
+                item(
+                    visible = displaySetting.enableFloatingChatWindow && !canDrawOverlays,
+                    onClick = ::requestOverlayPermission,
+                    headlineContent = { Text(stringResource(R.string.setting_page_preferences_notification_overlay_permission)) },
+                    supportingContent = { Text(stringResource(R.string.setting_page_preferences_notification_overlay_permission_desc)) },
+                    trailingContent = {
+                        Icon(HugeIcons.ArrowRight01, contentDescription = null)
+                    },
+                )
                 item(
                     onClick = {
                         if (!ignoringBatteryOptimizations) requestIgnoreBatteryOptimizations()
