@@ -48,6 +48,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,7 +65,11 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalScrollCaptureInProgress
@@ -76,6 +81,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.util.fastCoerceAtLeast
 import androidx.compose.ui.zIndex
 import dev.chrisbanes.haze.HazeState
@@ -87,6 +93,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.isEmptyUIMessage
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowDownDouble
 import me.rerere.hugeicons.stroke.ArrowUp01
@@ -172,6 +179,8 @@ fun ChatList(
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
     onConversationSystemPromptChange: ((String?) -> Unit)? = null,
     emptyHero: (@Composable () -> Unit)? = null,
+    // 滚到最底部后继续上拉、松手时回调；不传就不启用这个手势
+    onCreateNewChat: (() -> Unit)? = null,
 ) {
     AnimatedContent(
         targetState = previewMode,
@@ -217,6 +226,7 @@ fun ChatList(
                 onToggleFavorite = onToggleFavorite,
                 onConversationSystemPromptChange = onConversationSystemPromptChange,
                 emptyHero = emptyHero,
+                onCreateNewChat = onCreateNewChat,
             )
         }
     }
@@ -268,6 +278,7 @@ private fun ChatListNormal(
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
     onConversationSystemPromptChange: ((String?) -> Unit)? = null,
     emptyHero: (@Composable () -> Unit)? = null,
+    onCreateNewChat: (() -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val loadingState by rememberUpdatedState(loading)
@@ -329,6 +340,43 @@ private fun ChatListNormal(
     }
     val lastMessageIndex = conversation.messageNodes.lastIndex
 
+    // 滚到最底部以后继续上拉：拉得够高再松手才新建会话。
+    // available 沿用原始手势符号（手指上滑是负值），到底以后列表吃不下，多出来的这段就是拉伸量。
+    // 180dp 大约是半屏的四分之一，得明显拉一段才认，不会一路划到底就误触。
+    val createPullThreshold = with(LocalDensity.current) { 180.dp.toPx() }
+    var createPull by remember { mutableFloatStateOf(0f) }
+    var createPullArmed by remember { mutableStateOf(false) }
+    // 回调每次重组都是新实例，当 remember 的 key 用会让连接对象每帧重建
+    val createNewChat = rememberUpdatedState(onCreateNewChat)
+    val createPullConnection = remember(createPullThreshold) {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset {
+                if (createNewChat.value == null || source != NestedScrollSource.UserInput) {
+                    return Offset.Zero
+                }
+                if (available.y < 0f) {
+                    createPull = (createPull - available.y).coerceAtMost(createPullThreshold * 1.3f)
+                    createPullArmed = createPull >= createPullThreshold
+                    return Offset(0f, available.y)
+                }
+                createPull = 0f
+                createPullArmed = false
+                return Offset.Zero
+            }
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                if (createPullArmed) createNewChat.value?.invoke()
+                createPull = 0f
+                createPullArmed = false
+                return Velocity.Zero
+            }
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize(),
@@ -386,6 +434,7 @@ private fun ChatListNormal(
                 modifier = Modifier
                     .fillMaxSize()
                     .topFadingEdge(innerPadding.calculateTopPadding() + 24.dp)
+                    .nestedScroll(createPullConnection)
                     .hazeSource(state = hazeState),
             ) {
             if (terminalStyle) {
@@ -658,6 +707,44 @@ private fun ChatListNormal(
                 )
             }
         }
+        if (onCreateNewChat != null) {
+            Surface(
+                shape = CircleShape,
+                // 拉够以后换色，明确告诉用户"现在松手就会新建"
+                color = if (createPullArmed) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.secondaryContainer
+                },
+                tonalElevation = 3.dp,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = innerPadding.calculateBottomPadding() + 24.dp)
+                    .graphicsLayer {
+                        // 在图层相位读拉伸量：只重绘这一层，不重组整个列表
+                        val progress = (createPull / createPullThreshold).coerceIn(0f, 1f)
+                        alpha = progress
+                        translationY = (1f - progress) * 24.dp.toPx()
+                    },
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        imageVector = HugeIcons.Add01,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Text(
+                        text = if (createPullArmed) "松开新建会话" else "继续上拉新建会话",
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
+        }
+
     }
 }
 
