@@ -56,12 +56,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -76,7 +74,6 @@ import androidx.compose.ui.util.fastFilter
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
@@ -90,7 +87,6 @@ import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessage
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
-import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Connect
 import me.rerere.hugeicons.stroke.Delete01
@@ -130,7 +126,6 @@ import me.rerere.rikkahub.ui.components.ui.rememberShareSheetState
 import me.rerere.rikkahub.ui.components.ui.shadow.Button
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
-import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.assistant.detail.CustomBodies
 import me.rerere.rikkahub.ui.pages.assistant.detail.CustomHeaders
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
@@ -154,6 +149,8 @@ import org.koin.compose.koinInject
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlin.uuid.Uuid
+import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.ui.hooks.heroSource
 
 private enum class ProviderDetailTab(
     override val icon: ImageVector,
@@ -180,7 +177,7 @@ private enum class ModelFormTab(
 }
 
 @Composable
-fun SettingProviderDetailPage(id: Uuid, focusModelId: String? = null, vm: SettingVM = koinViewModel()) {
+fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val provider = settings.providers.find { it.id == id } ?: return
@@ -283,7 +280,6 @@ fun SettingProviderDetailPage(id: Uuid, focusModelId: String? = null, vm: Settin
                         SettingProviderModelPage(
                             provider = provider,
                             onEdit = onEdit,
-                            focusModelId = focusModelId,
                         )
                     }
 
@@ -666,12 +662,10 @@ private fun SettingProviderConfigPage(
 private fun SettingProviderModelPage(
     provider: ProviderSetting,
     onEdit: (ProviderSetting) -> Unit,
-    focusModelId: String? = null,
 ) {
     ModelList(
         providerSetting = provider,
         onUpdateProvider = onEdit,
-        focusModelId = focusModelId,
     )
 }
 
@@ -701,7 +695,6 @@ private fun SettingProviderAdvancedPage(
 private fun ModelList(
     providerSetting: ProviderSetting,
     onUpdateProvider: (ProviderSetting) -> Unit,
-    focusModelId: String? = null,
 ) {
     val providerManager = koinInject<ProviderManager>()
     val modelList by produceState(emptyList(), providerSetting) {
@@ -727,6 +720,7 @@ private fun ModelList(
             it.printStackTrace()
         }
     }
+    val navController = LocalNavController.current
     var expanded by rememberSaveable { mutableStateOf(true) }
     val lazyListState = rememberLazyListState()
     val reorderableLazyListState = rememberReorderableLazyListState(lazyListState) { from, to ->
@@ -759,17 +753,18 @@ private fun ModelList(
                         state = reorderableLazyListState,
                         key = item.id
                     ) { isDragging ->
+                        val editorScreen = Screen.ModelEditor(
+                            providerId = providerSetting.id.toString(),
+                            modelId = item.id.toString(),
+                        )
                         ModelCard(
                             model = item,
-                            autoOpen = focusModelId == item.id.toString(),
                             onDelete = {
                                 onUpdateProvider(providerSetting.delModel(item))
                             },
-                            onEdit = { editedModel ->
-                                onUpdateProvider(providerSetting.editModel(editedModel))
-                            },
-                            parentProvider = providerSetting,
-                            modifier = longPressReorder(isDragging),
+                            onOpenEditor = { navController.navigate(editorScreen) },
+                            // 点开时这张卡片展开成整页
+                            modifier = longPressReorder(isDragging).heroSource(editorScreen),
                         )
                     }
                 }
@@ -793,7 +788,12 @@ private fun ModelList(
                 },
                 expanded = expanded,
                 parentProvider = providerSetting,
-                onUpdateProvider = onUpdateProvider
+                onUpdateProvider = onUpdateProvider,
+                onOpenEditor = {
+                    navController.navigate(
+                        Screen.ModelEditor(providerId = providerSetting.id.toString())
+                    )
+                },
             )
         }
     }
@@ -804,7 +804,8 @@ private fun ModelSettingsForm(
     model: Model,
     onModelChange: (Model) -> Unit,
     isEdit: Boolean,
-    parentProvider: ProviderSetting? = null
+    parentProvider: ProviderSetting? = null,
+    modifier: Modifier = Modifier,
 ) {
     val pagerState = rememberPagerState { ModelFormTab.entries.size }
 
@@ -823,7 +824,7 @@ private fun ModelSettingsForm(
         )
     }
 
-    Column {
+    Column(modifier = modifier) {
         PagerTabs(
             pagerState = pagerState,
             tabs = ModelFormTab.entries,
@@ -968,12 +969,9 @@ private fun AddModelButton(
     onAddModel: (Model) -> Unit,
     onRemoveModel: (Model) -> Unit,
     parentProvider: ProviderSetting,
-    onUpdateProvider: (ProviderSetting) -> Unit
+    onUpdateProvider: (ProviderSetting) -> Unit,
+    onOpenEditor: () -> Unit,
 ) {
-    val dialogState = useEditState<Model> {
-        onAddModel(it.copy(displayName = it.displayName.trim()))
-    }
-    val scope = rememberCoroutineScope()
 
     Row(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -1024,9 +1022,7 @@ private fun AddModelButton(
         )
 
         Button(
-            onClick = {
-                dialogState.open(Model())
-            }
+            onClick = onOpenEditor,
         ) {
             Row(
                 modifier = Modifier,
@@ -1047,79 +1043,6 @@ private fun AddModelButton(
         }
     }
 
-    if (dialogState.isEditing) {
-        dialogState.currentState?.let { modelState ->
-            val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
-            ModalBottomSheet(
-                onDismissRequest = {
-                    dialogState.dismiss()
-                },
-                sheetState = sheetState,
-                sheetGesturesEnabled = false,
-                dragHandle = {
-                    IconButton(
-                        onClick = {
-                            scope.launch {
-                                sheetState.hide()
-                                dialogState.dismiss()
-                            }
-                        }
-                    ) {
-                        Icon(HugeIcons.ArrowDown01, null)
-                    }
-                }
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight(0.95f)
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        text = stringResource(R.string.setting_provider_page_add_model),
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                    ) {
-                        ModelSettingsForm(
-                            model = modelState,
-                            onModelChange = { dialogState.currentState = it },
-                            isEdit = false,
-                            parentProvider = parentProvider
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                    ) {
-                        TextButton(
-                            onClick = {
-                                dialogState.dismiss()
-                            },
-                        ) {
-                            Text(stringResource(R.string.cancel))
-                        }
-                        Button(
-                            onClick = {
-                                if (modelState.modelId.isNotBlank() && modelState.displayName.isNotBlank()) {
-                                    dialogState.confirm()
-                                }
-                            },
-                        ) {
-                            Text(stringResource(R.string.setting_provider_page_add))
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 @Composable
@@ -1603,102 +1526,12 @@ private fun ModelCard(
     model: Model,
     modifier: Modifier = Modifier,
     onDelete: () -> Unit,
-    onEdit: (Model) -> Unit,
-    parentProvider: ProviderSetting,
-    autoOpen: Boolean = false,
+    onOpenEditor: () -> Unit,
 ) {
-    val dialogState = useEditState<Model> {
-        onEdit(it.copy(displayName = it.displayName.trim()))
-    }
-    // 从模型选择菜单长按进来时直接打开这个模型的编辑面板
-    LaunchedEffect(autoOpen) {
-        if (autoOpen) dialogState.open(model.copy())
-    }
-    val scope = rememberCoroutineScope()
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-
-    if (dialogState.isEditing) {
-        dialogState.currentState?.let { editingModel ->
-            val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
-            ModalBottomSheet(
-                onDismissRequest = {
-                    dialogState.dismiss()
-                },
-                sheetState = sheetState,
-                sheetGesturesEnabled = false,
-                dragHandle = null,
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight(0.95f)
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        IconButton(
-                            onClick = {
-                                scope.launch {
-                                    sheetState.hide()
-                                    dialogState.dismiss()
-                                }
-                            },
-                            modifier = Modifier.align(Alignment.CenterStart)
-                        ) {
-                            Icon(HugeIcons.Cancel01, null)
-                        }
-                        Text(
-                            text = stringResource(R.string.setting_provider_page_edit_model),
-                            style = MaterialTheme.typography.titleLarge,
-                            modifier = Modifier.align(Alignment.Center),
-                        )
-                    }
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                    ) {
-                        ModelSettingsForm(
-                            model = editingModel,
-                            onModelChange = { dialogState.currentState = it },
-                            isEdit = true,
-                            parentProvider = parentProvider
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                    ) {
-                        TextButton(
-                            onClick = {
-                                dialogState.dismiss()
-                            },
-                        ) {
-                            Text(stringResource(R.string.cancel))
-                        }
-                        Button(
-                            onClick = {
-                                if (editingModel.displayName.isNotBlank()) {
-                                    dialogState.confirm()
-                                }
-                            },
-                        ) {
-                            Text(stringResource(R.string.confirm))
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     Card(
-        onClick = { dialogState.open(model.copy()) },
+        onClick = onOpenEditor,
         modifier = modifier,
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
@@ -1999,3 +1832,86 @@ private fun ProviderSetting.proxyHost(): String? = when (this) {
 private fun String.hostOf(): String? = runCatching { java.net.URI(this).host }
     .getOrNull()
     ?.takeIf { it.isNotBlank() }
+
+/**
+ * 模型编辑页：原来是 [ModelCard] 里的一个 ModalBottomSheet，改成独立页面后可以从卡片直接展开。
+ * [modelId] 为 null 时是新建。
+ */
+@Composable
+internal fun ModelEditorPage(
+    providerId: Uuid,
+    modelId: String? = null,
+    vm: SettingVM = koinViewModel(),
+) {
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val navController = LocalNavController.current
+    val provider = settings.providers.find { it.id == providerId } ?: return
+
+    val existing = remember(provider, modelId) {
+        modelId?.let { id -> provider.models.find { it.id.toString() == id } }
+    }
+    var draft by remember(existing) { mutableStateOf(existing?.copy() ?: Model()) }
+    val isEdit = existing != null
+
+    fun save() {
+        val edited = draft.copy(displayName = draft.displayName.trim())
+        vm.updateSettings { latest ->
+            latest.copy(
+                providers = latest.providers.map { item ->
+                    when {
+                        item.id != provider.id -> item
+                        isEdit -> item.editModel(edited)
+                        else -> item.addModel(edited)
+                    }
+                }
+            )
+        }
+        navController.popBackStack()
+    }
+
+    Scaffold(
+        containerColor = CustomColors.topBarColors.containerColor,
+        topBar = {
+            TopAppBar(
+                navigationIcon = { BackButton() },
+                colors = CustomColors.topBarColors,
+                title = {
+                    Text(
+                        text = stringResource(
+                            if (isEdit) {
+                                R.string.setting_provider_page_edit_model
+                            } else {
+                                R.string.setting_provider_page_add_model
+                            }
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                actions = {
+                    TextButton(
+                        // 新建时 modelId 也必须有，否则会写进一条点不动的空条目
+                        enabled = draft.displayName.isNotBlank() &&
+                            (isEdit || draft.modelId.isNotBlank()),
+                        onClick = { save() },
+                    ) {
+                        Text(stringResource(R.string.confirm))
+                    }
+                },
+            )
+        },
+    ) { innerPadding ->
+        ModelSettingsForm(
+            model = draft,
+            onModelChange = { draft = it },
+            isEdit = isEdit,
+            parentProvider = provider,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .consumeWindowInsets(innerPadding)
+                .padding(horizontal = 16.dp)
+                .imePadding(),
+        )
+    }
+}

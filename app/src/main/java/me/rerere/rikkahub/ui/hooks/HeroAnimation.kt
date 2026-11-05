@@ -95,6 +95,44 @@ fun Modifier.heroSource(
 )
 
 /**
+ * 这个页面是不是由某个条目展开进来的。
+ *
+ * true 的走容器变换（转场只留淡入淡出，位移由 sharedBounds 演）；
+ * false 的没有源条目，转场改成从下方滑入 / 向下滑出，比纯淡出更有方向感。
+ *
+ * 加新的 heroSource 入口时记得在这里补一条：漏了会和容器变换叠在一起，两层位移打架。
+ */
+fun Screen.usesHeroTransition(): Boolean = when (this) {
+    is Screen.AssistantDetail, is Screen.AssistantBasic, is Screen.AssistantPrompt,
+    is Screen.AssistantInjections, is Screen.AssistantMemory, is Screen.AssistantMcp,
+    is Screen.AssistantLocalTool, is Screen.AssistantHeartbeat, is Screen.AssistantRequest,
+    is Screen.MemoryFile, is Screen.SkillDetail, is Screen.WorkspaceDetail,
+    -> true
+
+    Screen.SettingPreferences, Screen.Assistant, Screen.Extensions,
+    Screen.SettingModels, Screen.SettingProvider, Screen.SettingSearch, Screen.SettingSpeech,
+    Screen.SettingMedia, Screen.SettingMcp, Screen.SettingWeb, Screen.Backup,
+    Screen.SettingFiles, Screen.SettingAbout, Screen.SettingDonate, Screen.Log,
+    Screen.SettingTheme, Screen.SettingPalette,
+    -> true
+
+    is Screen.SettingProviderDetail, is Screen.SettingMcpDetail,
+    is Screen.SettingMediaProviderDetail, is Screen.SettingSearchDetail,
+    -> true
+
+    // 只有从模型卡片进来（带 modelId）才有源条目；「+」新建那一路没有，走滑入
+    is Screen.ModelEditor -> modelId != null
+
+    Screen.QuickMessages, Screen.Prompts, Screen.Skills, Screen.Workspaces,
+    -> true
+
+    // 会话列表自己的容器变换挂在页面内部（SessionItem -> MediaCreationPage）
+    is Screen.MediaCreation -> true
+
+    else -> false
+}
+
+/**
  * 每个 Screen 一个稳定 key：源条目和目标页面各算一次，两边必须完全一致。
  *
  * 新增 Screen 时这里会编译不过，正好逼着补一条——key 撞车会让两个页面的容器变换互相串台。
@@ -134,6 +172,7 @@ fun Screen.heroKey(): String = when (this) {
     Screen.SettingProvider -> "hero_setting_provider"
     is Screen.SettingProviderDetail -> "hero_setting_provider_detail_$providerId"
     Screen.SettingModels -> "hero_setting_models"
+    is Screen.ModelEditor -> "hero_model_editor_${providerId}_${modelId.orEmpty()}"
     Screen.SettingAbout -> "hero_setting_about"
     Screen.SettingSearch -> "hero_setting_search"
     is Screen.SettingSearchDetail -> "hero_setting_search_detail_$serviceId"

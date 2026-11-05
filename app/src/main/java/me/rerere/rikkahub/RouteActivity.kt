@@ -14,6 +14,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -90,6 +92,7 @@ import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
 import me.rerere.rikkahub.ui.hooks.HeroPage
 import me.rerere.rikkahub.ui.hooks.heroKey
+import me.rerere.rikkahub.ui.hooks.usesHeroTransition
 import me.rerere.rikkahub.ui.hooks.readBooleanPreference
 import me.rerere.rikkahub.ui.hooks.readStringPreference
 import me.rerere.rikkahub.ui.hooks.rememberCustomAsrState
@@ -141,6 +144,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingMcpDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
 import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPage
+import me.rerere.rikkahub.ui.pages.setting.ModelEditorPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSearchDetailPage
@@ -470,10 +474,29 @@ class RouteActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         // 同一帧内连续两次返回时 NavDisplay 的返回状态还没更新，会多回调一次，不加判断会把栈弹空
                         onBack = { if (backStack.size > 1) backStack.removeLastOrNull() },
-                        // 位移交给源条目/目标页的容器变换去演（heroContainer），这里只留淡入淡出，免得两层动画打架
-                        transitionSpec = { fadeIn() togetherWith fadeOut() },
-                        popTransitionSpec = { fadeIn() togetherWith fadeOut() },
-                        predictivePopTransitionSpec = { fadeIn() togetherWith fadeOut() },
+                        // 有源条目的页面：位移交给容器变换去演，这里只留淡入淡出，免得两层动画打架
+                        // 没有源条目的页面（抽屉、聊天流里的入口）：从下方滑入、向下滑出，比纯淡出更有方向感
+                        transitionSpec = {
+                            if ((targetState as? Screen)?.usesHeroTransition() == true) {
+                                fadeIn() togetherWith fadeOut()
+                            } else {
+                                (slideInVertically { it } + fadeIn()) togetherWith fadeOut()
+                            }
+                        },
+                        popTransitionSpec = {
+                            if ((initialState as? Screen)?.usesHeroTransition() == true) {
+                                fadeIn() togetherWith fadeOut()
+                            } else {
+                                fadeIn() togetherWith (slideOutVertically { it } + fadeOut())
+                            }
+                        },
+                        predictivePopTransitionSpec = {
+                            if ((initialState as? Screen)?.usesHeroTransition() == true) {
+                                fadeIn() togetherWith fadeOut()
+                            } else {
+                                fadeIn() togetherWith (slideOutVertically { it } + fadeOut())
+                            }
+                        },
                         entryProvider = entryProvider {
                             entry<Screen.Chat>(
                                 metadata = NavDisplay.transitionSpec { fadeIn() togetherWith fadeOut() }
@@ -617,12 +640,18 @@ class RouteActivity : ComponentActivity() {
                             }
 
                             heroEntry<Screen.SettingProviderDetail> { key ->
-                                val id = Uuid.parse(key.providerId)
-                                SettingProviderDetailPage(id = id, focusModelId = key.modelId)
+                                SettingProviderDetailPage(id = Uuid.parse(key.providerId))
                             }
 
                             heroEntry<Screen.SettingModels> {
                                 SettingModelPage()
+                            }
+
+                            heroEntry<Screen.ModelEditor> { key ->
+                                ModelEditorPage(
+                                    providerId = Uuid.parse(key.providerId),
+                                    modelId = key.modelId,
+                                )
                             }
 
                             heroEntry<Screen.SettingAbout> {
@@ -898,10 +927,14 @@ sealed interface Screen : NavKey {
     data object SettingProvider : Screen
 
     @Serializable
-    data class SettingProviderDetail(val providerId: String, val modelId: String? = null) : Screen
+    data class SettingProviderDetail(val providerId: String) : Screen
 
     @Serializable
     data object SettingModels : Screen
+
+    /** 模型编辑页：modelId 为 null 时是新建 */
+    @Serializable
+    data class ModelEditor(val providerId: String, val modelId: String? = null) : Screen
 
     @Serializable
     data object SettingAbout : Screen

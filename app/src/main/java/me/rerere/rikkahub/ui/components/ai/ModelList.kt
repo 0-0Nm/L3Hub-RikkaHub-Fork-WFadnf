@@ -344,6 +344,11 @@ fun ModelListSheet(
             state.close()
         },
         sheetState = sheetState,
+        // 列表本身要上下滑，sheet 的下拉手势很容易在滚动时误触关闭；
+        // 只留两种关法：点弹窗外部，或点右上角 X
+        sheetGesturesEnabled = false,
+        // 手势关了就别留把手，免得看起来能拖却拖不动
+        dragHandle = null,
     ) {
         Column(
             modifier = Modifier
@@ -352,6 +357,21 @@ fun ModelListSheet(
                 .imePadding(),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(
+                    onClick = { dismiss() },
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(
+                        imageVector = HugeIcons.Cancel01,
+                        contentDescription = stringResource(R.string.close),
+                    )
+                }
+            }
             ModelPickerTwoPane(
                 currentModel = state.modelId,
                 providers = state.filteredProviders,
@@ -389,7 +409,7 @@ fun ModelListSheet(
                 onEditModel = { model, provider ->
                     dismiss()
                     navController.navigate(
-                        Screen.SettingProviderDetail(
+                        Screen.ModelEditor(
                             providerId = provider.id.toString(),
                             modelId = model.id.toString(),
                         )

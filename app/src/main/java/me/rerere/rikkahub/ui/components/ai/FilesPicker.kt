@@ -2,8 +2,12 @@ package me.rerere.rikkahub.ui.components.ai
 
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -49,6 +53,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastForEach
@@ -232,9 +237,22 @@ internal fun FilesPicker(
                 val showMcp = settings.mcpServers.isNotEmpty()
                 // 限制了上下文消息数就是滚动上下文，旧消息会自动移出，不需要压缩
                 val showCompress = assistant.contextMessageLimit <= 0
-                val cwdItems = if (showWorkspace) cwdWorkspaces else emptyList()
-                val itemCount = 3 + cwdItems.size + listOf(showWorkspace, showMcp, showCompress).count { it }
+                // 收起的项不占位置，后面的往前挪一格；圆角和设置页的卡片组同一套算法
+                val itemCount = 3 +
+                    (if (showWorkspace) cwdWorkspaces.size + 1 else 0) +
+                    (if (showMcp) 1 else 0) +
+                    (if (showCompress) 1 else 0)
+                val pickerExpandSpec = spring<IntSize>(dampingRatio = 0.72f, stiffness = 480f)
                 var itemIndex = 0
+                // 收起的项在退出动画期间还在渲染，给它末项形状，免得拿到首项的大圆角
+                val hiddenShapeIndex = (itemCount - 1).coerceAtLeast(0)
+                val searchIndex = itemIndex++
+                val workspaceIndex = if (showWorkspace) itemIndex++ else hiddenShapeIndex
+                val cwdIndexes = cwdWorkspaces.map { if (showWorkspace) itemIndex++ else hiddenShapeIndex }
+                val mcpIndex = if (showMcp) itemIndex++ else hiddenShapeIndex
+                val extensionsIndex = itemIndex++
+                val planModeIndex = itemIndex++
+                val compressIndex = if (showCompress) itemIndex++ else hiddenShapeIndex
                 Column(
                     verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
                 ) {
@@ -242,85 +260,97 @@ internal fun FilesPicker(
                         enableSearch = assistant.enableWebSearch,
                         settings = settings,
                         model = chatModel,
-                        shapes = ListItemDefaults.segmentedShapes(index = itemIndex++, count = itemCount),
+                        shapes = ListItemDefaults.segmentedShapes(index = searchIndex, count = itemCount),
                         onClick = { page = FilesPickerPage.SEARCH },
                     )
 
-                    if (showWorkspace) {
-                        WorkspacePickerListItem(
-                            assistant = assistant,
-                            workspaces = workspaces,
-                            shapes = ListItemDefaults.segmentedShapes(index = itemIndex++, count = itemCount),
-                            onUpdateAssistant = onUpdateAssistant,
-                            onNavigateToDetail = { id ->
-                                onDismiss()
-                                navController.navigate(Screen.WorkspaceDetail(id))
-                            },
-                            onNavigateToTerminal = { id ->
-                                onDismiss()
-                                navController.navigate(Screen.WorkspaceTerminal(id))
-                            },
-                            onNavigateToManage = {
-                                onDismiss()
-                                navController.navigate(Screen.Workspaces)
-                            },
-                        )
+                    AnimatedVisibility(
+                        visible = showWorkspace,
+                        enter = expandVertically(pickerExpandSpec) + fadeIn(),
+                        exit = shrinkVertically(pickerExpandSpec) + fadeOut(),
+                    ) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+                        ) {
+                            WorkspacePickerListItem(
+                                assistant = assistant,
+                                workspaces = workspaces,
+                                shapes = ListItemDefaults.segmentedShapes(index = workspaceIndex, count = itemCount),
+                                onUpdateAssistant = onUpdateAssistant,
+                                onNavigateToDetail = { id ->
+                                    onDismiss()
+                                    navController.navigate(Screen.WorkspaceDetail(id))
+                                },
+                                onNavigateToTerminal = { id ->
+                                    onDismiss()
+                                    navController.navigate(Screen.WorkspaceTerminal(id))
+                                },
+                                onNavigateToManage = {
+                                    onDismiss()
+                                    navController.navigate(Screen.Workspaces)
+                                },
+                            )
 
-                        // 每个绑定工作区各一个 CWD 入口
-                        cwdItems.forEach { workspace ->
-                            SegmentedListItem(
-                                onClick = { cwdWorkspaceId = workspace.id },
-                                shapes = ListItemDefaults.segmentedShapes(index = itemIndex++, count = itemCount),
-                                leadingContent = {
-                                    Icon(
-                                        imageVector = HugeIcons.Folder01,
-                                        contentDescription = stringResource(R.string.workspace_cwd_select_directory),
-                                    )
-                                },
-                                trailingContent = {
-                                    Icon(HugeIcons.ArrowRight01, contentDescription = null)
-                                },
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            // 每个绑定工作区各一个 CWD 入口
+                            cwdWorkspaces.forEachIndexed { i, workspace ->
+                                SegmentedListItem(
+                                    onClick = { cwdWorkspaceId = workspace.id },
+                                    shapes = ListItemDefaults.segmentedShapes(index = cwdIndexes[i], count = itemCount),
+                                    leadingContent = {
+                                        Icon(
+                                            imageVector = HugeIcons.Folder01,
+                                            contentDescription = stringResource(R.string.workspace_cwd_select_directory),
+                                        )
+                                    },
+                                    trailingContent = {
+                                        Icon(HugeIcons.ArrowRight01, contentDescription = null)
+                                    },
                                 ) {
-                                    WorkspaceConnectionIndicator(
-                                        workspace = workspace,
-                                        state = sshStates[workspace.id],
-                                    )
-                                    Text(
-                                        text = workspace.name,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f, fill = false),
-                                    )
-                                    Text(
-                                        text = WorkspaceCwd.absolute(
-                                            workspace.workspaceDir(),
-                                            WorkspaceCwd.normalize(
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        WorkspaceConnectionIndicator(
+                                            workspace = workspace,
+                                            state = sshStates[workspace.id],
+                                        )
+                                        Text(
+                                            text = workspace.name,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f, fill = false),
+                                        )
+                                        Text(
+                                            text = WorkspaceCwd.absolute(
                                                 workspace.workspaceDir(),
-                                                conversation.workspaceCwds[workspace.id],
+                                                WorkspaceCwd.normalize(
+                                                    workspace.workspaceDir(),
+                                                    conversation.workspaceCwds[workspace.id],
+                                                ),
                                             ),
-                                        ),
-                                        // 路径的末尾更有辨识度，放不下时省略开头
-                                        maxLines = 1,
-                                        overflow = TextOverflow.StartEllipsis,
-                                        modifier = Modifier.weight(2f),
-                                    )
+                                            // 路径的末尾更有辨识度，放不下时省略开头
+                                            maxLines = 1,
+                                            overflow = TextOverflow.StartEllipsis,
+                                            modifier = Modifier.weight(2f),
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
 
-                    if (showMcp) {
+                    AnimatedVisibility(
+                        visible = showMcp,
+                        enter = expandVertically(pickerExpandSpec) + fadeIn(),
+                        exit = shrinkVertically(pickerExpandSpec) + fadeOut(),
+                    ) {
                         McpPickerListItem(
                             assistant = assistant,
                             servers = settings.mcpServers,
                             mcpManager = mcpManager,
-                            shapes = ListItemDefaults.segmentedShapes(index = itemIndex++, count = itemCount),
+                            shapes = ListItemDefaults.segmentedShapes(index = mcpIndex, count = itemCount),
                             onClick = { page = FilesPickerPage.MCP },
                         )
                     }
@@ -333,7 +363,7 @@ internal fun FilesPicker(
                             assistant.enabledSkills.size
                     SegmentedListItem(
                         onClick = { page = FilesPickerPage.EXTENSIONS },
-                        shapes = ListItemDefaults.segmentedShapes(index = itemIndex++, count = itemCount),
+                        shapes = ListItemDefaults.segmentedShapes(index = extensionsIndex, count = itemCount),
                         leadingContent = {
                             Icon(
                                 imageVector = HugeIcons.Package,
@@ -352,7 +382,7 @@ internal fun FilesPicker(
                     // Plan Mode Toggle
                     SegmentedListItem(
                         onClick = { onUpdateAssistant(assistant.copy(planMode = !assistant.planMode)) },
-                        shapes = ListItemDefaults.segmentedShapes(index = itemIndex++, count = itemCount),
+                        shapes = ListItemDefaults.segmentedShapes(index = planModeIndex, count = itemCount),
                         leadingContent = {
                             Icon(
                                 imageVector = HugeIcons.View,
@@ -369,10 +399,14 @@ internal fun FilesPicker(
                     }
 
                     // Compress History Button
-                    if (showCompress) {
+                    AnimatedVisibility(
+                        visible = showCompress,
+                        enter = expandVertically(pickerExpandSpec) + fadeIn(),
+                        exit = shrinkVertically(pickerExpandSpec) + fadeOut(),
+                    ) {
                         SegmentedListItem(
                             onClick = { onShowCompressDialogChange(true) },
-                            shapes = ListItemDefaults.segmentedShapes(index = itemIndex++, count = itemCount),
+                            shapes = ListItemDefaults.segmentedShapes(index = compressIndex, count = itemCount),
                             leadingContent = {
                                 Icon(
                                     imageVector = HugeIcons.Package01,

@@ -436,7 +436,11 @@ CompositionLocal，页面只读它，不各自去判断 `Settings`。
 `transitionSpec` / `popTransitionSpec` / `predictivePopTransitionSpec` 只留淡入淡出，两层动画不再打架。
 
 - 目标页：`RouteActivity.kt` 里绝大多数 `entry<T>` 换成 `heroEntry<T>`，把页面包进
-  `HeroPage(key.heroKey())`；页面到位后圆角从 20dp 收到直角，退场时再长回去
+  `HeroPage(key.heroKey())`；页面到位后圆角从 20dp 收到直角，退场时再长回去。
+  页面**自己不要再包一层 `HeroPage`**——`heroEntry` 已经包了，叠两层同一个 key 的共享容器会打架
+- 没有源条目的页面（抽屉、聊天流里的入口、模型编辑页的「新建」）由 `Screen.usesHeroTransition()`
+  判定为 false，转场改成从下方滑入 / 向下滑出，比纯淡出更有方向感；新增 `heroSource` 入口时
+  要在这个 `when` 里补一条，漏了会和容器变换叠成两层位移
 - 源条目：`Modifier.heroSource(screen, shape)`，圆角默认取 `HeroSourceCorner`（20dp）；
   全宽组件模式下两边一起归零（都走 `adaptiveCornerRadius`），否则展开的第一帧会对不上
 - 两边的 key 都由 `Screen.heroKey()` 算：`Screen` 是 sealed 接口，新增条目时 `when` 少一条编译不过，
@@ -456,8 +460,32 @@ CompositionLocal，页面只读它，不各自去判断 `Settings`。
 |---|---|
 | `ui/hooks/HeroAnimation.kt` | 新增 `HeroPage`、`heroSource`、`Screen.heroKey()`、`HeroSourceCorner` |
 | `RouteActivity.kt` | `heroEntry` 扩展；`transitionSpec` 只留淡入淡出 |
-| `ui/components/ui/CardGroup.kt` | `heroScreen` / `visible` 参数、展开收起动画、`content` 改成 `@Composable` |
+| `ui/components/ui/CardGroup.kt` | `heroScreen` / `visible` 参数、展开收起动画 |
+
+`CardGroup` 的 `content` 参数**不能**标 `@Composable`：标了之后它变成一个独立的重组作用域，
+外部状态（比如某个开关的 `remember` 值）变了只会把 `items` 重新填一遍，下面读 `items` 的
+`Column` 不会重组，表现是「点了开关没反应，动一下别的才刷新」。调用点里的 `item(...)` /
+`formItem(...)` 都不是 composable 调用，把 composable 块作为参数传进去，去掉标注照样编译。
 | 各 `*Page.kt` | 入口条目补 `heroScreen`、列表项补 `heroSource`；原来的条件项改用 `visible` |
+
+## 模型编辑页（fork 新增）
+
+模型的新增/编辑原来是 `SettingProviderDetailPage` 里的一个 `ModalBottomSheet`，现在抽成独立页面
+`Screen.ModelEditor(providerId, modelId)`（`modelId` 为 null 是新建），从模型卡片直接展开成整页：
+
+- 卡片长按拖拽排序的 modifier 之外再挂 `heroSource(Screen.ModelEditor(...))`，点开时卡片自己展开成页
+- 模型选择弹窗里长按模型也进这一页（原来带上 `focusModelId` 回到供应商详情再自动弹面板）
+- 编辑对象是页面内的 `draft`，点右上角确认才写回；新建时 `modelId` 和 `displayName` 都非空才可确认，
+  否则会写进一条点不动的空条目
+- 走 `heroEntry` 注册，页面本身不再包 `HeroPage`
+
+侧带的几处调整：
+
+- 模型选择弹窗关掉了 `sheetGesturesEnabled`、去掉把手：列表本身要上下滑，下拉手势很容易误触关闭；
+  关闭只留「点外部」和右上角 X 两种
+- 用量弹窗的 sheet 只留 `Hidden` / `Expanded`，否则 `show()` 会先停在半屏
+- 输入框附件面板里可收起的项（工作区、MCP、压缩）改用 `AnimatedVisibility`，收起的项不占位，
+  后面的条目连同圆角一起挪过去
 
 ## 模型选择弹窗（fork 改版）
 

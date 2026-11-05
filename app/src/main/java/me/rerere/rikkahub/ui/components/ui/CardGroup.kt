@@ -396,8 +396,10 @@ private fun CardGroupListItem(
 fun CardGroup(
     modifier: Modifier = Modifier,
     title: (@Composable () -> Unit)? = null,
-    // 标成 @Composable：条目要能挂 heroSource（容器变换），那是个 composable 扩展
-    content: @Composable CardGroupScope.() -> Unit,
+    // 不能标 @Composable：那会让 content 变成独立的重组作用域，
+    // 外部状态变了只重跑这个 lambda 把 items 填一遍，下面读 items 的 Column 不会重组，
+    // 表现就是「点了开关没反应，动一下别的才刷新」
+    content: CardGroupScope.() -> Unit,
 ) {
     val scope = CardGroupScopeImpl()
     scope.content()

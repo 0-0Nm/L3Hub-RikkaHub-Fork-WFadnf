@@ -316,6 +316,8 @@ fun ModelPickerTwoPane(
                         onDismiss = onDismiss,
                         compact = compact,
                         onLongClick = { onEditModel(model, provider) },
+                        // 切收藏 / 搜关键词时列表内容会整体换掉，让条目自己滑进滑出
+                        modifier = Modifier.animateItem(),
                         // 搜索结果把多个供应商拍平了，卡片上得带上供应商名才分得清
                         subtitle = contextWatermark(model, provider.name.takeIf { query.isNotBlank() || showFavorites }),
                         tail = {

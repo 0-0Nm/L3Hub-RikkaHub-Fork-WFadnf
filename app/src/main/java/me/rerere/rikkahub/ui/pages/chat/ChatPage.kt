@@ -1063,7 +1063,15 @@ private fun ChatPageContent(
         }
 
         if (showUsageSheet) {
-            ModalBottomSheet(onDismissRequest = { showUsageSheet = false }) {
+            // 默认允许半展开，show() 会先停在半屏，得用手再拉一次；这里只留 Hidden / Expanded
+            val usageSheetState = rememberBottomSheetState(
+                initialValue = SheetValue.Hidden,
+                enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+            )
+            ModalBottomSheet(
+                onDismissRequest = { showUsageSheet = false },
+                sheetState = usageSheetState,
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
