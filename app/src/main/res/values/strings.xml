@@ -142,6 +142,8 @@
   <string name="assistant_page_top_p">Top P</string>
   <string name="assistant_page_top_p_value">Top P: %s</string>
   <string name="assistant_page_top_p_warning">Please don\'t modify this value unless you know what you\'re doing</string>
+  <string name="assistant_page_top_k">Top K</string>
+  <string name="assistant_page_top_k_warning">Only sample from the K most likely tokens. Not every provider supports this value.</string>
   <string name="assistant_page_use_assistant_avatar">Use Assistant Avatar</string>
   <string name="assistant_page_use_assistant_avatar_desc">Use assistant avatar and name instead of model avatar and name in chats</string>
   <string name="audio">Audio</string>

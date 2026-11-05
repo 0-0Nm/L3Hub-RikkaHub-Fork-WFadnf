@@ -251,6 +251,8 @@ class ChatCompletionsAPI(
             if (isModelAllowTemperature(params.model)) {
                 if (params.temperature != null) put("temperature", params.temperature)
                 if (params.topP != null) put("top_p", params.topP)
+                // OpenAI 官方接口没有 top_k，第三方兼容服务大多支持，交给用户单独开启
+                if (params.topK != null && acceptsTopK(host)) put("top_k", params.topK)
             }
             if (params.maxTokens != null) put("max_tokens", params.maxTokens)
 
@@ -455,6 +457,14 @@ class ChatCompletionsAPI(
             !ModelRegistry.GPT_5.match(model.modelId) &&
             !isMoonshotRestricted
     }
+
+    // OpenAI 官方（含 Azure）与 xAI 都不接受 top_k；其他兼容服务按需透传
+    private fun acceptsTopK(host: String): Boolean =
+        host != "api.openai.com" &&
+            host != "chatgpt.com" &&
+            !host.endsWith(".openai.azure.com") &&
+            host != "x.ai" &&
+            !host.endsWith(".x.ai")
 
     private fun buildMessages(
         messages: List<UIMessage>,

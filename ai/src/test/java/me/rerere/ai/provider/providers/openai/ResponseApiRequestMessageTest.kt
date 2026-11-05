@@ -76,6 +76,36 @@ class ResponseApiRequestMessageTest {
     }
 
     @Test
+    fun `top_k is sent to third party responses endpoints`() {
+        val body = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.deepseek.com/v1"),
+            params = TextGenerationParams(model = Model(modelId = "test-model"), topK = 40),
+        )
+
+        assertEquals("40", body["top_k"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `top_k is dropped for official openai responses endpoint`() {
+        val body = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1"),
+            params = TextGenerationParams(model = Model(modelId = "test-model"), topK = 40),
+        )
+
+        assertFalse("top_k" in body)
+    }
+
+    @Test
+    fun `top_k is dropped for azure responses endpoint`() {
+        val body = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://example.openai.azure.com/openai/v1"),
+            params = TextGenerationParams(model = Model(modelId = "test-model"), topK = 40),
+        )
+
+        assertFalse("top_k" in body)
+    }
+
+    @Test
     fun `multi-round tool calls should produce correct function_call and function_call_output pairs`() {
         // Scenario: Multiple tool calls in sequence
         val assistantMessage = UIMessage(

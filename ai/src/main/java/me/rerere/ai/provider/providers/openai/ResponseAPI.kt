@@ -245,6 +245,7 @@ class ResponseAPI(
                 if (isModelAllowTemperature(params.model)) {
                     if (params.temperature != null) put("temperature", params.temperature)
                     if (params.topP != null) put("top_p", params.topP)
+                    if (params.topK != null && capabilities.supportsTopK) put("top_k", params.topK)
                 }
                 if (params.maxTokens != null) put("max_output_tokens", params.maxTokens)
             }
@@ -781,6 +782,8 @@ internal data class ResponseProviderCapabilities(
     val systemMessageRole: String? = null,
     // 是否接受 temperature、top_p 和 max_output_tokens
     val supportsSamplingParams: Boolean = true,
+    // 是否接受 top_k：OpenAI 官方和 xAI 都明确不支持
+    val supportsTopK: Boolean = true,
     // 非推理模型也请求加密推理内容：不保存会话时，自带推理的模型要靠它接上多轮推理
     val alwaysIncludeEncryptedContent: Boolean = false,
     // 推理档位对应的 reasoning.effort（参数依次是档位、模型 id），返回 null 时不带
@@ -791,6 +794,15 @@ internal data class ResponseProviderCapabilities(
 )
 
 internal fun resolveResponseProviderCapabilities(host: String): ResponseProviderCapabilities {
+    // OpenAI 官方（含 Azure）和 xAI 都不接受 top_k
+    if (host == "api.openai.com" ||
+        host == "chatgpt.com" ||
+        host == "x.ai" ||
+        host.endsWith(".openai.azure.com") ||
+        host.endsWith(".x.ai")
+    ) {
+        return ResponseProviderCapabilities(supportsTopK = false)
+    }
     return when (host) {
         "ark.cn-beijing.volces.com" -> ResponseProviderCapabilities(
             supportsReasoningSummary = false,
