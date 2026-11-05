@@ -106,10 +106,16 @@ jobs:
             echo "没有 tag（只出 artifact），跳过版本号校验"
             exit 0
           fi
-          code=$(sed -n 's/^ *versionCode = \([0-9]*\)/\1/p' app/build.gradle.kts | head -1)
-          name=$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts | head -1)
+          code=$(sed -n 's/^ *versionCode = \([0-9]*\)$/\1/p' app/build.gradle.kts | head -1)
+          name=$(sed -n 's/^ *versionName = "\(.*\)"$/\1/p' app/build.gradle.kts | head -1)
           if [ -z "$code" ] || [ -z "$name" ]; then
             echo "没读到 versionCode / versionName，app/build.gradle.kts 的格式变了？" >&2
+            exit 1
+          fi
+          # tag 解析不到（打错、浅克隆没拿到）说明 checkout 的 ref 和 TAG 不是一回事，
+          # 下面「找不到上一个 tag 就跳过」会把这种情况一起吞掉，先在这里拦下
+          if ! git rev-parse --verify --quiet "${TAG}^{commit}" >/dev/null; then
+            echo "tag ${TAG} 解析不到，无法核对版本号" >&2
             exit 1
           fi
           # v3.1.6 → 3.1.6；v3.1.1-preview.102 → 3.1.1
@@ -121,14 +127,27 @@ jobs:
               echo "versionName「${name}」和 tag ${TAG} 对不上，应形如 L.${base}.NNN" >&2
               exit 1 ;;
           esac
-          # versionCode 不涨，覆盖安装只是重装同一个版本，用户会以为没更新成功
+          # 预览版是独立包名（.debug），versionCode 和正式版撞车不影响谁覆盖谁，
+          # 只核对 versionName，别为了打个预览包还得先 bump 版本号
+          case "$TAG" in
+            *-*)
+              echo "预览版 tag，只核对 versionName：${name}"
+              exit 0 ;;
+          esac
+          # 正式版 versionCode 不涨，覆盖安装只是重装同一个版本，用户会以为没更新成功
           prev=$(git describe --tags --abbrev=0 --exclude='*-*' "${TAG}^" 2>/dev/null || true)
           if [ -z "$prev" ]; then
             echo "没有上一个正式版 tag，跳过 versionCode 递增校验；versionName=${name}"
             exit 0
           fi
+          # 前序 tag 上可能根本没有这个文件（早于模块拆分），git show 会非零退出，
+          # set -e 下整个 job 就死在 git 的 fatal 上，先探一下
+          if ! git cat-file -e "${prev}:app/build.gradle.kts" 2>/dev/null; then
+            echo "${prev} 上没有 app/build.gradle.kts，跳过 versionCode 递增校验"
+            exit 0
+          fi
           prev_code=$(git show "${prev}:app/build.gradle.kts" \
-            | sed -n 's/^ *versionCode = \([0-9]*\)/\1/p' | head -1)
+            | sed -n 's/^ *versionCode = \([0-9]*\)$/\1/p' | head -1)
           if [ -z "$prev_code" ]; then
             echo "没从 ${prev} 读到 versionCode，跳过递增校验"
             exit 0
@@ -311,9 +330,14 @@ jobs:
           set -euo pipefail
           # 本仓库不走 PR，GitHub 的 --generate-notes 只会给一行 Full Changelog。
           # 自己按「上一个 tag..这个 tag」列提交，读的人才知道这版改了什么。
-          # 预览版 tag（v3.1.1-preview.102）也是 tag，必须排除，否则正式版的改动区间
-          # 会从上一个预览版开始算，正式版之间真正的改动整段消失。
-          prev=$(git describe --tags --abbrev=0 --exclude='*-*' "${TAG}^" 2>/dev/null || true)
+          # 正式版要排除预览版 tag（v3.1.1-preview.102 也是 tag），否则区间从上一个预览版
+          # 开始算，正式版之间真正的改动整段消失；预览版反过来要留在预览 tag 之间，
+          # 否则区间被拉回上一个正式版，把已经随正式版发过的改动重列一遍。
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            prev=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)
+          else
+            prev=$(git describe --tags --abbrev=0 --exclude='*-*' "${TAG}^" 2>/dev/null || true)
+          fi
           pkg=com.rikkahub.l3hub.wfadnf
           version=$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts | head -1)
           {
