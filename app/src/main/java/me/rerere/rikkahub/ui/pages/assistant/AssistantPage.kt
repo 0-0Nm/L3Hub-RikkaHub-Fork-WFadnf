@@ -216,9 +216,6 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                         AssistantItem(
                             assistant = assistant,
                             settings = settings,
-                            modifier = Modifier.heroSource(
-                                Screen.AssistantDetail(id = assistant.id.toString())
-                            ),
                             memories = memories,
                             onEdit = {
                                 navController.navigate(Screen.AssistantDetail(id = assistant.id.toString()))
@@ -239,6 +236,7 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                                 .fillMaxWidth()
                                 .animateItem()
                                 .then(longPressReorder(isDragging, enabled = !isFiltering))
+                                .heroSource(Screen.AssistantDetail(id = assistant.id.toString()))
                         )
                     }
                 }
