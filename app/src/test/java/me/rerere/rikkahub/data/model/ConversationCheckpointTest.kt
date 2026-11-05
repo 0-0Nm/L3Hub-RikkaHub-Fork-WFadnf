@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.data.model
 
 import me.rerere.ai.ui.UIMessage
-import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.limitContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -27,27 +26,18 @@ class ConversationCheckpointTest {
     }
 
     @Test
-    fun `checkpoint split keeps the original message and only trims the request context`() {
-        val parts = listOf(
-            UIMessagePart.Text("summarized prefix"),
-            UIMessagePart.Text("kept suffix"),
-        )
-        val split = UIMessage.assistant("").copy(parts = parts).toMessageNode()
-        val nodes = listOf(UIMessage.user("hello").toMessageNode(), split)
+    fun `the previous checkpoint is absorbed by the new summary`() {
+        val nodes = List(4) { UIMessage.user("message $it").toMessageNode() }
         val source = Conversation(assistantId = Uuid.random(), messageNodes = nodes)
 
-        val result = source.insertContextCheckpoint(
-            afterNodeId = nodes[0].id,
-            summary = "summary",
-            splitMessageId = split.currentMessage.id,
-            keepPartsFrom = 1,
-        )!!
+        val first = source.insertContextCheckpoint(afterNodeId = nodes[1].id, summary = "first")!!
+        val second = first.insertContextCheckpoint(afterNodeId = nodes[2].id, summary = "second")!!
 
-        assertEquals(parts, result.messageNodes[2].currentMessage.parts)
-        assertEquals(
-            listOf(result.messageNodes[1].currentMessage, split.currentMessage.copy(parts = parts.drop(1))),
-            result.currentMessages.limitContext(0),
-        )
+        // 旧摘要的正文已经进了这次压缩的输入，留着只会在会话里堆一串摘要块
+        assertEquals(1, second.messageNodes.count { it.currentMessage.isContextCheckpoint })
+        assertEquals(nodes.subList(0, 3), second.messageNodes.subList(0, 3))
+        assertEquals("second", second.messageNodes[3].currentMessage.toText())
+        assertEquals(nodes[3], second.messageNodes[4])
     }
 
     @Test

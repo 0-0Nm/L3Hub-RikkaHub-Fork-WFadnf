@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.service
 
 import android.app.Application
-import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.StringRes
 import androidx.core.net.toUri
@@ -26,7 +25,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.LocalDateTime
 import me.rerere.ai.agent.AgentEvent
 import me.rerere.ai.agent.AgentFinishReason
 import me.rerere.ai.agent.RetryAttempt
@@ -69,12 +67,13 @@ import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.event.ChatStatus
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
-import me.rerere.rikkahub.data.model.AutoCompressTarget
-import me.rerere.rikkahub.data.model.AutoCompressThreshold
 import me.rerere.rikkahub.data.model.ContextTrim
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.TodoItem
+import me.rerere.rikkahub.data.model.autoCompressBudget
+import me.rerere.rikkahub.data.model.autoCompressKeepMessages
 import me.rerere.rikkahub.data.model.autoCompressLimit
+import me.rerere.rikkahub.data.model.autoCompressRetainedBudget
 import me.rerere.rikkahub.data.model.bindConfig
 import me.rerere.rikkahub.data.model.cancelInterruptedTools
 import me.rerere.rikkahub.data.model.deleteMessage
@@ -91,7 +90,6 @@ import me.rerere.rikkahub.data.model.insertContextCheckpoint
 import me.rerere.rikkahub.data.model.resolveContextUsage
 import me.rerere.rikkahub.data.model.isAwaitingToolApproval
 import me.rerere.rikkahub.data.model.isContextLimitReached
-import me.rerere.rikkahub.data.model.keepRecentContextForTokens
 import me.rerere.rikkahub.data.model.lastContextTokens
 import me.rerere.rikkahub.data.model.localFileUrls
 import me.rerere.rikkahub.data.model.replaceUserRegexes
@@ -117,7 +115,6 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatService"
-private const val LOOP_COMPRESSION_CHECK_INTERVAL_MS = 1_000L
 
 // 只收能指向「上下文/输入超限」的说法。像 "payload too large" 和单独的「令牌数」这种
 // 更像网关的请求体大小限制或无关的 token 报错，匹配上会白跑一次付费压缩再失败。
@@ -1078,11 +1075,6 @@ class ChatService(
         contextRetryCount: Int = 0,
     ): TurnResult {
         val conversationId = session.id
-        // 循环压缩的检查很重（要扫整个上下文），流式时按时间节流；
-        // 但每步结束（finishedAt 变化）必须检查一次，否则可能漏掉下一次请求前的超限
-        var lastLoopCompressionCheckAt = 0L
-        var lastStepFinishedAt: LocalDateTime? = null
-        var lastExecutedToolCount = -1
         // 先清理上一轮状态；确定历史后，仅为真正的续写恢复消息 ID。
         session.replyMessageId.value = null
         // 生成开始前失败时通知只用来取消 Live Update，用不到发送者名称
@@ -1128,6 +1120,13 @@ class ChatService(
                 turn = turn,
                 messages = history,
                 processingStatus = session.processingStatus,
+                // 模型循环里、每次请求之前检查上下文。压缩会中途换掉历史，而 AgentLoop 手里的
+                // history 是启动时那份快照，所以每一步都按最新会话重新组装：压缩才能对后续步骤
+                // 持续生效。没压缩时它与 history + current 等价，不会改变请求内容
+                beforeStep = { stepMessages ->
+                    compressBeforeStep(session, turn, regenerateNodeId)
+                    session.state.value.historyForStep(regenerateNodeId, stepMessages.lastOrNull())
+                },
             )
             var finishReason: AgentFinishReason? = null
             try {
@@ -1145,21 +1144,6 @@ class ChatService(
                             appEventBus.tryEmit(
                                 AppEvent.ChatGenerationUpdate(conversationId, event.message, senderName)
                             )
-                            // 这条检查要扫整个上下文，流式时每个 chunk 都跑会把主线程拖死；
-                            // 平时一秒一次，每步结束再补一次，保证下一次请求之前一定检查过
-                            val finishedAt = event.message.finishedAt
-                            val stepFinished = finishedAt != null && finishedAt != lastStepFinishedAt
-                            if (stepFinished) lastStepFinishedAt = finishedAt
-                            val executedToolCount = event.message.getTools().count { it.isExecuted }
-                            val toolsProgressed = executedToolCount != lastExecutedToolCount
-                            lastExecutedToolCount = executedToolCount
-                            val now = SystemClock.elapsedRealtime()
-                            if (stepFinished || toolsProgressed ||
-                                now - lastLoopCompressionCheckAt >= LOOP_COMPRESSION_CHECK_INTERVAL_MS
-                            ) {
-                                lastLoopCompressionCheckAt = now
-                                requestLoopCompressionIfNeeded(session, turn, event.message)
-                            }
                         }
 
                         is AgentEvent.Retrying -> {
@@ -1214,7 +1198,7 @@ class ChatService(
             return TurnResult.Failed
         } catch (e: Exception) {
             // 模型循环里上下文超限：压缩后从当前状态继续这一轮，最多重试一次
-            if (contextRetryCount < 2 && retryWithCompression(session, e)) {
+            if (contextRetryCount < 2 && retryWithCompression(session, e, regenerateNodeId)) {
                 return runTurn(session, regenerateNodeId, contextRetryCount = contextRetryCount + 1)
             }
             // 兜底取消 Live Update 通知（生成开始前失败时上面的 finally 不会执行）
@@ -1375,46 +1359,89 @@ class ChatService(
     }
 
     /**
-     * 工具执行完、下一次请求之前主动检查上下文。等提供商报错再压缩时，有些服务会把超限
-     * 包装成普通 400，甚至直接截断输入，循环压缩就永远不会触发；这里按估算值提前拦住。
+     * 模型循环里、发出下一次请求之前检查上下文。等提供商报错再压缩时，有些服务会把超限
+     * 包装成普通 400，甚至直接截断输入，循环压缩就永远不会触发；这里在请求发出之前拦住。
+     *
+     * 压缩后由调用方按最新会话重新组装这一步的消息。以前是先中断请求、压缩、再把整轮重跑一遍：
+     * 压缩完还得把同一段上下文再发一次，白白多付一次输入的钱，压缩对已经发出的那一步也不生效。
      */
-    private fun requestLoopCompressionIfNeeded(
+    private suspend fun compressBeforeStep(
         session: ConversationSession,
         turn: ChatTurnContext,
-        message: UIMessage,
+        regenerateNodeId: Uuid?,
     ) {
         if (!turn.assistant.autoCompress || !turn.assistant.autoCompressLoop) return
-        // 工具都执行完后检查一次；不要求工具一定在 parts 末尾，避免中间夹着思考/正文时漏掉
-        val tools = message.getTools()
-        if (tools.isEmpty() || tools.any { !it.isExecuted }) return
         val limit = turn.model.autoCompressLimit(turn.assistant.autoCompressThreshold) ?: return
-        val systemPrompt = if (turn.assistant.allowConversationSystemPrompt &&
-            !turn.conversationSystemPrompt.isNullOrBlank()) {
-            turn.conversationSystemPrompt.orEmpty()
-        } else {
-            turn.assistant.systemPrompt
-        }
-        // 和生成前那次检查用同一把尺子：真实 usage 与估算取大
-        val real = message.contextTokens()?.takeIf { it > 0 }
+        // 同一份上下文只压一次：压缩完之后还没发出过请求，就先别再压，
+        // 否则每一步都是一次整段摘要请求
+        if (session.isCompressedContext()) return
+        val conversation = session.state.value
         val used = resolveContextUsage(
-            realTokens = real,
-            visibleTokens = session.state.value.estimateContextTokens(turn.assistant.contextMessageLimit),
-            fixedTokens = estimateTokens(systemPrompt),
+            realTokens = conversation.lastContextTokens(),
+            visibleTokens = conversation.estimateContextTokens(turn.assistant.contextMessageLimit),
+            fixedTokens = estimateTokens(conversation.effectiveSystemPrompt(turn.assistant)),
         )
         if (used < limit) return
-        val source = if (real != null) "usage" else "estimate"
-        Log.i(TAG, "runTurn: context $used ($source) >= $limit, compress before next step")
-        throw LoopCompressionRequested(used, limit)
+        autoCompressIfNeeded(
+            session = session,
+            force = true,
+            // 末尾两条是这一轮的提问和正在生成的回复：一起压进摘要，模型只能对着摘要重开一轮
+            minTailNodes = 2,
+            // 重新生成较早的消息时，检查点不能插到那个节点后面
+            trimBeforeNodeId = regenerateNodeId,
+        )
     }
 
-    /** 循环压缩：模型循环里上下文超限时，保留正在生成的回复，压缩它之前的历史 */
-    private suspend fun retryWithCompression(session: ConversationSession, error: Throwable): Boolean {
-        if (error !is LoopCompressionRequested && !error.isContextOverflow()) return false
+    /**
+     * 这一步要发的历史：会话当前的分支，加上本轮正在写的那条回复。
+     *
+     * 重新生成时选区还停在旧分支上（新回复另起一个分支），只取 [Conversation.currentMessages]
+     * 会把被替换的旧回复也发给模型，所以按 [regenerateNodeId] 截断后再接回本轮回复。
+     * 循环手里那条消息优先于会话里的副本：会话里的可能已经过展示用的转换。
+     */
+    private fun Conversation.historyForStep(
+        regenerateNodeId: Uuid?,
+        current: UIMessage?,
+    ): List<UIMessage> {
+        val history = if (regenerateNodeId != null) {
+            val index = messageNodes.indexOfFirst { it.id == regenerateNodeId }
+            if (index == -1) currentMessages else currentMessages.take(index)
+        } else {
+            currentMessages
+        }
+        return when {
+            current == null -> history
+            history.lastOrNull()?.id == current.id -> history.dropLast(1) + current
+            current.role == MessageRole.ASSISTANT -> history + current
+            else -> history
+        }
+    }
+
+    /** 这一轮真正发给模型的 systemPrompt：会话级覆盖优先 */
+    private fun Conversation.effectiveSystemPrompt(assistant: Assistant): String =
+        if (assistant.allowConversationSystemPrompt && !customSystemPrompt.isNullOrBlank()) {
+            customSystemPrompt.orEmpty()
+        } else {
+            assistant.systemPrompt
+        }
+
+    /** 提供商已经报上下文超限：压缩后重跑这一轮，最多重试两次 */
+    private suspend fun retryWithCompression(
+        session: ConversationSession,
+        error: Throwable,
+        regenerateNodeId: Uuid?,
+    ): Boolean {
+        if (!error.isContextOverflow()) return false
         val assistant = settingsStore.awaitLoaded().getAssistantOf(session.state.value)
         if (!assistant.autoCompress || !assistant.autoCompressLoop) return false
         Log.i(TAG, "runTurn: context overflow, compress and retry")
-        return autoCompressIfNeeded(session, force = true, keepTailNodes = 1) ==
-            CompressAttempt.COMPRESSED
+        return autoCompressIfNeeded(
+            session = session,
+            force = true,
+            // 和循环压缩一样：提问和正在写的回复都不能压进摘要
+            minTailNodes = 2,
+            trimBeforeNodeId = regenerateNodeId,
+        ) == CompressAttempt.COMPRESSED
     }
 
     /**
@@ -1428,16 +1455,17 @@ class ChatService(
     /**
      * 自动压缩：上下文占用到 WARN/MAX 门限时，在生成本轮回复之前先压缩一次。
      *
-     * [force] 跳过门限检查，用于模型循环中已经确定超限的场景；[keepTailNodes] 指定末尾保留的
-     * 消息条数，循环压缩时保留正在生成的那条回复，压缩请求只发送它之前的历史。
+     * [force] 只跳过门限判断（提供商已经报超限，或者调用方刚算过一遍）。
+     * 「同一份上下文只压一次」的守卫始终生效：重复总结同一段历史只会多付一次摘要请求，
+     * 压出来的摘要还和上一份一样。
      *
      * 生成中的加载球复用 [ConversationSession.processingStatus]，显示「正在压缩……」，不弹浮窗。
-     * 插入检查点后 [Conversation.lastContextTokens] 会返回 null，同一轮不会重复触发。
      */
     private suspend fun autoCompressIfNeeded(
         session: ConversationSession,
         force: Boolean = false,
-        keepTailNodes: Int? = null,
+        minTailNodes: Int = 1,
+        trimBeforeNodeId: Uuid? = null,
     ): CompressAttempt {
         // 同一份上下文只压一次：并发/连续触发时后面的直接放弃，避免把同一段历史总结两遍
         if (!session.compressMutex.tryLock()) {
@@ -1445,12 +1473,13 @@ class ChatService(
             return CompressAttempt.SKIPPED
         }
         return try {
-            // 节点数和末尾节点都没变，才是同一份上下文；只比条数会被「删一条再加一条」骗过去
-            if (!force && session.isCompressedContext()) {
+            // 节点数、末尾节点、末尾消息都没变，才是同一份上下文；
+            // 只比条数会被「删一条再加一条」和「续写」骗过去
+            if (session.isCompressedContext()) {
                 Log.d(TAG, "autoCompress: context unchanged since last compression, skip")
                 CompressAttempt.SKIPPED
             } else {
-                autoCompressLocked(session, force, keepTailNodes)
+                autoCompressLocked(session, force, minTailNodes, trimBeforeNodeId)
             }
         } finally {
             session.compressMutex.unlock()
@@ -1460,7 +1489,8 @@ class ChatService(
     private suspend fun autoCompressLocked(
         session: ConversationSession,
         force: Boolean,
-        keepTailNodes: Int?,
+        minTailNodes: Int,
+        trimBeforeNodeId: Uuid?,
     ): CompressAttempt {
         val settings = settingsStore.awaitLoaded()
         val conversation = session.state.value
@@ -1474,39 +1504,38 @@ class ChatService(
         // 两个口径各有盲区：usage 看不到刚追加、还没发出去的消息，估算看不到工具定义，
         // 所以都算一遍取大的
         val real = conversation.lastContextTokens()?.takeIf { it > 0 }
-        val systemPrompt = if (assistant.allowConversationSystemPrompt &&
-            !conversation.customSystemPrompt.isNullOrBlank()) {
-            conversation.customSystemPrompt.orEmpty()
-        } else {
-            assistant.systemPrompt
-        }
-        val systemTokens = estimateTokens(systemPrompt)
+        val systemTokens = estimateTokens(conversation.effectiveSystemPrompt(assistant))
         val used = resolveContextUsage(
             realTokens = real,
             visibleTokens = conversation.estimateContextTokens(assistant.contextMessageLimit),
             fixedTokens = systemTokens,
         )
-        // 摘要和 systemPrompt 压缩之后仍然占着上下文：截断目标先扣掉这块固定开销
-        val checkpointMessage = conversation.messageNodes
-            .lastOrNull { it.currentMessage.isContextCheckpoint }
-            ?.currentMessage
-        val reservedTokens = systemTokens +
-            (checkpointMessage?.let { estimateMessageTokens(it) } ?: 0)
         if (!force && (limit == null || used < limit)) {
             Log.d(TAG, "autoCompress: skip used=$used real=$real limit=$limit")
             return CompressAttempt.SKIPPED
         }
 
+        // 摘要和 systemPrompt 压缩之后仍然占着上下文：保留区的预算先扣掉这块固定开销，
+        // 否则压完正好贴着预算，下一轮加一条消息又触发一次
+        val checkpointTokens = conversation.messageNodes
+            .lastOrNull { it.currentMessage.isContextCheckpoint }
+            ?.currentMessage
+            ?.let(::estimateMessageTokens)
+            ?: 0
+        val budget = autoCompressBudget(used, limit)
+        // 重新生成较早的消息时，截断点必须在那个节点之前：插到它后面，请求按 regenerateNodeId
+        // 截断后连检查点都看不到，压缩等于没发生。再往前让一格，那个节点前面那条提问也不能压掉，
+        // 否则这一步的请求里只剩一条摘要
+        val maxEndIndex = if (trimBeforeNodeId == null) {
+            conversation.messageNodes.size
+        } else {
+            conversation.messageNodes.indexOfFirst { it.id == trimBeforeNodeId } - 1
+        }
         val trim = conversation.resolveAutoCompressTrim(
-            target = assistant.autoCompressTarget,
-            targetValue = assistant.autoCompressTargetValue,
-            keepTailNodes = keepTailNodes,
-            force = force,
-            reservedTokens = reservedTokens,
-            // 用门限判断实际用掉的那个数：两边尺子不一致会留出一段「判超限但没有可压范围」
-            limitTokens = used,
-            // 压缩目标再按门限封顶，占用远超门限时不必连压几轮
-            thresholdTokens = limit,
+            keepMessages = assistant.autoCompressKeepMessages,
+            minTailNodes = minTailNodes,
+            retainedBudget = autoCompressRetainedBudget(budget, systemTokens + checkpointTokens),
+            maxEndIndex = maxEndIndex,
         ) ?: run {
             Log.d(TAG, "autoCompress: no compressible range")
             return CompressAttempt.SKIPPED
@@ -1514,8 +1543,8 @@ class ChatService(
 
         Log.i(
             TAG,
-            "autoCompress: conversation=${session.id} used=$used real=$real " +
-                "limit=$limit reserved=$reservedTokens trim=$trim",
+            "autoCompress: conversation=${session.id} used=$used real=$real limit=$limit " +
+                "budget=$budget trim=${trim.nodeIndex}",
         )
         val statusSender = assistant.name.ifEmpty { context.getString(R.string.assistant_page_default_assistant) }
         appEventBus.tryEmit(AppEvent.ChatGenerationStatus(session.id, statusSender, ChatStatus.COMPRESSING))
@@ -1569,11 +1598,7 @@ class ChatService(
         val checkpointIndex = nodes.indexOfLast { it.currentMessage.isContextCheckpoint }
         // 压缩范围是 (checkpointIndex, endIndex)，之后的节点原样保留
         val endIndex = trim.nodeIndex
-        // 上一个检查点之后没有可压缩的消息；partIndex > 0 时允许切分检查点后的第一条消息
-        val onlyCheckpointTail = endIndex == checkpointIndex + 1
-        if (endIndex < checkpointIndex + 1 || endIndex > nodes.size ||
-            (onlyCheckpointTail && (trim.partIndex == 0 || checkpointIndex < 0))
-        ) {
+        if (endIndex <= checkpointIndex + 1 || endIndex > nodes.size) {
             throw IllegalStateException(
                 context.getString(
                     if (endIndex < nodes.size) {
@@ -1584,19 +1609,10 @@ class ChatService(
                 )
             )
         }
-        // partIndex 指向 endIndex 这条消息内部：前半段进摘要，后半段留在检查点之后
-        val splitNode = if (trim.partIndex > 0) {
-            nodes.getOrNull(endIndex)?.takeIf { trim.partIndex < it.currentMessage.parts.size }
-        } else {
-            null
-        }
-        val summarizedParts = splitNode?.currentMessage?.parts?.take(trim.partIndex).orEmpty()
         // 未完成的工具调用没有结果，请求会被服务端拒绝；压到检查点之前也再不会执行。
         // 保留区里的不发给压缩请求，压缩后照常留在检查点之后，不用检查
         check(nodes.subList(checkpointIndex + 1, endIndex).none { node ->
             node.currentMessage.getTools().any { it.isPending || it.canResumeExecution }
-        } && summarizedParts.none { part ->
-            part is UIMessagePart.Tool && (part.isPending || part.canResumeExecution)
         }) { context.getString(R.string.chat_page_compress_handle_pending_tools) }
 
         // 必须和对话用同一个模型、同一套请求组装，才能命中提示词缓存
@@ -1607,10 +1623,6 @@ class ChatService(
         val summaryMessages = buildList {
             checkpointMessage?.let { add(it) }
             addAll(conversation.currentMessages.subList(checkpointIndex + 1, endIndex))
-            // 被截掉的前半段仍要参与摘要，否则这部分内容会凭空消失
-            if (splitNode != null) {
-                add(splitNode.currentMessage.copy(parts = summarizedParts))
-            }
         }
         val summary = requestFactory.generateCompressionSummary(
             turn = turn,
@@ -1638,18 +1650,11 @@ class ChatService(
             val updated = latest.insertContextCheckpoint(
                 afterNodeId = nodes[endIndex - 1].id,
                 summary = summary,
-                splitMessageId = splitNode?.currentMessage?.id,
-                keepPartsFrom = trim.partIndex,
             ) ?: throw IllegalStateException(context.getString(R.string.chat_page_compress_conversation_changed))
             updated.copy(chatSuggestions = emptyList())
         }
         session.flush()
     }
-
-    private class LoopCompressionRequested(
-        val estimated: Int,
-        val limit: Int,
-    ) : Exception("estimated context $estimated exceeds limit $limit")
 
     // ---- 聊天页配置 ----
 

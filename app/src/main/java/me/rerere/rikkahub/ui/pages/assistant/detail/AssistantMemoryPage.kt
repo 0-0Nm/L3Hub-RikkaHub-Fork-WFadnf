@@ -26,9 +26,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBarDefaults
@@ -75,6 +72,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AutoCompressTarget
 import me.rerere.rikkahub.data.model.AutoCompressThreshold
 import me.rerere.rikkahub.data.model.MemoryFile
+import me.rerere.rikkahub.data.model.autoCompressKeepMessages
 import me.rerere.rikkahub.data.model.groupByDirectory
 import me.rerere.rikkahub.data.model.memoryTitleOf
 import me.rerere.rikkahub.data.repository.MemoryRepository
@@ -87,7 +85,6 @@ import me.rerere.rikkahub.ui.components.ui.ItemAction
 import me.rerere.rikkahub.ui.components.ui.ItemActionMenu
 import me.rerere.rikkahub.ui.components.ui.PagerTab
 import me.rerere.rikkahub.ui.components.ui.PagerTabs
-import me.rerere.rikkahub.ui.components.ui.glassSegmentedButtonColors
 import me.rerere.rikkahub.ui.components.ui.shadow.FilledTonalButton
 import me.rerere.rikkahub.ui.components.ui.switchItem
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -286,7 +283,6 @@ private fun MemorySettingsTab(
     var showAutoCompressThresholdDialog by remember(assistant.id) { mutableStateOf(false) }
     var showAutoCompressTargetDialog by remember(assistant.id) { mutableStateOf(false) }
     var autoCompressTargetInput by remember(assistant.id) { mutableStateOf("") }
-    var autoCompressTargetMode by remember(assistant.id) { mutableStateOf(assistant.autoCompressTarget) }
     val settings = LocalSettings.current
     val dreamingModelState = rememberModelListState(
         modelId = assistant.dreamingModelId,
@@ -375,45 +371,16 @@ private fun MemorySettingsTab(
 
     if (showAutoCompressTargetDialog) {
         val parsed = autoCompressTargetInput.toIntOrNull()
-        val minValue = if (autoCompressTargetMode == AutoCompressTarget.MESSAGES) 1 else 100
-        // 上限防手滑：条数填得比现存消息还多，压缩永远找不到可压范围；token 填得比模型窗口还大，
-        // 保留区会撑到门限之上。两种情况界面都照旧显示「已开启」，用户只会觉得压缩坏了
-        val maxValue = if (autoCompressTargetMode == AutoCompressTarget.MESSAGES) 500 else 1_000_000
+        // 上限防手滑：条数填得比现存消息还多，压缩永远找不到可压范围，界面却照旧显示「已开启」，
+        // 用户只会觉得压缩坏了
+        val minValue = 1
+        val maxValue = 500
         val valid = parsed != null && parsed in minValue..maxValue
         AlertDialog(
             onDismissRequest = { showAutoCompressTargetDialog = false },
             title = { Text(stringResource(R.string.assistant_page_memory_auto_compress_target)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        AutoCompressTarget.entries.forEachIndexed { index, mode ->
-                            SegmentedButton(
-                                colors = glassSegmentedButtonColors(),
-                                selected = autoCompressTargetMode == mode,
-                                onClick = {
-                                    autoCompressTargetMode = mode
-                                    val current = autoCompressTargetInput.toIntOrNull() ?: 0
-                                    autoCompressTargetInput = when (mode) {
-                                        AutoCompressTarget.MESSAGES ->
-                                            if (current in 1..200) current.toString() else "8"
-                                        AutoCompressTarget.TOKENS ->
-                                            if (current >= 1000) current.toString() else "16000"
-                                    }
-                                },
-                                shape = SegmentedButtonDefaults.itemShape(index, AutoCompressTarget.entries.size),
-                            ) {
-                                Text(
-                                    stringResource(
-                                        if (mode == AutoCompressTarget.MESSAGES) {
-                                            R.string.assistant_page_memory_auto_compress_mode_messages
-                                        } else {
-                                            R.string.assistant_page_memory_auto_compress_mode_tokens
-                                        }
-                                    )
-                                )
-                            }
-                        }
-                    }
                     TextField(
                         value = autoCompressTargetInput,
                         onValueChange = { autoCompressTargetInput = it },
@@ -440,7 +407,7 @@ private fun MemorySettingsTab(
                         parsed?.let {
                             onUpdateAssistant(
                                 assistant.copy(
-                                    autoCompressTarget = autoCompressTargetMode,
+                                    autoCompressTarget = AutoCompressTarget.MESSAGES,
                                     autoCompressTargetValue = it,
                                 )
                             )
@@ -585,16 +552,10 @@ private fun MemorySettingsTab(
                     supportingContent = { Text(stringResource(R.string.assistant_page_memory_auto_compress_target_desc)) },
                     trailingContent = {
                         Text(
-                            text = when (assistant.autoCompressTarget) {
-                                AutoCompressTarget.MESSAGES -> stringResource(
-                                    R.string.assistant_page_memory_auto_compress_messages,
-                                    assistant.autoCompressTargetValue,
-                                )
-                                AutoCompressTarget.TOKENS -> stringResource(
-                                    R.string.assistant_page_memory_auto_compress_tokens,
-                                    assistant.autoCompressTargetValue,
-                                )
-                            },
+                            text = stringResource(
+                                R.string.assistant_page_memory_auto_compress_messages,
+                                assistant.autoCompressKeepMessages,
+                            ),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary,
                         )
@@ -602,11 +563,8 @@ private fun MemorySettingsTab(
                     onClick = {
                         // 上限是后加的：存量配置可能已经越界，打开时先夹进区间，
                         // 否则输入框一进来就是错误态、保存键禁用，用户不改数字就退不出去
-                        val mode = assistant.autoCompressTarget
-                        val range = if (mode == AutoCompressTarget.MESSAGES) 1..500 else 100..1_000_000
-                        autoCompressTargetMode = mode
                         autoCompressTargetInput =
-                            assistant.autoCompressTargetValue.coerceIn(range).toString()
+                            assistant.autoCompressKeepMessages.coerceIn(1, 500).toString()
                         showAutoCompressTargetDialog = true
                     },
                 )

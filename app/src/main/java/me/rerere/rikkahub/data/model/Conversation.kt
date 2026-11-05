@@ -192,19 +192,17 @@ fun Conversation.lastContextTokens(): Int? {
 /**
  * 在 [afterNodeId] 节点之后插入压缩检查点；该节点已不存在时返回 null。
  *
- * [splitMessageId] 不为空时，检查点只让这条消息从 [keepPartsFrom] 开始的 part 发给模型。
- * 原文不会被删改，聊天页仍能看到完整内容；被截掉的前半段已经写进摘要。
+ * 检查点替代它之前的全部历史，却只改发给模型的内容：原文一条不删，聊天页仍能看到完整内容。
+ * 旧版本的检查点还可能带 `contextStartMessageId` / `contextStartPartIndex`（切在一条消息中间），
+ * 请求侧由 `limitContext` 兼容，新写入的检查点一律落在消息边界上。
  */
 internal fun Conversation.insertContextCheckpoint(
     afterNodeId: Uuid,
     summary: String,
-    splitMessageId: Uuid? = null,
-    keepPartsFrom: Int = 0,
 ): Conversation? {
     // 旧检查点已经被新摘要吸收——它的文本就在这次压缩的输入里——留着只会在聊天页堆出一串
     // 摘要块，导出和 WebDto 也跟着带上全部旧摘要。请求侧本来只用最后一个，删掉不改变行为。
-    // 锚点本身是旧检查点时要留着：part 边界压缩的锚点正好是上一个检查点
-    // （endIndex - 1 == checkpointIndex），滤掉它会让这类压缩永远找不到插入位置
+    // 锚点本身是检查点时留着：正常调用不会这样传，但滤掉它只会让插入无声失败
     val nodes = messageNodes
         .filterNot { node ->
             node.id != afterNodeId &&
@@ -213,11 +211,7 @@ internal fun Conversation.insertContextCheckpoint(
         .toMutableList()
     val index = nodes.indexOfFirst { it.id == afterNodeId }
     if (index == -1) return null
-    val checkpoint = UIMessage.user(summary).copy(
-        isContextCheckpoint = true,
-        contextStartMessageId = splitMessageId?.takeIf { keepPartsFrom > 0 },
-        contextStartPartIndex = keepPartsFrom.coerceAtLeast(0),
-    ).toMessageNode()
+    val checkpoint = UIMessage.user(summary).copy(isContextCheckpoint = true).toMessageNode()
     nodes.add(index + 1, checkpoint)
     return copy(messageNodes = nodes)
 }

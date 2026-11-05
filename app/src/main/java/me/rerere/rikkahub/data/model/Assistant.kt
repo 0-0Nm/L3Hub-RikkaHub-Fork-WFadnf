@@ -42,9 +42,10 @@ data class Assistant(
     // 上下文到达门限后自动压缩，效果与手动压缩一致（插入检查点摘要）
     val autoCompress: Boolean = false,
     val autoCompressThreshold: AutoCompressThreshold = AutoCompressThreshold.WARN,
+    // 已废弃：压缩只按消息条数保留，留着这个字段只为旧设置还能解码
     val autoCompressTarget: AutoCompressTarget = AutoCompressTarget.MESSAGES,
-    val autoCompressTargetValue: Int = 8, // 按条数时保留的消息条数；按 token 时保留的 token 数
-    // 模型循环中请求上下文超限时，压缩后继续本轮生成
+    val autoCompressTargetValue: Int = 8, // autoCompressTarget 为 MESSAGES 时保留的消息条数
+    // 模型循环中每次请求之前检查上下文，超限就先压缩再发
     val autoCompressLoop: Boolean = false,
     val enableRecentChatsReference: Boolean = false,
     val messageTemplate: String = "{{ message }}",

@@ -15,6 +15,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.rerere.ai.ui.finishReasoning
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.estimateMessageTokens
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.uuid.Uuid
@@ -243,25 +244,39 @@ class ConversationSession(
     /** 自动压缩串行化：并发或连续触发时只让第一次真正跑 */
     internal val compressMutex = Mutex()
 
-    /** 上一次成功压缩后的节点数；和 [compressedTailNodeId] 一起用来判断上下文有没有变过 */
+    /** 上一次成功压缩时的上下文指纹，见 [isCompressedContext] */
     @Volatile
-    internal var compressedNodeCount: Int = -1
+    private var compressedFingerprint: ContextFingerprint? = null
 
-    /** 上一次成功压缩时的末尾节点：只比节点数会被「删一条再加一条」骗过去 */
-    @Volatile
-    internal var compressedTailNodeId: Uuid? = null
+    private data class ContextFingerprint(
+        val nodeCount: Int,
+        val tailNodeId: Uuid?,
+        val tailMessageId: Uuid?,
+        val tailTokens: Int,
+    )
 
     /** 记下这次压缩落在哪份上下文上 */
     internal fun markCompressed() {
-        val nodes = state.value.messageNodes
-        compressedNodeCount = nodes.size
-        compressedTailNodeId = nodes.lastOrNull()?.id
+        compressedFingerprint = currentFingerprint()
     }
 
-    /** 当前上下文是否就是上次压缩后的那一份 */
-    internal fun isCompressedContext(): Boolean {
+    /**
+     * 当前上下文是否就是上次压缩后的那一份。
+     *
+     * 只比节点数会被「删一条再加一条」骗过去；末尾消息的内容也要比——模型循环里压缩完，
+     * 正在生成的那条回复还会继续追加正文和工具输出，那已经不是同一份上下文了。
+     */
+    internal fun isCompressedContext(): Boolean = compressedFingerprint == currentFingerprint()
+
+    private fun currentFingerprint(): ContextFingerprint {
         val nodes = state.value.messageNodes
-        return nodes.size == compressedNodeCount && nodes.lastOrNull()?.id == compressedTailNodeId
+        return ContextFingerprint(
+            nodeCount = nodes.size,
+            tailNodeId = nodes.lastOrNull()?.id,
+            tailMessageId = nodes.lastOrNull()?.currentMessage?.id,
+            // 工具输出是原地改写，part 数不变；按估算 token 比才能真正看出回复又长了多少
+            tailTokens = nodes.lastOrNull()?.currentMessage?.let(::estimateMessageTokens) ?: 0,
+        )
     }
 
     internal fun acquire(): Int = refCount.incrementAndGet().also {

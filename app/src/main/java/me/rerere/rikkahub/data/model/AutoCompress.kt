@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.data.model
 
 import kotlinx.serialization.Serializable
-import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -14,87 +13,41 @@ enum class AutoCompressThreshold {
     MAX,
 }
 
-/** 自动压缩保留多少最近上下文：按消息条数或按 token 数 */
+/**
+ * 压缩后保留多少最近上下文。
+ *
+ * 现在只按消息条数保留。按 token 数保留的算法已经移除：它要靠字符估算在消息内部找 part
+ * 边界，切点经常落在半条消息上，附件、工具调用和正文对不上，模型读到的是残缺的一轮。
+ * [TOKENS] 只是为了旧设置文件还能解码，运行时按 [AUTO_COMPRESS_DEFAULT_KEEP_MESSAGES] 处理。
+ */
 @Serializable
 enum class AutoCompressTarget {
     MESSAGES,
     TOKENS,
 }
 
+/** 自动压缩默认保留的消息条数 */
+internal const val AUTO_COMPRESS_DEFAULT_KEEP_MESSAGES = 8
+
+/** 自动压缩保留的消息条数；旧版本按 token 数配置的助手退回默认条数 */
+val Assistant.autoCompressKeepMessages: Int
+    get() = if (autoCompressTarget == AutoCompressTarget.MESSAGES) {
+        autoCompressTargetValue.coerceAtLeast(1)
+    } else {
+        AUTO_COMPRESS_DEFAULT_KEEP_MESSAGES
+    }
+
 /**
- * 压缩后保留的起点。
+ * 压缩后保留的起点：[nodeIndex] 之前的消息全部压进摘要，从这里开始的消息原样发给模型。
  *
- * [nodeIndex] 之前的消息全部压进摘要；[partIndex] 大于 0 时，[nodeIndex] 这条消息只保留
- * 从该 part 开始的后缀（思考、正文、工具调用等 part 的边界），避免为了凑 token 数整条丢弃。
+ * 切点一定落在两条消息之间。压缩只改变发给模型的上下文，会话里存的消息一条都不删。
  */
-data class ContextTrim(val nodeIndex: Int, val partIndex: Int = 0)
+data class ContextTrim(val nodeIndex: Int)
 
 private const val MESSAGE_TOKEN_OVERHEAD = 4
 
 /**
- * 从对话末尾往前累计，找出离 [targetTokens] 最近的 part 边界。
- *
- * 只统计最后一个压缩检查点之后的消息：检查点之前的内容已经由摘要代替，不会发给模型。
- * token 数按字符粗略估算（CJK 一字约一 token，其它约四字符一 token），
- * 只用来决定压缩范围，不要求精确。
- */
-fun Conversation.keepRecentContextForTokens(targetTokens: Int): ContextTrim {
-    if (targetTokens <= 0 || messageNodes.isEmpty()) return ContextTrim(messageNodes.size)
-
-    var used = 0
-    var keptAny = false
-    var index = messageNodes.lastIndex
-    while (index >= 0) {
-        val node = messageNodes[index]
-        val message = node.messages.getOrNull(node.selectIndex)
-        if (message == null) {
-            index--
-            continue
-        }
-        if (message.isContextCheckpoint) break
-
-        val partTokens = message.parts.map(::estimatePartTokens)
-        val messageTokens = MESSAGE_TOKEN_OVERHEAD + partTokens.sum()
-        if (used + messageTokens <= targetTokens) {
-            used += messageTokens
-            keptAny = true
-            index--
-            continue
-        }
-
-        // 用户消息不拆，宁可整条保留或整条压掉；附件和文本拆开容易破坏语义。
-        // 最新一条消息必须保留，否则刚发出的问题会被压进摘要、模型看不到。
-        if (message.role == MessageRole.USER || message.parts.isEmpty()) {
-            return ContextTrim(if (keptAny) index + 1 else index)
-        }
-
-        // 这条消息放不下：在它的 part 边界里挑一个估算值最接近目标的
-        var best = if (keptAny) ContextTrim(index + 1) else ContextTrim(index)
-        var bestDiff = if (keptAny) {
-            kotlin.math.abs(targetTokens - used)
-        } else {
-            kotlin.math.abs(targetTokens - (used + messageTokens))
-        }
-        var suffixTokens = 0
-        for (partIndex in message.parts.indices.reversed()) {
-            suffixTokens += partTokens[partIndex]
-            // 空文本/空 part 不能当成切割边界，否则截断后内容没有变化
-            if (partTokens[partIndex] <= 0) continue
-            val estimate = used + MESSAGE_TOKEN_OVERHEAD + suffixTokens
-            val diff = kotlin.math.abs(targetTokens - estimate)
-            if (diff < bestDiff || (diff == bestDiff && estimate <= targetTokens)) {
-                best = ContextTrim(index, partIndex)
-                bestDiff = diff
-            }
-            if (estimate >= targetTokens) break
-        }
-        return best
-    }
-    return ContextTrim(index + 1)
-}
-
-/**
- * 实际会发给模型的上下文 token 估算；压缩前的老消息和 part 边界之前的内容都不计入。
+ * 实际会发给模型的上下文 token 估算；压缩前的老消息和检查点之前的 part 都不计入。
  *
  * [messageLimit] 必须和组装请求时的 `assistant.contextMessageLimit` 一致：判定用的尺子比发送用的
  * 尺子长，就会为一堆根本不会发出去的尾部消息反复触发压缩，每次还都是一次全量摘要请求。
@@ -106,7 +59,16 @@ fun Conversation.estimateContextTokens(messageLimit: Int = 0): Int =
 internal fun estimateMessageTokens(message: UIMessage): Int =
     MESSAGE_TOKEN_OVERHEAD + message.parts.sumOf(::estimatePartTokens)
 
-/** 单个 part 的 token 估算，用来决定消息内部的截断位置 */
+/** 从 [start] 开始（含）仍会发给模型的消息的 token 估算，用来核对保留区有没有超预算 */
+internal fun Conversation.estimateNodesTokens(start: Int): Int {
+    var total = 0
+    for (index in start.coerceIn(0, messageNodes.size) until messageNodes.size) {
+        total += estimateMessageTokens(messageNodes[index].currentMessage)
+    }
+    return total
+}
+
+/** 单个 part 的 token 估算 */
 internal fun estimatePartTokens(part: UIMessagePart): Int = when (part) {
     is UIMessagePart.Text -> estimateTokens(part.text)
     is UIMessagePart.Reasoning -> estimateTokens(part.reasoning)
@@ -184,115 +146,72 @@ fun Model.autoCompressLimit(threshold: AutoCompressThreshold): Int? {
 }
 
 /**
- * 计算自动压缩的截断点。返回值已经过范围校验：null 表示没有可压缩的消息。
+ * 压缩预算：这次要把上下文压到多少 token 以内。
  *
- * [reservedTokens] 是压缩后依然占着上下文的那部分固定开销（摘要、systemPrompt 等）。
- * [limitTokens] 是门限判断实际用掉的那个占用值（真实 usage 与估算取大），压缩目标按它的
- * [AUTO_COMPRESS_TARGET_RATIO] 折算：压完留出余量，否则保留区贴着门限，下一轮立刻再压一次。
- * [thresholdTokens] 是门限本身。占用远远超过门限时（导入的长历史、换了窗口更小的模型），
- * 按占用的一半压完仍然在门限之上，下一轮接着压，要连压好几轮才进得去；所以再用门限的一半
- * 封一次顶，一次压到门限以内。
- *
- * 循环压缩（[force] && [keepTailNodes]）优先保留末尾那条正在生成的回复；检查点之后只剩
- * 这几条时压缩范围为空，此时返回 null 放弃这一轮——硬压会把正在生成的回复也总结掉，
- * 重试请求里连用户的问题都不剩。
+ * 取「当前占用的一半」和「门限的一半」里更小的那个。按门限压满，下一轮加一条消息就又过线；
+ * 占用远超门限时（导入的长历史、换了窗口更小的模型）只看占用的一半还会连压几轮，
+ * 每一轮都是一次整段摘要请求，所以再用门限的一半封顶。
  */
-internal fun Conversation.resolveAutoCompressTrim(
-    target: AutoCompressTarget,
-    targetValue: Int,
-    keepTailNodes: Int?,
-    force: Boolean,
-    reservedTokens: Int = 0,
-    limitTokens: Int? = null,
-    thresholdTokens: Int? = null,
-): ContextTrim? {
-    val checkpointIndex = messageNodes.indexOfLast { it.currentMessage.isContextCheckpoint }
-    if (messageNodes.size - checkpointIndex - 1 < 1) return null
-
-    // 压缩目标只取占用的一半：贴着实测占用压，下一轮加一条消息就又过线。
-    // 再以「门限的一半」封顶：占用是门限好几倍时，只看占用的一半会把压缩拖成连续几轮，
-    // 每一轮都是一次整段摘要请求；封顶之后一次就压进门限以内。
-    // 占用没有明显超过门限时，占用的一半本就更小，封顶不生效，行为和原来的「按对半压」一致。
-    val budget = limitTokens?.takeIf { it > 0 }?.let { used ->
-        val halfUsage = (used * AUTO_COMPRESS_TARGET_RATIO).toInt()
-        val halfThreshold = thresholdTokens?.takeIf { it > 0 }
-            ?.let { (it * AUTO_COMPRESS_TARGET_RATIO).toInt() }
-        if (halfThreshold == null) halfUsage else minOf(halfUsage, halfThreshold)
-    }
-
-    val preferred = if (keepTailNodes != null) {
-        ContextTrim((messageNodes.size - keepTailNodes).coerceAtLeast(checkpointIndex + 1))
-    } else {
-        when (target) {
-            AutoCompressTarget.MESSAGES -> {
-                val byCount = ContextTrim(messageNodes.size - targetValue)
-                // 条数模式没有 token 目标，压完用预算复核一次：固定开销加上保留区估算
-                // 超过预算，说明按条数留得太多，改用 token 预算再算；没超就保持按条数
-                val retained = if (budget == null) {
-                    0
-                } else {
-                    reservedTokens + estimateRetainedTokens(byCount.nodeIndex.coerceAtLeast(checkpointIndex + 1))
-                }
-                // 保留条数比现有消息还多时，byCount 落到检查点之前，范围校验会直接返回 null——
-                // 等于「设了保留 20 条，于是永远不压缩」，而门限已经判定超限，请求照发只会被拒。
-                // 这时退回 token 预算，至少还能按占用的一半压一次
-                val byCountUnusable = byCount.nodeIndex < checkpointIndex + 1
-                if (budget != null && (byCountUnusable || retained > budget)) {
-                    trimToTokenBudget(budget, reservedTokens)
-                } else {
-                    byCount
-                }
-            }
-
-            AutoCompressTarget.TOKENS -> {
-                // 设置页只校验下限，保留量可能比门限还大；那样等于要求整段上下文都留下，
-                // 压缩永远不会发生，所以夹到预算以内
-                trimToTokenBudget(
-                    if (budget == null) targetValue else minOf(targetValue, budget),
-                    reservedTokens,
-                )
-            }
-        }
-    }
-    // 检查点之后只剩要保留的那几条：再压就只能把它们也压掉
-    if (force && keepTailNodes != null && preferred.nodeIndex <= checkpointIndex + 1) return null
-    val onlyCheckpointTail = preferred.nodeIndex == checkpointIndex + 1
-    if (preferred.nodeIndex < checkpointIndex + 1 ||
-        preferred.nodeIndex > messageNodes.size ||
-        preferred.nodeIndex == 0 ||
-        (onlyCheckpointTail && preferred.partIndex == 0)
-    ) {
-        return null
-    }
-    return preferred
+internal fun autoCompressBudget(usedTokens: Int, thresholdTokens: Int?): Int {
+    val halfUsage = (usedTokens * AUTO_COMPRESS_TARGET_RATIO).toInt()
+    val halfThreshold = thresholdTokens?.takeIf { it > 0 }
+        ?.let { (it * AUTO_COMPRESS_TARGET_RATIO).toInt() }
+    return if (halfThreshold == null) halfUsage else minOf(halfUsage, halfThreshold)
 }
 
 /**
- * token 模式的截断目标：先扣掉固定开销，再留门限 25% 的下限，
- * 防止摘要和 systemPrompt 本身就把预算吃光时把保留区压成空。
+ * 保留区能用的预算：总预算先扣掉摘要和 systemPrompt 这些压缩后仍然占着上下文的固定开销。
+ * 至少留四分之一，防止固定开销自己就把预算吃光时把保留区压成空。
  */
-private fun Conversation.trimToTokenBudget(budget: Int, reservedTokens: Int): ContextTrim {
-    val floor = (budget * 0.25f).toInt()
-    val effectiveTarget = (budget - reservedTokens).coerceAtLeast(floor)
-    val trim = keepRecentContextForTokens(effectiveTarget)
-    // 「取最接近目标的边界」允许轻微超出。超出到检查点之后一条都压不掉时，预算等于没起作用，
-    // 减半再算一次，保证至少切掉一条，否则压缩会在最后一步空转成「没有可压缩范围」
-    val checkpointIndex = messageNodes.indexOfLast { it.currentMessage.isContextCheckpoint }
-    if (trim.nodeIndex <= checkpointIndex + 1 && trim.partIndex == 0 && effectiveTarget > 0) {
-        return keepRecentContextForTokens(effectiveTarget / 2)
-    }
-    return trim
-}
+internal fun autoCompressRetainedBudget(budgetTokens: Int, reservedTokens: Int): Int =
+    (budgetTokens - reservedTokens).coerceAtLeast((budgetTokens * 0.25f).toInt())
 
-/** [start] 之后（含 [start]）仍会发给模型的 token 估算；固定开销不算在内 */
-private fun Conversation.estimateRetainedTokens(start: Int): Int {
-    if (messageNodes.isEmpty()) return 0
-    val from = start.coerceIn(0, messageNodes.size)
-    var total = 0
-    for (index in from..messageNodes.lastIndex) {
-        total += estimateMessageTokens(messageNodes[index].currentMessage)
+/**
+ * 计算自动压缩的截断点：保留最近 [keepMessages] 条消息，其余压进摘要。
+ *
+ * 只在消息边界切。以前按 token 数找「最接近目标的 part 边界」，切在半条消息上时
+ * 附件、工具调用和正文会拆开，模型读到的是残缺的一轮；估算本身也不准，切点经常偏掉。
+ *
+ * [minTailNodes] 是末尾必须留下的节点数：模型循环里压缩时，末尾那条是正在生成的回复，
+ * 压进摘要就等于把这一轮的提问和输出一起丢掉。
+ *
+ * 保留区估算超过 [retainedBudget] 时从旧的一端整条丢弃，压完不会立刻又贴着门限；
+ * 保留条数配得比现有消息还多、一条都压不掉时按一半压——门限已经判定超限，
+ * 一条都不压等于把超限的请求原样发出去。
+ *
+ * [maxEndIndex] 是截断点的上界（不含）：重新生成较早的消息时，检查点不能插到那个节点后面，
+ * 否则它连同刚生成的回复一起被排除在请求之外，内容既不在摘要里也不发给模型。
+ *
+ * 返回 null 表示没有可压缩的范围。
+ */
+internal fun Conversation.resolveAutoCompressTrim(
+    keepMessages: Int,
+    minTailNodes: Int = 1,
+    retainedBudget: Int? = null,
+    maxEndIndex: Int = messageNodes.size,
+): ContextTrim? {
+    val checkpointIndex = messageNodes.indexOfLast { it.currentMessage.isContextCheckpoint }
+    val tailNodes = messageNodes.size - checkpointIndex - 1
+    if (tailNodes <= minTailNodes) return null
+
+    val limit = maxEndIndex.coerceIn(checkpointIndex + 1, messageNodes.size)
+    if (limit <= checkpointIndex + 1) return null
+
+    val keep = if (keepMessages in 1 until tailNodes) keepMessages
+    else (tailNodes / 2).coerceAtLeast(minTailNodes)
+    var endIndex = minOf(messageNodes.size - keep, limit)
+
+    if (retainedBudget != null && retainedBudget > 0) {
+        val lastKeepable = minOf(messageNodes.size - minTailNodes, limit)
+        var retained = estimateNodesTokens(endIndex)
+        while (retained > retainedBudget && endIndex < lastKeepable) {
+            retained -= estimateMessageTokens(messageNodes[endIndex].currentMessage)
+            endIndex++
+        }
     }
-    return total
+
+    if (endIndex <= checkpointIndex + 1) return null
+    return ContextTrim(endIndex)
 }
 
 /**

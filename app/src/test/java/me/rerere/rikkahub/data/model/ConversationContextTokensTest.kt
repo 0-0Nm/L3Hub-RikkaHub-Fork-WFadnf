@@ -117,8 +117,9 @@ class ConversationContextTokensTest {
         assertEquals(404 + 768, conversation.estimateContextTokens())
     }
 
+    /** 旧版本按 token 数保留时会把检查点切在一条消息中间，这些会话仍要按 part 下标裁剪请求 */
     @Test
-    fun `estimate excludes the summarized prefix of a split message`() {
+    fun `estimate excludes the summarized prefix of a legacy split message`() {
         val split = UIMessage(
             role = MessageRole.ASSISTANT,
             parts = listOf(
@@ -126,15 +127,21 @@ class ConversationContextTokensTest {
                 UIMessagePart.Text("b".repeat(400)),
             ),
         )
-        val source = conversation(UIMessage.user("hello"), split)
-        val result = source.insertContextCheckpoint(
-            afterNodeId = source.messageNodes[0].id,
-            summary = "摘要",
-            splitMessageId = split.id,
-            keepPartsFrom = 1,
-        )!!
+        val source = Conversation(
+            assistantId = Uuid.random(),
+            messageNodes = listOf(
+                UIMessage.user("hello").toMessageNode(),
+                UIMessage.user("摘要").copy(
+                    isContextCheckpoint = true,
+                    contextStartMessageId = split.id,
+                    contextStartPartIndex = 1,
+                ).toMessageNode(),
+                split.toMessageNode(),
+            ),
+        )
 
-        assertEquals(4 + 2 + 4 + 100, result.estimateContextTokens())
+        // 检查点 4 + 2，切剩的后半段 4 + 100
+        assertEquals(4 + 2 + 4 + 100, source.estimateContextTokens())
     }
 
     @Test

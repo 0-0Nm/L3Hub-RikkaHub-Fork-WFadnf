@@ -160,6 +160,7 @@ class ChatRequestFactory(
         messages: List<UIMessage>,
         processingStatus: MutableStateFlow<String?>,
         pendingInjections: suspend () -> List<UIMessage> = { emptyList() },
+        beforeStep: suspend (List<UIMessage>) -> List<UIMessage>? = { null },
     ): Pair<AgentRequest, AgentHooks> {
         val injectedMessages = mutableListOf<UIMessage>()
         val request = AgentRequest(
@@ -176,9 +177,12 @@ class ChatRequestFactory(
         val hooks = object : AgentHooks {
             override suspend fun prepareStep(messages: List<UIMessage>): StepRequest {
                 Log.i(TAG, "prepareStep: ${turn.model.id}")
+                // 压缩这类会换掉历史的操作要在组装请求之前做，返回新的历史表示这一步必须按它重新组装；
+                // 放到请求发出去之后再处理，压缩就只能对下一次请求生效，这一步仍然带着旧上下文
+                val refreshed = beforeStep(messages)
                 // 外部注入消息在每一步请求前取一次，取到后这一步之后的步骤也要继续带上
                 injectedMessages += pendingInjections()
-                val step = buildStep(turn, messages, processingStatus)
+                val step = buildStep(turn, refreshed ?: messages, processingStatus)
                 return if (injectedMessages.isEmpty()) {
                     step
                 } else {
