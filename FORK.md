@@ -559,12 +559,19 @@ debug 里 dex 有 38 个、release 压缩后只剩 2 个，差的就是 R8。上
 2. 打 tag 推上去：`git tag v3.1.1 && git push origin v3.1.1`（预览版就是 `v3.1.1-preview.102`）。
    手动触发时如果填了 tag，checkout 用的就是这个 tag 的提交，不会拿分支 HEAD 出的包挂到 tag 上；
    `gh release create` 带 `--verify-tag`，tag 不存在直接报错，不会现造一个
+   tag 和版本号由 `Check version against tag` 这一步互相对账：`versionName` 必须以
+   `L.<tag 去掉 v 与 -preview.NN>.` 开头，`versionCode` 必须大于上一个正式版 tag 的值。
+   忘了改版本号、或者 tag 打错一位，都在出包前就红，不会发出去一个 versionCode 没涨、
+   装上等于没更新的包
 3. `build-apk.yml` 自动跑：checkout（含子模块）→ pnpm 装 web-ui → `tools/build-apk.sh`
    （按 `VARIANT` 选 `:app:assembleGithubRelease` / `:app:assembleGithubDebug`，跳过 lint vital）→ 重命名产物 → 建 Release
 
 产物是 `L3Hub-<tag>-arm64-v8a.apk` 加同名 `.sha256`，arm64-v8a，R8 已开。
-Release notes 由流程按「上一个 tag..本 tag」的提交自己生成——本仓库不走 PR，
-GitHub 自带的 `--generate-notes` 只会给一行 Full Changelog。
+Release notes 由流程按「上一个正式版 tag..本 tag」的提交自己生成——本仓库不走 PR，
+GitHub 自带的 `--generate-notes` 只会给一行 Full Changelog。取上一个 tag 用
+`git describe --tags --exclude='*-*'`，预览版 tag（`v3.1.1-preview.102`）不参与，
+否则两次正式版之间的改动会被预览版切在区间外、整段消失。
+`ci:` / `test:` / `build:` 开头的提交一律不进 notes，读的人只关心功能变化。
 
 ### 正式版的签名
 
