@@ -1834,7 +1834,7 @@
   <string name="assistant_page_memory_auto_compress">Автосжатие</string>
   <string name="assistant_page_memory_auto_compress_desc">Когда занятость контекста достигает порога, история сжимается перед ответом; результат совпадает с ручным сжатием</string>
   <string name="assistant_page_memory_auto_compress_loop">Циклическое сжатие</string>
-  <string name="assistant_page_memory_auto_compress_loop_desc">Если во время цикла инструментов модели запрос превышает лимит контекста, история сжимается автоматически, и текущая генерация продолжается. Последние сообщения сохраняются согласно настройке выше; текущий вопрос и генерируемый ответ в сводку не попадают.</string>
+  <string name="assistant_page_memory_auto_compress_loop_desc">Если во время цикла инструментов модели запрос превышает лимит контекста, история сжимается автоматически, и текущая генерация продолжается. Последние сообщения сохраняются согласно настройке выше; если остаются только текущий вопрос и генерируемый ответ, вопрос уходит в сводку, а ответ сохраняется.</string>
   <string name="assistant_page_memory_auto_compress_messages">%1$d сообщений</string>
   <string name="assistant_page_memory_auto_compress_target">Сохранять после сжатия</string>
   <string name="assistant_page_memory_auto_compress_target_range">Диапазон: %1$d–%2$d</string>

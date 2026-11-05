@@ -1828,7 +1828,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_memory_auto_compress">自動圧縮</string>
   <string name="assistant_page_memory_auto_compress_desc">コンテキスト使用量がしきい値に達すると、返信の前に履歴を圧縮します。結果は手動圧縮と同じです</string>
   <string name="assistant_page_memory_auto_compress_loop">ループ圧縮</string>
-  <string name="assistant_page_memory_auto_compress_loop_desc">モデルのループ中にリクエストがコンテキスト上限を超えた場合、自動で圧縮して現在の生成を継続します。直近のメッセージは上の設定どおりに残り、今回の質問と生成中の返信は要約に含めません。</string>
+  <string name="assistant_page_memory_auto_compress_loop_desc">モデルのループ中にリクエストがコンテキスト上限を超えた場合、自動で圧縮して現在の生成を継続します。直近のメッセージは上の設定どおりに残ります。今回の質問と生成中の返信だけが残った場合は、質問を要約し、返信は残します。</string>
   <string name="assistant_page_memory_auto_compress_messages">%1$d 件のメッセージ</string>
   <string name="assistant_page_memory_auto_compress_target">圧縮後に保持</string>
   <string name="assistant_page_memory_auto_compress_target_range">範囲: %1$d–%2$d</string>

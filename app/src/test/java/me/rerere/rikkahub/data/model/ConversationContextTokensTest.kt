@@ -148,4 +148,51 @@ class ConversationContextTokensTest {
     fun `returns null without any reply`() {
         assertNull(conversation(UIMessage.user("hi")).lastContextTokens())
     }
+
+    /** 模型循环手里那条回复比会话里的新，判断门限要按它算 */
+    @Test
+    fun `list usage follows the live reply`() {
+        val sessionReply = assistantMessage(1, lastUsage = TokenUsage(1_000, 100))
+        val liveReply = assistantMessage(2, lastUsage = TokenUsage(3_000, 200))
+        val live = listOf(UIMessage.user("hi"), sessionReply, liveReply)
+
+        assertEquals(3_200, live.lastContextTokens())
+    }
+
+    @Test
+    fun `list usage ignores replies before the checkpoint`() {
+        val live = listOf(
+            assistantMessage(1, lastUsage = TokenUsage(7_500, 100)),
+            UIMessage.user("summary").copy(createdAt = at(2), isContextCheckpoint = true),
+            UIMessage.user("hi").copy(createdAt = at(3)),
+        )
+
+        assertNull(live.lastContextTokens())
+    }
+
+    /**
+     * 回归：AgentLoop 跑在 flowOn 的产出侧，工具输出写回会话要经过通道。
+     * prepareStep 判断门限时会话里可能还没有这段输出，估算必须按这一步真正要发的消息算。
+     */
+    @Test
+    fun `list estimate sees the tool output the session does not have yet`() {
+        val session = conversation(UIMessage.user("hi"), assistantMessage(1))
+        val liveReply = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Tool(
+                    toolCallId = "call",
+                    toolName = "read",
+                    input = "{}",
+                    output = listOf(UIMessagePart.Text("x".repeat(4_000))),
+                ),
+            ),
+        )
+        val live = session.currentMessages + liveReply
+
+        // 会话里只有 "hi"(5) + 空回复(4)；实时列表还要算上工具输出：
+        // 4 + "read"(1) + "{}"(1) + 4000 个 ASCII(1000) = 1006
+        assertEquals(9, session.estimateContextTokens())
+        assertEquals(1_015, live.estimateContextTokens())
+    }
 }

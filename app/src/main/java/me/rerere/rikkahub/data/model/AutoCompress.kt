@@ -53,7 +53,11 @@ private const val MESSAGE_TOKEN_OVERHEAD = 4
  * 尺子长，就会为一堆根本不会发出去的尾部消息反复触发压缩，每次还都是一次全量摘要请求。
  */
 fun Conversation.estimateContextTokens(messageLimit: Int = 0): Int =
-    currentMessages.limitContext(messageLimit).sumOf(::estimateMessageTokens)
+    currentMessages.estimateContextTokens(messageLimit)
+
+/** 同一套估算，作用在已经组装好的消息列表上：模型循环手里的那条回复比会话里的新 */
+fun List<UIMessage>.estimateContextTokens(messageLimit: Int = 0): Int =
+    limitContext(messageLimit).sumOf(::estimateMessageTokens)
 
 /** 单条消息的 token 估算，工具调用的输入输出也算在内 */
 internal fun estimateMessageTokens(message: UIMessage): Int =
@@ -172,8 +176,8 @@ internal fun autoCompressRetainedBudget(budgetTokens: Int, reservedTokens: Int):
  * 只在消息边界切。以前按 token 数找「最接近目标的 part 边界」，切在半条消息上时
  * 附件、工具调用和正文会拆开，模型读到的是残缺的一轮；估算本身也不准，切点经常偏掉。
  *
- * [minTailNodes] 是末尾必须留下的节点数：模型循环里压缩时，末尾那条是正在生成的回复，
- * 压进摘要就等于把这一轮的提问和输出一起丢掉。
+ * [minTailNodes] 是正常情况下末尾保留的节点数：模型循环里压缩时，末尾那条是正在生成的回复，
+ * 压进摘要就等于把这一轮的输出丢掉。可压缩范围不够时最多退到 1（只保住这条回复）。
  *
  * 保留区估算超过 [retainedBudget] 时从旧的一端整条丢弃，压完不会立刻又贴着门限；
  * 保留条数配得比现有消息还多、一条都压不掉时按一半压——门限已经判定超限，
@@ -192,17 +196,21 @@ internal fun Conversation.resolveAutoCompressTrim(
 ): ContextTrim? {
     val checkpointIndex = messageNodes.indexOfLast { it.currentMessage.isContextCheckpoint }
     val tailNodes = messageNodes.size - checkpointIndex - 1
-    if (tailNodes <= minTailNodes) return null
+    // 末尾至少留下正在生成的那条回复。minTailNodes 是正常情况下希望保留的条数，
+    // 但一轮对话只有「提问 + 回复」两条时，坚持留两条就永远压不动：上下文已经超了，
+    // 原样发出去只会被拒。这时退到 1，把提问压进摘要，回复照常留在后面。
+    if (tailNodes <= 1) return null
+    val floor = minTailNodes.coerceIn(1, tailNodes - 1)
 
     val limit = maxEndIndex.coerceIn(checkpointIndex + 1, messageNodes.size)
     if (limit <= checkpointIndex + 1) return null
 
     val keep = if (keepMessages in 1 until tailNodes) keepMessages
-    else (tailNodes / 2).coerceAtLeast(minTailNodes)
+    else (tailNodes / 2).coerceAtLeast(floor)
     var endIndex = minOf(messageNodes.size - keep, limit)
 
     if (retainedBudget != null && retainedBudget > 0) {
-        val lastKeepable = minOf(messageNodes.size - minTailNodes, limit)
+        val lastKeepable = minOf(messageNodes.size - floor, limit)
         var retained = estimateNodesTokens(endIndex)
         while (retained > retainedBudget && endIndex < lastKeepable) {
             retained -= estimateMessageTokens(messageNodes[endIndex].currentMessage)

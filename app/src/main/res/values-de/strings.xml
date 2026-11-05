@@ -1829,7 +1829,7 @@
   <string name="assistant_page_memory_auto_compress">Automatisch komprimieren</string>
   <string name="assistant_page_memory_auto_compress_desc">Sobald die Kontextnutzung den Schwellenwert erreicht, wird der Verlauf vor der Antwort komprimiert; das Ergebnis entspricht der manuellen Komprimierung</string>
   <string name="assistant_page_memory_auto_compress_loop">Zyklische Komprimierung</string>
-  <string name="assistant_page_memory_auto_compress_loop_desc">Wenn eine Anfrage während der Modellschleife das Kontextlimit überschreitet, wird automatisch komprimiert und die laufende Generierung fortgesetzt. Die letzten Nachrichten bleiben gemäß der Einstellung oben erhalten; die aktuelle Frage und die laufende Antwort wandern nie in die Zusammenfassung.</string>
+  <string name="assistant_page_memory_auto_compress_loop_desc">Wenn eine Anfrage während der Modellschleife das Kontextlimit überschreitet, wird automatisch komprimiert und die laufende Generierung fortgesetzt. Die letzten Nachrichten bleiben gemäß der Einstellung oben erhalten; bleiben nur die aktuelle Frage und die laufende Antwort übrig, wird die Frage zusammengefasst und die Antwort behalten.</string>
   <string name="assistant_page_memory_auto_compress_messages">%1$d Nachrichten</string>
   <string name="assistant_page_memory_auto_compress_target">Nach Komprimierung behalten</string>
   <string name="assistant_page_memory_auto_compress_target_range">Bereich: %1$d–%2$d</string>

@@ -1953,7 +1953,7 @@
   <string name="assistant_page_memory_auto_compress">自動壓縮</string>
   <string name="assistant_page_memory_auto_compress_desc">上下文佔用達到閾值時，先壓縮歷史再回復，效果與手動壓縮一致</string>
   <string name="assistant_page_memory_auto_compress_loop">迴圈壓縮</string>
-  <string name="assistant_page_memory_auto_compress_loop_desc">模型迴圈中請求超出上下文上限時，自動壓縮並繼續當前生成；最近的訊息依上方設定保留，本次提問與生成中的回覆不會壓進摘要</string>
+  <string name="assistant_page_memory_auto_compress_loop_desc">模型迴圈中請求超出上下文上限時，自動壓縮並繼續當前生成；最近的訊息依上方設定保留；只剩本輪提問與生成中的回覆時，提問會進摘要、回覆保留</string>
   <string name="assistant_page_memory_auto_compress_messages">%1$d 條訊息</string>
   <string name="assistant_page_memory_auto_compress_target">壓縮後保留</string>
   <string name="assistant_page_memory_auto_compress_target_range">取值範圍 %1$d–%2$d</string>

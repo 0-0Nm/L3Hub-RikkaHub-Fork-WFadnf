@@ -106,7 +106,7 @@ class AutoCompressTrimTest {
     }
 
     /**
-     * 回归：循环压缩至少留下这一轮的提问和正在生成的回复。
+     * 回归：循环压缩优先留下这一轮的提问和正在生成的回复。
      * 只留最后一条时，预算一紧就把用户刚问的问题压进摘要，模型只能对着摘要重开一轮。
      */
     @Test
@@ -122,11 +122,37 @@ class AutoCompressTrimTest {
                 retainedBudget = 1,
             ),
         )
-        // 检查点之后只剩这两条：没有可压缩范围
-        assertNull(
-            conversation(checkpoint(), reply(), reply())
-                .resolveAutoCompressTrim(keepMessages = 4, minTailNodes = 2),
+    }
+
+    /** 检查点之后只有本轮提问和生成中的回复时，压缩仍然要能发生 */
+    @Test
+    fun `loop after a checkpoint can compress the current question`() {
+        val conversation = conversation(
+            checkpoint(),
+            UIMessage.user("hi").toMessageNode(),
+            reply(),
         )
+
+        assertEquals(
+            ContextTrim(nodeIndex = 2),
+            conversation.resolveAutoCompressTrim(keepMessages = 8, minTailNodes = 2),
+        )
+    }
+
+    /**
+     * 回归：一轮对话只有「提问 + 回复」两条时，坚持留两条就永远压不动。
+     * 上下文已经超限，这时退到只保回复、把提问压进摘要，否则请求只能原样发出去被拒。
+     */
+    @Test
+    fun `single exchange still compresses the question away`() {
+        val conversation = conversation(UIMessage.user("hi").toMessageNode(), reply())
+
+        assertEquals(
+            ContextTrim(nodeIndex = 1),
+            conversation.resolveAutoCompressTrim(keepMessages = 8, minTailNodes = 2),
+        )
+        // 只剩一条回复时仍然没有可压缩范围
+        assertNull(conversation(reply()).resolveAutoCompressTrim(keepMessages = 8, minTailNodes = 2))
     }
 
     /**

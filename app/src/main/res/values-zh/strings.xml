@@ -2142,7 +2142,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_memory_auto_compress">自动压缩</string>
   <string name="assistant_page_memory_auto_compress_desc">上下文占用达到阈值时，先压缩历史再回复，效果与手动压缩一致</string>
   <string name="assistant_page_memory_auto_compress_loop">循环压缩</string>
-  <string name="assistant_page_memory_auto_compress_loop_desc">模型循环中请求超出上下文上限时，自动压缩并继续当前生成；最近的消息按上方设置保留，本次提问与生成中的回复不会被压进摘要</string>
+  <string name="assistant_page_memory_auto_compress_loop_desc">模型循环中请求超出上下文上限时，自动压缩并继续当前生成；最近的消息按上方设置保留；只剩本轮提问与生成中的回复时，提问会进摘要、回复保留</string>
   <string name="assistant_page_memory_auto_compress_threshold">触发阈值</string>
   <string name="assistant_page_memory_auto_compress_threshold_desc">WARN 为预警线，MAX 为硬上限</string>
   <string name="assistant_page_memory_auto_compress_target">压缩后保留</string>

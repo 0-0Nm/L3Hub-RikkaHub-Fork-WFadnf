@@ -1124,8 +1124,15 @@ class ChatService(
                 // history 是启动时那份快照，所以每一步都按最新会话重新组装：压缩才能对后续步骤
                 // 持续生效。没压缩时它与 history + current 等价，不会改变请求内容
                 beforeStep = { stepMessages ->
-                    compressBeforeStep(session, turn, regenerateNodeId)
-                    session.state.value.historyForStep(regenerateNodeId, stepMessages.lastOrNull())
+                    val current = stepMessages.lastOrNull()
+                    val history = session.state.value.historyForStep(regenerateNodeId, current)
+                    // 判据用 history 而不是 session.state：AgentLoop 跑在 flowOn 的产出侧，
+                    // 刚执行完的工具输出还在通道里没写回会话，按会话判断会一直看不到增长
+                    if (compressBeforeStep(session, turn, history, regenerateNodeId)) {
+                        session.state.value.historyForStep(regenerateNodeId, current)
+                    } else {
+                        history
+                    }
                 },
             )
             var finishReason: AgentFinishReason? = null
@@ -1368,28 +1375,31 @@ class ChatService(
     private suspend fun compressBeforeStep(
         session: ConversationSession,
         turn: ChatTurnContext,
+        messages: List<UIMessage>,
         regenerateNodeId: Uuid?,
-    ) {
-        if (!turn.assistant.autoCompress || !turn.assistant.autoCompressLoop) return
-        val limit = turn.model.autoCompressLimit(turn.assistant.autoCompressThreshold) ?: return
+    ): Boolean {
+        if (!turn.assistant.autoCompress || !turn.assistant.autoCompressLoop) return false
+        val limit = turn.model.autoCompressLimit(turn.assistant.autoCompressThreshold) ?: return false
         // 同一份上下文只压一次：压缩完之后还没发出过请求，就先别再压，
         // 否则每一步都是一次整段摘要请求
-        if (session.isCompressedContext()) return
+        if (session.isCompressedContext()) return false
         val conversation = session.state.value
         val used = resolveContextUsage(
-            realTokens = conversation.lastContextTokens(),
-            visibleTokens = conversation.estimateContextTokens(turn.assistant.contextMessageLimit),
+            realTokens = messages.lastContextTokens(),
+            visibleTokens = messages.estimateContextTokens(turn.assistant.contextMessageLimit),
             fixedTokens = estimateTokens(conversation.effectiveSystemPrompt(turn.assistant)),
         )
-        if (used < limit) return
-        autoCompressIfNeeded(
+        if (used < limit) return false
+        return autoCompressIfNeeded(
             session = session,
             force = true,
-            // 末尾两条是这一轮的提问和正在生成的回复：一起压进摘要，模型只能对着摘要重开一轮
+            // 优先留下这一轮的提问和正在生成的回复；只剩这两条时退到只保回复
             minTailNodes = 2,
             // 重新生成较早的消息时，检查点不能插到那个节点后面
             trimBeforeNodeId = regenerateNodeId,
-        )
+            usedTokens = used,
+            liveMessages = messages,
+        ) == CompressAttempt.COMPRESSED
     }
 
     /**
@@ -1466,6 +1476,8 @@ class ChatService(
         force: Boolean = false,
         minTailNodes: Int = 1,
         trimBeforeNodeId: Uuid? = null,
+        usedTokens: Int? = null,
+        liveMessages: List<UIMessage>? = null,
     ): CompressAttempt {
         // 同一份上下文只压一次：并发/连续触发时后面的直接放弃，避免把同一段历史总结两遍
         if (!session.compressMutex.tryLock()) {
@@ -1479,7 +1491,7 @@ class ChatService(
                 Log.d(TAG, "autoCompress: context unchanged since last compression, skip")
                 CompressAttempt.SKIPPED
             } else {
-                autoCompressLocked(session, force, minTailNodes, trimBeforeNodeId)
+                autoCompressLocked(session, force, minTailNodes, trimBeforeNodeId, usedTokens, liveMessages)
             }
         } finally {
             session.compressMutex.unlock()
@@ -1491,6 +1503,8 @@ class ChatService(
         force: Boolean,
         minTailNodes: Int,
         trimBeforeNodeId: Uuid?,
+        usedTokens: Int? = null,
+        liveMessages: List<UIMessage>? = null,
     ): CompressAttempt {
         val settings = settingsStore.awaitLoaded()
         val conversation = session.state.value
@@ -1505,7 +1519,8 @@ class ChatService(
         // 所以都算一遍取大的
         val real = conversation.lastContextTokens()?.takeIf { it > 0 }
         val systemTokens = estimateTokens(conversation.effectiveSystemPrompt(assistant))
-        val used = resolveContextUsage(
+        // 循环里调用方手里有更准的数（含刚执行完的工具输出），用它定预算
+        val used = usedTokens ?: resolveContextUsage(
             realTokens = real,
             visibleTokens = conversation.estimateContextTokens(assistant.contextMessageLimit),
             fixedTokens = systemTokens,
@@ -1515,9 +1530,30 @@ class ChatService(
             return CompressAttempt.SKIPPED
         }
 
+        // 重新生成最后一个检查点之前（或紧贴检查点）的消息时，请求按 regenerateNodeId 截断后
+        // 根本看不到检查点，压缩范围落在检查点之前：compressSession 按会话里的检查点校验会直接失败。
+        // 这里提前跳过，别把「本来就不能压」变成一条「自动压缩失败」
+        if (trimBeforeNodeId != null) {
+            val targetIndex = conversation.messageNodes.indexOfFirst { it.id == trimBeforeNodeId }
+            val checkpointIndex = conversation.messageNodes
+                .indexOfLast { it.currentMessage.isContextCheckpoint }
+            if (targetIndex == -1 || targetIndex <= checkpointIndex + 2) {
+                Log.d(TAG, "autoCompress: regenerate target is before the checkpoint, skip")
+                return CompressAttempt.SKIPPED
+            }
+        }
+
+        // 判据用的是这一步真正要发的消息，截断点也必须用同一份：会话由收集侧异步写回，
+        // 可能还没有模型循环手里那条回复。少一个节点会判成「没有可压缩范围」，
+        // 而多出来的节点在末尾，截断点仍然落在会话里真实存在的节点之后
+        val trimSource = if (liveMessages == null) {
+            conversation
+        } else {
+            conversation.copy(messageNodes = liveMessages.map { it.toMessageNode() })
+        }
         // 摘要和 systemPrompt 压缩之后仍然占着上下文：保留区的预算先扣掉这块固定开销，
         // 否则压完正好贴着预算，下一轮加一条消息又触发一次
-        val checkpointTokens = conversation.messageNodes
+        val checkpointTokens = trimSource.messageNodes
             .lastOrNull { it.currentMessage.isContextCheckpoint }
             ?.currentMessage
             ?.let(::estimateMessageTokens)
@@ -1527,11 +1563,11 @@ class ChatService(
         // 截断后连检查点都看不到，压缩等于没发生。再往前让一格，那个节点前面那条提问也不能压掉，
         // 否则这一步的请求里只剩一条摘要
         val maxEndIndex = if (trimBeforeNodeId == null) {
-            conversation.messageNodes.size
+            trimSource.messageNodes.size
         } else {
             conversation.messageNodes.indexOfFirst { it.id == trimBeforeNodeId } - 1
         }
-        val trim = conversation.resolveAutoCompressTrim(
+        val trim = trimSource.resolveAutoCompressTrim(
             keepMessages = assistant.autoCompressKeepMessages,
             minTailNodes = minTailNodes,
             retainedBudget = autoCompressRetainedBudget(budget, systemTokens + checkpointTokens),

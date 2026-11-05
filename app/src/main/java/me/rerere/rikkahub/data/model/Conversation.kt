@@ -190,6 +190,26 @@ fun Conversation.lastContextTokens(): Int? {
 }
 
 /**
+ * 同一套口径，作用在已经组装好的消息列表上。
+ *
+ * 模型循环手里那条回复比会话里的新：MessageUpdated 要经过 flowOn 的缓冲才写回会话，
+ * prepareStep 跑在产出侧，这时会话里还没有刚执行完的工具输出。判断门限必须用它，
+ * 否则压力最大的那一步恰好看不到增长。
+ */
+internal fun List<UIMessage>.lastContextTokens(): Int? {
+    val checkpoint = lastOrNull { it.isContextCheckpoint }
+    for (message in asReversed()) {
+        if (message.isContextCheckpoint) return null
+        if (message.role != MessageRole.ASSISTANT) continue
+        val usage = message.contextTokens() ?: continue
+        if (checkpoint == null) return usage
+        val updatedAt = message.finishedAt ?: message.createdAt
+        return if (updatedAt > checkpoint.createdAt) usage else null
+    }
+    return null
+}
+
+/**
  * 在 [afterNodeId] 节点之后插入压缩检查点；该节点已不存在时返回 null。
  *
  * 检查点替代它之前的全部历史，却只改发给模型的内容：原文一条不删，聊天页仍能看到完整内容。

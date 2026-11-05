@@ -2140,7 +2140,7 @@
   <string name="assistant_page_memory_auto_compress">Auto-compress</string>
   <string name="assistant_page_memory_auto_compress_desc">Compress the history before replying once context usage reaches the threshold; the result matches manual compression</string>
   <string name="assistant_page_memory_auto_compress_loop">Loop compression</string>
-  <string name="assistant_page_memory_auto_compress_loop_desc">When a request exceeds the context limit during the model tool loop, compress automatically and continue the current turn with the compressed history. The recent messages above are kept; the current question and the reply being generated never go into the summary.</string>
+  <string name="assistant_page_memory_auto_compress_loop_desc">When a request exceeds the context limit during the model tool loop, compress automatically and continue the current turn with the compressed history. Recent messages are kept as configured; when only the current question and the reply being generated remain, the question is summarized and the reply is kept.</string>
   <string name="assistant_page_memory_auto_compress_threshold">Trigger threshold</string>
   <string name="assistant_page_memory_auto_compress_threshold_desc">WARN is the soft warning line, MAX is the hard limit</string>
   <string name="assistant_page_memory_auto_compress_target">Keep after compressing</string>

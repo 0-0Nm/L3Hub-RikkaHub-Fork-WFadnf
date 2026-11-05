@@ -1826,7 +1826,7 @@
   <string name="assistant_page_memory_auto_compress">الضغط التلقائي</string>
   <string name="assistant_page_memory_auto_compress_desc">عند بلوغ استخدام السياق العتبة، يُضغط السجل قبل الرد؛ والنتيجة مطابقة للضغط اليدوي</string>
   <string name="assistant_page_memory_auto_compress_loop">الضغط الدوري</string>
-  <string name="assistant_page_memory_auto_compress_loop_desc">عندما يتجاوز الطلب حد السياق أثناء حلقة أدوات النموذج، يُضغط تلقائيًا ويستمر التوليد الحالي. تُحفظ الرسائل الأخيرة وفق الإعداد أعلاه، ولا يُضمّ السؤال الحالي والرد الجاري إلى الملخص.</string>
+  <string name="assistant_page_memory_auto_compress_loop_desc">عندما يتجاوز الطلب حد السياق أثناء حلقة أدوات النموذج، يُضغط تلقائيًا ويستمر التوليد الحالي. تُحفظ الرسائل الأخيرة وفق الإعداد أعلاه؛ وإذا لم يبقَ سوى سؤال هذه الجولة والرد الجاري، يُلخّص السؤال ويُحتفظ بالرد.</string>
   <string name="assistant_page_memory_auto_compress_messages">%1$d رسالة</string>
   <string name="assistant_page_memory_auto_compress_target">الاحتفاظ بعد الضغط</string>
   <string name="assistant_page_memory_auto_compress_target_range">النطاق: %1$d–%2$d</string>
