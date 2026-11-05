@@ -201,22 +201,23 @@ L3Hub 自己的设置都在 `Settings` 里，随 `settings.json` 整份序列化
 
 | 项 | 说明 |
 |---|---|
-| 触发阈值 | `WARN` 或 `MAX`，取模型上配置的两个上下文门限 |
+| 触发阈值 | `WARN` 或 `MAX`，取模型上配置的两个上下文门限；两个都没配时按窗口兜底（WARN 75%、MAX 90%）；自动填充的门限（`contextThresholdsAuto`）按 90% 窗口封顶——超过真实窗口的门限等于没有门限，手填的值不封顶。以前最后一步退回的是 `Model.contextLength` 原值，而它的默认值是 1M，真实窗口 128k / 200k 又没被识别出来的模型会拿到一个永远到不了的门限，只能等 provider 报超限 |
 | 压缩后保留 | 只按消息条数保留，切点一定落在两条消息之间。配置的条数比现有消息还多时按一半压；一轮对话只剩「提问 + 回复」两条时退到只保回复、把提问压进摘要，否则超限的请求原样发出去只会被拒。旧版本按 token 数保留的配置退回默认 8 条：那套算法要在消息内部找 part 边界，切出来的历史是残缺的一轮 |
-| 触发时机 | 写入用户消息前后各判断一次；开了「循环压缩」时，模型循环里每次请求之前再判断一次——在 `prepareStep` 里压完，这一步和之后每一步都按最新会话重新组装历史（`AgentLoop` 手里的 history 是启动时的快照），既不发已经注定超限的请求，也不把整轮重发一遍。判据取「真实 usage」与「可见内容估算」的较大者：usage 看不到刚追加、还没发出去的消息，估算看不到工具定义。循环里的判据用这一步真正要发的消息，不是会话快照：`MessageUpdated` 要经过 `flowOn` 的缓冲才写回会话，`prepareStep` 跑在产出侧，会话里往往还没有刚执行完的工具输出 |
+| 触发时机 | 写入用户消息前后各判断一次；开了「循环压缩」时，模型循环里每次请求之前再判断一次——在 `prepareStep` 里压完，这一步和之后每一步都按最新会话重新组装历史（`AgentLoop` 手里的 history 是启动时的快照），既不发已经注定超限的请求，也不把整轮重发一遍。判据以最近一次请求的真实 usage 打底，只补上它之后新增的内容（新消息，以及上一次请求之后才执行完的工具输出——工具输出是原地写回已有 part 的，usage 里看不到）：usage 已经包含系统提示词、工具定义和它之前的全部历史，而估算只是补 usage 看不到的那部分。两边各算整段再取大（旧做法）会把整段上下文放大约一倍，中文会话在门限六成时就反复触发压缩。检查点之前的 usage 不算数，那份占用算的是压缩前的上下文。循环里的判据用这一步真正要发的消息，不是会话快照：`MessageUpdated` 要经过 `flowOn` 的缓冲才写回会话，`prepareStep` 跑在产出侧，会话里往往还没有刚执行完的工具输出。provider 仍然报超限时由 `AgentHooks.onContextOverflow` 压缩后重装这一步（最多两次），不再把整轮重跑一遍 |
 | 压缩目标 | 当前占用的 50%（`AUTO_COMPRESS_TARGET_RATIO`）与门限的 50% 取小，再扣掉摘要和 systemPrompt 的固定开销。保留区超出预算时从旧的一端整条丢，压完不会立刻又贴着门限 |
 | 同一份上下文只压一次 | 节点数、末尾节点、末尾消息的 token 估算都没变就直接跳过：循环压缩后回复还在续写，`usage` 还是压缩前那次请求的，拿它判断会立刻再压一遍 |
 | 上下文已满 | 到达 MAX 后确认发送会先弹窗，确认后压缩再发送 |
 | 效果 | 与手动压缩完全一致：调用同一个压缩请求，在原位置插入 `isContextCheckpoint` 摘要消息 |
 | 原文 | 压缩只改变发给模型的上下文，会话里存的消息一条都不删。旧数据里切在消息中间的检查点仍按 `contextStartMessageId` / `contextStartPartIndex` 裁剪请求 |
 | 界面 | 不弹浮窗，复用生成中的加载球与 `processingStatus`，显示「正在压缩……」 |
-| 已知限制 | 整轮工具调用和输出都堆在同一条 assistant 消息里，按节点压缩只能切它之前的历史。压到只剩「提问 + 回复」后，这一轮再涨也没有可切的节点，只能由 provider 的硬上限兜底 |
+| 已知限制 | 整轮工具调用和输出都堆在同一条 assistant 消息里，按节点压缩只能切它之前的历史。压到只剩「提问 + 回复」后，这一轮再涨也没有可切的节点，只能由 provider 的硬上限兜底。另外，流式已经吐出内容之后 provider 才报超限时，重装这一步是重新生成：请求里仍带着那半截回复，而最终存下来的回复从空消息重新写，已经显示过的开头会被替换掉 |
 
 实现位置：
 
 - `data/model/AutoCompress.kt`：阈值枚举、`resolveContextUsage`（门限判据）、`autoCompressBudget` / `resolveAutoCompressTrim`（压缩目标与截断点）
 - `ai/ui/Message.kt` 的 `limitContext`：真正的请求裁剪点，跳过检查点之前的消息、按条数滞回截断、再按检查点里的 part 切分点丢掉已进摘要的前缀
 - `Assistant` 新增 `autoCompress`、`autoCompressThreshold`、`autoCompressTarget`、`autoCompressTargetValue`
+- `AgentHooks.onContextOverflow`：`AgentLoop` 在一步请求超限时回调，压缩后按新历史重装这一步；`ChatService` 用它接上 `retryWithCompression`，外层只剩「循环没机会处理」时的整轮兜底
 - `ChatService.autoCompressIfNeeded`：在 `sendQueuedMessage` 的 job 里、写入用户消息之前执行；循环压缩在 `ChatRequestFactory` 的 `beforeStep` 钩子里、每次请求之前执行；`compressConversation` 与它们共用 `compressSession`
 - 开启自动压缩后，MAX 拦截（`sendMessage` / `dispatchNextQueuedMessage`）先放行，由这一轮生成前的压缩处理；压缩失败只记日志，不阻塞回复
 

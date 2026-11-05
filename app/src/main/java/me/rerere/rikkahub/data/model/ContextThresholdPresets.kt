@@ -38,10 +38,10 @@ object ContextThresholdPresets {
 }
 
 /** WARN 占模型窗口的百分比：留四分之一给输出和下一轮输入 */
-private const val WARN_WINDOW_PERCENT = 75
+internal const val WARN_WINDOW_PERCENT = 75
 
 /** MAX 占模型窗口的百分比：门限贴着硬窗口时，输入刚好占满、回复一个 token 都放不下 */
-private const val MAX_WINDOW_PERCENT = 90
+internal const val MAX_WINDOW_PERCENT = 90
 
 /**
  * 自动模式下（[Model.contextThresholdsAuto]）给还没设置过门限的模型填预设。

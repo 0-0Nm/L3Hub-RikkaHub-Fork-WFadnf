@@ -36,6 +36,15 @@ interface AgentHooks {
     suspend fun prepareStep(messages: List<UIMessage>): StepRequest
 
     /**
+     * 请求模型时上下文超限，provider 已经拒绝。
+     *
+     * 返回 true 表示调用方已经压缩、换掉了历史，这一步要按新的历史重新组装再发一次；
+     * 返回 false 时异常照常抛出。整轮重跑会让同一段历史（连已经执行完的工具结果）再发一遍，
+     * 所以超限的收尾放在这一步里做。
+     */
+    suspend fun onContextOverflow(error: Throwable): Boolean = false
+
+    /**
      * 生成过程中每次发出更新之前调用，返回值只用于这一次 [AgentEvent.MessageUpdated]，不会写回循环内部。
      * 适合 think 标签这类要边生成边展示、等这一步结束才真正处理的转换；[newPartsFrom] 的含义同 [finishStep]。
      */

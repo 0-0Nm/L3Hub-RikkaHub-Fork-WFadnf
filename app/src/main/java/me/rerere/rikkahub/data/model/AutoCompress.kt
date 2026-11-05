@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.data.model
 
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
@@ -116,37 +118,90 @@ internal fun estimateTokens(text: String): Int {
  */
 internal const val AUTO_COMPRESS_TARGET_RATIO = 0.5f
 
-/** 按字符估算偏低（不含工具定义等），真实 usage 不可用时留一点余量 */
+/** 按字符估算偏低（不含工具定义等），只有估算的那部分乘这个系数 */
 internal const val CONTEXT_ESTIMATE_SAFETY = 1.1f
 
 /**
- * 门限判断用的上下文占用。
+ * 门限判断用的上下文占用：以最近一次请求的真实 usage 打底，只补上它之后新增的内容。
  *
- * 真实 usage 看不到刚追加、还没发出去的消息；字符估算看不到工具定义，精度也差。
- * 两边都算一遍取大的——谁更悲观就信谁。压缩后 usage 会短暂缺失，那时只剩估算，
- * 所以估算这一侧仍然乘安全系数。
+ * 真实 usage 已经包含系统提示词、工具定义和它之前的全部历史；估算只负责 usage 看不到的那部分
+ * （刚追加、还没发出去的消息，以及上一次请求之后才执行完的工具输出）。两边不能各自算整段再取大
+ * ——那样整段上下文会被放大约一倍（中文按 1 字 1 token 估，现代分词器实际约 0.65），
+ * 门限一到六成就反复触发压缩。
+ *
+ * [fixedTokens] 只在完全没有 usage 时用得上：这时连系统提示词一起估。
+ *
+ * 检查点之前的回复不算数，哪怕它带着 usage，见 [measuredUsageIndex]。
  */
-internal fun resolveContextUsage(
-    realTokens: Int?,
-    visibleTokens: Int,
-    fixedTokens: Int,
+internal fun List<UIMessage>.resolveContextUsage(
+    messageLimit: Int = 0,
+    fixedTokens: Int = 0,
 ): Int {
-    val estimated = ((visibleTokens + fixedTokens) * CONTEXT_ESTIMATE_SAFETY).toInt()
-    return maxOf(realTokens ?: 0, estimated)
+    val visible = limitContext(messageLimit)
+    val estimated = visible.estimateContextTokens() + fixedTokens
+    val measuredIndex = visible.measuredUsageIndex()
+    if (measuredIndex != null) {
+        val message = visible[measuredIndex]
+        val measured = message.contextTokens() ?: 0
+        // 有的中转只回 completion，promptTokens 是 0：这时 usage 当不了底，
+        // 拿它判断门限等于永不触发，退回估算（估高总比不压好）
+        if (measured * 2 >= estimated) {
+            val grown = message.outputsSinceRequestTokens() +
+                visible.subList(measuredIndex + 1, visible.size).sumOf(::estimateMessageTokens)
+            return measured + (grown * CONTEXT_ESTIMATE_SAFETY).toInt()
+        }
+    }
+    return (estimated * CONTEXT_ESTIMATE_SAFETY).toInt()
 }
 
 /**
- * 自动压缩实际使用的门限。WARN/MAX 未配置时依次退回另一个门限和旧的 contextLength，
- * 避免只填了模型上下文长度时自动压缩被判成“没有门限”而永不触发。
+ * 上一次请求之后才执行完的工具输出。
+ *
+ * 工具调用和它的输出是同一个 part：请求发出时 part 里只有调用，输出是之后原地写回去的，
+ * 所以 usage 里看不到这部分增长。按执行时间认出来补上——否则循环里压力最大的那一步
+ * （刚跑完一堆 shell 或文件操作）判据一动不动。
+ *
+ * 只算输出正文：调用名和参数是模型的输出，那次请求的 usage 里已经计过。
+ * 审批拒绝这类没真正跑过的工具没有 [UIMessagePart.Tool.startedAt]，补不上，量也小。
+ */
+private fun UIMessage.outputsSinceRequestTokens(): Int {
+    val requestAt = finishedAt ?: return 0
+    val executed = parts.filterIsInstance<UIMessagePart.Tool>().filter { it.startedAt != null }
+    if (executed.isEmpty()) return 0
+    val zone = TimeZone.currentSystemDefault()
+    return executed
+        .filter { it.startedAt?.let { at -> at.toLocalDateTime(zone) >= requestAt } == true }
+        .sumOf { tool -> tool.output.filterIsInstance<UIMessagePart.Text>().sumOf { estimateTokens(it.text) } }
+}
+
+/**
+ * 自动压缩实际使用的门限。
+ *
+ * 用户填过的门限优先：WARN/MAX 缺一个就退回另一个，和以前一致，手填的值一律不动。
+ * 两个都没填时按模型窗口兜底（WARN 75%、MAX 90%）。以前最后一步退回的是
+ * [Model.contextLength] 原值：等于让输入占满整个窗口，回复一个 token 都放不下，
+ * 压缩只能等 provider 先报超限。
+ *
+ * 自动填充的门限（[Model.contextThresholdsAuto]）还会按窗口封顶：它可能是按 1M 窗口写下的旧值，
+ * 超过真实窗口的门限等于没有门限。手填的值不封顶——那是用户自己的选择。
  */
 fun Model.autoCompressLimit(threshold: AutoCompressThreshold): Int? {
     val warn = warnContextTokens?.takeIf { it > 0 }
     val max = maxContextTokens?.takeIf { it > 0 }
-    val legacy = contextLength.takeIf { it > 0 }
-    return when (threshold) {
-        AutoCompressThreshold.WARN -> warn ?: max ?: legacy
-        AutoCompressThreshold.MAX -> max ?: warn ?: legacy
+    val window = contextLength.takeIf { it > 0 }
+    val ceiling = window?.let { (it * MAX_WINDOW_PERCENT / 100).coerceAtLeast(1) }
+    val configured = when (threshold) {
+        AutoCompressThreshold.WARN -> warn ?: max
+        AutoCompressThreshold.MAX -> max ?: warn
     }
+    if (configured != null) {
+        return if (contextThresholdsAuto && ceiling != null) minOf(configured, ceiling) else configured
+    }
+    val percent = when (threshold) {
+        AutoCompressThreshold.WARN -> WARN_WINDOW_PERCENT
+        AutoCompressThreshold.MAX -> MAX_WINDOW_PERCENT
+    }
+    return window?.let { (it * percent / 100).coerceAtLeast(1) }
 }
 
 /**

@@ -78,7 +78,6 @@ import me.rerere.rikkahub.data.model.bindConfig
 import me.rerere.rikkahub.data.model.cancelInterruptedTools
 import me.rerere.rikkahub.data.model.deleteMessage
 import me.rerere.rikkahub.data.model.editMessage
-import me.rerere.rikkahub.data.model.estimateContextTokens
 import me.rerere.rikkahub.data.model.estimateMessageTokens
 import me.rerere.rikkahub.data.model.estimateTokens
 import me.rerere.rikkahub.data.model.fillModelSnapshots
@@ -1079,6 +1078,9 @@ class ChatService(
         session.replyMessageId.value = null
         // 生成开始前失败时通知只用来取消 Live Update，用不到发送者名称
         var senderName = ""
+        // 循环里最近一次超限压缩的结果。压过或压失败，外层都不再整轮重跑：
+        // 那会把同一段历史再发一遍、再付一次摘要钱
+        var loopOverflowCompress: CompressAttempt? = null
         try {
             val settings = settingsStore.awaitLoaded()
             // 清掉上一轮的建议；没法继续执行的工具调用发给模型会被拒绝，先去掉。
@@ -1133,6 +1135,14 @@ class ChatService(
                     } else {
                         history
                     }
+                },
+                // provider 已经报超限：压缩后按最新会话重装这一步。以前是抛到外层把整轮重跑，
+                // 同一段历史（连已经执行完的工具结果）要再发一次
+                onContextOverflow = { error ->
+                    // 重试次数由 AgentLoop 的 MAX_STEP_OVERFLOW_RETRIES 兜住
+                    retryWithCompression(session, error, regenerateNodeId)
+                        .also { loopOverflowCompress = it }
+                        .let { it == CompressAttempt.COMPRESSED }
                 },
             )
             var finishReason: AgentFinishReason? = null
@@ -1204,8 +1214,13 @@ class ChatService(
             )
             return TurnResult.Failed
         } catch (e: Exception) {
-            // 模型循环里上下文超限：压缩后从当前状态继续这一轮，最多重试一次
-            if (contextRetryCount < 2 && retryWithCompression(session, e, regenerateNodeId)) {
+            // 模型循环里上下文超限：循环自己会压缩并重装这一步，压过（或压失败）就不再整轮重跑
+            val handledInLoop = loopOverflowCompress == CompressAttempt.COMPRESSED ||
+                loopOverflowCompress == CompressAttempt.FAILED
+            if (!handledInLoop &&
+                contextRetryCount < 2 &&
+                retryWithCompression(session, e, regenerateNodeId) == CompressAttempt.COMPRESSED
+            ) {
                 return runTurn(session, regenerateNodeId, contextRetryCount = contextRetryCount + 1)
             }
             // 兜底取消 Live Update 通知（生成开始前失败时上面的 finally 不会执行）
@@ -1384,9 +1399,8 @@ class ChatService(
         // 否则每一步都是一次整段摘要请求
         if (session.isCompressedContext()) return false
         val conversation = session.state.value
-        val used = resolveContextUsage(
-            realTokens = messages.lastContextTokens(),
-            visibleTokens = messages.estimateContextTokens(turn.assistant.contextMessageLimit),
+        val used = messages.resolveContextUsage(
+            messageLimit = turn.assistant.contextMessageLimit,
             fixedTokens = estimateTokens(conversation.effectiveSystemPrompt(turn.assistant)),
         )
         if (used < limit) return false
@@ -1435,15 +1449,20 @@ class ChatService(
             assistant.systemPrompt
         }
 
-    /** 提供商已经报上下文超限：压缩后重跑这一轮，最多重试两次 */
+    /**
+     * 提供商已经报上下文超限：压缩一次，让调用方按新的历史重发。
+     *
+     * 返回 [CompressAttempt.FAILED] 时摘要请求已经付过钱，调用方不能再整轮重跑——
+     * 那会再压一次、再把同一段历史发一遍。
+     */
     private suspend fun retryWithCompression(
         session: ConversationSession,
         error: Throwable,
         regenerateNodeId: Uuid?,
-    ): Boolean {
-        if (!error.isContextOverflow()) return false
+    ): CompressAttempt {
+        if (!error.isContextOverflow()) return CompressAttempt.SKIPPED
         val assistant = settingsStore.awaitLoaded().getAssistantOf(session.state.value)
-        if (!assistant.autoCompress || !assistant.autoCompressLoop) return false
+        if (!assistant.autoCompress || !assistant.autoCompressLoop) return CompressAttempt.SKIPPED
         Log.i(TAG, "runTurn: context overflow, compress and retry")
         return autoCompressIfNeeded(
             session = session,
@@ -1451,7 +1470,7 @@ class ChatService(
             // 和循环压缩一样：提问和正在写的回复都不能压进摘要
             minTailNodes = 2,
             trimBeforeNodeId = regenerateNodeId,
-        ) == CompressAttempt.COMPRESSED
+        )
     }
 
     /**
@@ -1520,9 +1539,8 @@ class ChatService(
         val real = conversation.lastContextTokens()?.takeIf { it > 0 }
         val systemTokens = estimateTokens(conversation.effectiveSystemPrompt(assistant))
         // 循环里调用方手里有更准的数（含刚执行完的工具输出），用它定预算
-        val used = usedTokens ?: resolveContextUsage(
-            realTokens = real,
-            visibleTokens = conversation.estimateContextTokens(assistant.contextMessageLimit),
+        val used = usedTokens ?: conversation.currentMessages.resolveContextUsage(
+            messageLimit = assistant.contextMessageLimit,
             fixedTokens = systemTokens,
         )
         if (!force && (limit == null || used < limit)) {

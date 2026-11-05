@@ -161,8 +161,11 @@ class ChatRequestFactory(
         processingStatus: MutableStateFlow<String?>,
         pendingInjections: suspend () -> List<UIMessage> = { emptyList() },
         beforeStep: suspend (List<UIMessage>) -> List<UIMessage>? = { null },
+        onContextOverflow: suspend (Throwable) -> Boolean = { false },
     ): Pair<AgentRequest, AgentHooks> {
         val injectedMessages = mutableListOf<UIMessage>()
+        // 和钩子同名，提前取个别名，免得 override 里写成自己调自己
+        val contextOverflowHandler = onContextOverflow
         val request = AgentRequest(
             provider = usageRecorder.wrap(
                 providerManager.getProviderByType(turn.providerSetting),
@@ -180,8 +183,10 @@ class ChatRequestFactory(
                 // 压缩这类会换掉历史的操作要在组装请求之前做，返回新的历史表示这一步必须按它重新组装；
                 // 放到请求发出去之后再处理，压缩就只能对下一次请求生效，这一步仍然带着旧上下文
                 val refreshed = beforeStep(messages)
-                // 外部注入消息在每一步请求前取一次，取到后这一步之后的步骤也要继续带上
+                // 外部注入消息在每一步请求前取一次，取到后这一步之后的步骤也要继续带上。
+                // 一步可能被重装（上下文超限），按 id 去重，同一条不会进两次
                 injectedMessages += pendingInjections()
+                    .filterNot { message -> injectedMessages.any { it.id == message.id } }
                 val step = buildStep(turn, refreshed ?: messages, processingStatus)
                 return if (injectedMessages.isEmpty()) {
                     step
@@ -189,6 +194,9 @@ class ChatRequestFactory(
                     step.copy(messages = step.messages + injectedMessages)
                 }
             }
+
+            override suspend fun onContextOverflow(error: Throwable): Boolean =
+                contextOverflowHandler(error)
 
             override suspend fun previewStep(message: UIMessage, newPartsFrom: Int) =
                 message.transformNewParts(newPartsFrom) {

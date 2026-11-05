@@ -509,6 +509,56 @@ class AgentLoopTest {
         assertEquals(setOf(message.id), events.messageIds())
     }
 
+    /**
+     * 回归：上下文超限以前会抛到上层，由上层把整轮重跑一遍——同一段历史（连已经执行完的
+     * 工具结果）要再发一次。现在压缩完只重装这一步。
+     */
+    @Test
+    fun `context overflow replays the step instead of the whole run`() = runTest {
+        provider.stream { throw IllegalStateException("context length exceeded") }
+        provider.stream {
+            text("answer")
+            finish()
+        }
+        val overflowHooks = OverflowHooks(hooks) { true }
+
+        val finished = runToEnd(hooks = overflowHooks).finished()
+
+        assertEquals(AgentFinishReason.Completed, finished.reason)
+        assertEquals(listOf("answer"), finished.message.texts())
+        assertEquals(2, provider.requests.size)
+        // 这一步按新历史重新组装过：prepareStep 被调了两次，而不是从头重跑整轮
+        assertEquals(2, hooks.prepared.size)
+        assertEquals(1, overflowHooks.overflows.size)
+    }
+
+    @Test
+    fun `context overflow is rethrown when the caller cannot compress`() = runTest {
+        provider.stream { throw IllegalStateException("context length exceeded") }
+        val overflowHooks = OverflowHooks(hooks) { false }
+
+        val error = runCatching { runToEnd(hooks = overflowHooks) }.exceptionOrNull()
+
+        assertTrue(error is IllegalStateException)
+        assertEquals("context length exceeded", error?.message)
+        assertEquals(1, provider.requests.size)
+        assertEquals(1, overflowHooks.overflows.size)
+    }
+
+    /** 每次重装都可能是一次摘要请求，次数必须有界：0 + MAX_STEP_OVERFLOW_RETRIES 次 */
+    @Test
+    fun `step overflow retries are bounded`() = runTest {
+        repeat(3) { provider.stream { throw IllegalStateException("context length exceeded") } }
+        val overflowHooks = OverflowHooks(hooks) { true }
+
+        val error = runCatching { runToEnd(hooks = overflowHooks) }.exceptionOrNull()
+
+        assertTrue(error is IllegalStateException)
+        assertEquals(3, provider.requests.size)
+        assertEquals(3, hooks.prepared.size)
+        assertEquals(2, overflowHooks.overflows.size)
+    }
+
     @Test
     fun `non-streaming text after a step that ended with text is still transformed`() = runTest {
         provider.result(assistant(UIMessagePart.Tool("call-1", "search", "{}"), UIMessagePart.Text("before")))
@@ -556,6 +606,19 @@ private class FakeProvider : Provider<ProviderSetting> {
         requests += Request(messages, params)
         val block = streams.removeFirst()
         return flow { block() }
+    }
+}
+
+/** 只接管超限回调，其余行为沿用 [delegate]；记录问过几次、每次拿到的异常 */
+private class OverflowHooks(
+    private val delegate: AgentHooks,
+    private val canCompress: () -> Boolean,
+) : AgentHooks by delegate {
+    val overflows = mutableListOf<Throwable>()
+
+    override suspend fun onContextOverflow(error: Throwable): Boolean {
+        overflows += error
+        return canCompress()
     }
 }
 

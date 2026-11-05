@@ -196,17 +196,28 @@ fun Conversation.lastContextTokens(): Int? {
  * prepareStep 跑在产出侧，这时会话里还没有刚执行完的工具输出。判断门限必须用它，
  * 否则压力最大的那一步恰好看不到增长。
  */
-internal fun List<UIMessage>.lastContextTokens(): Int? {
-    val checkpoint = lastOrNull { it.isContextCheckpoint }
-    for (message in asReversed()) {
-        if (message.isContextCheckpoint) return null
-        if (message.role != MessageRole.ASSISTANT) continue
-        val usage = message.contextTokens() ?: continue
-        if (checkpoint == null) return usage
-        val updatedAt = message.finishedAt ?: message.createdAt
-        return if (updatedAt > checkpoint.createdAt) usage else null
+internal fun List<UIMessage>.lastContextTokens(): Int? =
+    measuredUsageIndex()?.let { this[it].contextTokens() }
+
+/**
+ * 最近一次请求的 usage 记在哪条消息上，取不到时返回 null。
+ *
+ * 检查点之前的 usage 不算数：那份占用算的是压缩前的上下文。检查点之后的消息还要比时间，
+ * 压缩后尾部那条回复会继续续写，续写刷新了 finishedAt 的那一份才是压缩之后的占用。
+ *
+ * 门限判据（[resolveContextUsage]）和 [lastContextTokens] 共用这一份定位，两边口径不会漂。
+ */
+internal fun List<UIMessage>.measuredUsageIndex(): Int? {
+    val checkpointIndex = indexOfLast { it.isContextCheckpoint }
+    val checkpoint = getOrNull(checkpointIndex)
+    return (lastIndex downTo checkpointIndex + 1).firstOrNull { index ->
+        val message = this[index]
+        if (message.role != MessageRole.ASSISTANT || message.contextTokens() == null) {
+            return@firstOrNull false
+        }
+        if (checkpoint == null) return@firstOrNull true
+        (message.finishedAt ?: message.createdAt) > checkpoint.createdAt
     }
-    return null
 }
 
 /**

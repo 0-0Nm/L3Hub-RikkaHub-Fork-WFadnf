@@ -26,6 +26,9 @@ import kotlin.time.TimeSource
 // 输出为空的工具会被当成没执行过，之后每一步都会再执行一次，所以换成占位文本
 private const val EMPTY_TOOL_OUTPUT = "(no output)"
 
+// 一步请求超限后最多重装几次：每次重装都可能再触发一次摘要请求，多了只是多付钱
+private const val MAX_STEP_OVERFLOW_RETRIES = 2
+
 private class StreamChunkHandlingException(override val cause: Throwable) : RuntimeException(cause)
 
 internal class AgentLoop(
@@ -89,19 +92,32 @@ internal class AgentLoop(
         findTool(part.toolName)?.needsApproval?.invoke(part.inputAsJson()) == true
     }.getOrDefault(true)
 
-    private suspend fun generateStep() {
+    private suspend fun generateStep(overflowRetries: Int = 0, retriedBase: UIMessage? = null) {
         val current = message
         val step = hooks.prepareStep(if (current == null) history else history + current)
         val params = step.params.copy(tools = request.tools)
-        val base = current ?: UIMessage(
+        // 重装这一步时沿用同一条助手消息：失败前已经流出去的半截内容可能写进了会话，
+        // 换一个 id 会让同一个节点多出一份分支
+        val base = retriedBase ?: current ?: UIMessage(
             role = MessageRole.ASSISTANT,
             parts = emptyList(),
             modelId = params.model.id,
         )
-        val generated = if (request.stream) {
-            stream(step.messages, params, base)
-        } else {
-            generate(step.messages, params, base)
+        val generated = try {
+            if (request.stream) {
+                stream(step.messages, params, base)
+            } else {
+                generate(step.messages, params, base)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            // 上下文超限：让调用方压缩后按新历史重装这一步。抛到外层重跑整轮的话，
+            // 已经执行完的工具结果要跟着再发一次，压缩也就白做了
+            if (overflowRetries < MAX_STEP_OVERFLOW_RETRIES && hooks.onContextOverflow(e)) {
+                return generateStep(overflowRetries + 1, base)
+            }
+            throw e
         }
         update(hooks.finishStep(generated, newPartsFrom = base.parts.size).copy(finishedAt = now()))
     }
