@@ -348,8 +348,18 @@ private fun ChatListNormal(
     var createPullArmed by remember { mutableStateOf(false) }
     // 回调每次重组都是新实例，当 remember 的 key 用会让连接对象每帧重建
     val createNewChat = rememberUpdatedState(onCreateNewChat)
-    val createPullConnection = remember(createPullThreshold) {
+    val createPullConnection = remember(state, createPullThreshold) {
         object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // 反向拖动说明这次不是上拉：之前累积的（可能因手势被打断没走到 onPostFling）作废，
+                // 不然胶囊会一直亮着，下一次随便一划就新建会话
+                if (available.y > 0f) {
+                    createPull = 0f
+                    createPullArmed = false
+                }
+                return Offset.Zero
+            }
+
             override fun onPostScroll(
                 consumed: Offset,
                 available: Offset,
@@ -358,7 +368,9 @@ private fun ChatListNormal(
                 if (createNewChat.value == null || source != NestedScrollSource.UserInput) {
                     return Offset.Zero
                 }
-                if (available.y < 0f) {
+                // 还得真的是「能滚、且已经到底」：内容不足一屏时两个方向都滚不动，
+                // 随手一滑也会留下余量，不能算拉到底
+                if (available.y < 0f && !state.canScrollForward && state.canScrollBackward) {
                     createPull = (createPull - available.y).coerceAtMost(createPullThreshold * 1.3f)
                     createPullArmed = createPull >= createPullThreshold
                     return Offset(0f, available.y)
