@@ -132,6 +132,9 @@ internal const val CONTEXT_ESTIMATE_SAFETY = 1.1f
  * [fixedTokens] 只在完全没有 usage 时用得上：这时连系统提示词一起估。
  *
  * 检查点之前的回复不算数，哪怕它带着 usage，见 [measuredUsageIndex]。
+ *
+ * 只有 prompt 侧的 usage 才算实测：有的中转只回 completion、promptTokens 是 0，
+ * 那时的 usage 只是这条回复的长度，拿它当整段上下文会一直判不到门限。
  */
 internal fun List<UIMessage>.resolveContextUsage(
     messageLimit: Int = 0,
@@ -142,10 +145,12 @@ internal fun List<UIMessage>.resolveContextUsage(
     val measuredIndex = visible.measuredUsageIndex()
     if (measuredIndex != null) {
         val message = visible[measuredIndex]
-        val measured = message.contextTokens() ?: 0
-        // 有的中转只回 completion，promptTokens 是 0：这时 usage 当不了底，
-        // 拿它判断门限等于永不触发，退回估算（估高总比不压好）
-        if (measured * 2 >= estimated) {
+        val usage = message.lastRequestUsage()
+        val measured = (usage?.promptTokens ?: 0) + (usage?.completionTokens ?: 0)
+        // 两个条件：prompt 侧确实测过（否则就是上面那种只有 completion 的 usage），
+        // 以及 usage 至少是估算的一半——usage 停在很早以前那次请求上时，同样当不了整段上下文。
+        // 都不满足就退回估算，估高总比不压好
+        if ((usage?.promptTokens ?: 0) > 0 && measured * 2 >= estimated) {
             val grown = message.outputsSinceRequestTokens() +
                 visible.subList(measuredIndex + 1, visible.size).sumOf(::estimateMessageTokens)
             return measured + (grown * CONTEXT_ESTIMATE_SAFETY).toInt()
@@ -182,14 +187,20 @@ private fun UIMessage.outputsSinceRequestTokens(): Int {
  * [Model.contextLength] 原值：等于让输入占满整个窗口，回复一个 token 都放不下，
  * 压缩只能等 provider 先报超限。
  *
- * 自动填充的门限（[Model.contextThresholdsAuto]）还会按窗口封顶：它可能是按 1M 窗口写下的旧值，
- * 超过真实窗口的门限等于没有门限。手填的值不封顶——那是用户自己的选择。
+ * 自动填充的门限（[Model.contextThresholdsAuto]）还会按窗口收窄：它可能是按 1M 窗口写下的旧值，
+ * 超过真实窗口的门限等于没有门限。收窄比例和预设一致（WARN 75%、MAX 90%）：
+ * 两档都夹到 90% 的话 WARN 和 MAX 会落到同一个数，预警那一档等于不存在。
+ * 手填的值不收窄——那是用户自己的选择。
  */
 fun Model.autoCompressLimit(threshold: AutoCompressThreshold): Int? {
     val warn = warnContextTokens?.takeIf { it > 0 }
     val max = maxContextTokens?.takeIf { it > 0 }
     val window = contextLength.takeIf { it > 0 }
-    val ceiling = window?.let { (it * MAX_WINDOW_PERCENT / 100).coerceAtLeast(1) }
+    val percent = when (threshold) {
+        AutoCompressThreshold.WARN -> WARN_WINDOW_PERCENT
+        AutoCompressThreshold.MAX -> MAX_WINDOW_PERCENT
+    }
+    val ceiling = window?.let { (it * percent / 100).coerceAtLeast(1) }
     val configured = when (threshold) {
         AutoCompressThreshold.WARN -> warn ?: max
         AutoCompressThreshold.MAX -> max ?: warn
@@ -197,11 +208,7 @@ fun Model.autoCompressLimit(threshold: AutoCompressThreshold): Int? {
     if (configured != null) {
         return if (contextThresholdsAuto && ceiling != null) minOf(configured, ceiling) else configured
     }
-    val percent = when (threshold) {
-        AutoCompressThreshold.WARN -> WARN_WINDOW_PERCENT
-        AutoCompressThreshold.MAX -> MAX_WINDOW_PERCENT
-    }
-    return window?.let { (it * percent / 100).coerceAtLeast(1) }
+    return ceiling
 }
 
 /**

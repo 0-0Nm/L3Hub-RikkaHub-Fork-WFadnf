@@ -127,6 +127,19 @@ class AutoCompressTest {
         assertEquals(12, messages.resolveContextUsage())
     }
 
+    /**
+     * 只回 completion 的中转：completionTokens 可能有几千，能骗过「至少是估算的一半」，
+     * 但 prompt 侧根本没测过，拿它当上下文占用就永远判不到门限。
+     */
+    @Test
+    fun `completion-only usage falls back to the estimate`() {
+        val messages = listOf(
+            UIMessage.user("hi"),
+            assistantWithUsage(promptTokens = 0, completionTokens = 5_000),
+        )
+        assertEquals(12, messages.resolveContextUsage())
+    }
+
     /** 完全没有 usage 时退回估算，这时连系统提示词一起估 */
     @Test
     fun `estimate includes the system prompt when no usage is available`() {

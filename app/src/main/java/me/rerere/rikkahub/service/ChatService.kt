@@ -1534,8 +1534,7 @@ class ChatService(
         val limit = model.autoCompressLimit(assistant.autoCompressThreshold)
 
         // 真实用量偶尔缺失（回复没写入 usage、压缩后还没开始下一轮），退回按字符估算。
-        // 两个口径各有盲区：usage 看不到刚追加、还没发出去的消息，估算看不到工具定义，
-        // 所以都算一遍取大的
+        // 有 usage 时以它打底，只补它之后新增的消息和工具输出；这里取 real 只为日志好对照
         val real = conversation.lastContextTokens()?.takeIf { it > 0 }
         val systemTokens = estimateTokens(conversation.effectiveSystemPrompt(assistant))
         // 循环里调用方手里有更准的数（含刚执行完的工具输出），用它定预算

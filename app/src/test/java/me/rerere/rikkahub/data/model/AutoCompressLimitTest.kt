@@ -35,7 +35,7 @@ class AutoCompressLimitTest {
     @Test
     fun `thresholds never go above the window`() {
         assertEquals(
-            57_600,
+            48_000,
             Model(warnContextTokens = 100_000, contextLength = 64_000)
                 .autoCompressLimit(AutoCompressThreshold.WARN),
         )
@@ -44,6 +44,21 @@ class AutoCompressLimitTest {
             Model(maxContextTokens = 1_000_000, contextLength = 100_000)
                 .autoCompressLimit(AutoCompressThreshold.MAX),
         )
+    }
+
+    /**
+     * 回归：两档都按 90% 封顶时，1M 窗口写下的旧预设夹到 128k 模型上会变成同一个数，
+     * WARN 和 MAX 没有区别，预警那一档等于不存在。
+     */
+    @Test
+    fun `auto thresholds stay ordered after clamping`() {
+        val model = Model(
+            warnContextTokens = 393_216,
+            maxContextTokens = 524_288,
+            contextLength = 128_000,
+        )
+        assertEquals(96_000, model.autoCompressLimit(AutoCompressThreshold.WARN))
+        assertEquals(115_200, model.autoCompressLimit(AutoCompressThreshold.MAX))
     }
 
     /** 手填的门限是用户自己的选择：不按窗口封顶，否则旧的小 contextLength 会把每轮都压 */
