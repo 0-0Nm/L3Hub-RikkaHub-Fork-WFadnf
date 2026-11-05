@@ -232,7 +232,8 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     }
 
     val openSettingsFromDrawer: () -> Unit = {
-        if (!isBigScreen) scope.launch { drawerState.close() }
+        // 不先收抽屉：设置页整屏盖上来时它跟着一起退场，
+        // 先滑回去再推设置页等于两段动画，反而拖
         navController.navigate(Screen.Setting)
     }
     val startNewChat: () -> Unit = {
@@ -300,11 +301,14 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                         settings = setting,
                         onNewChat = startNewChat,
                         onOpenSettings = openSettingsFromDrawer,
+                        // 常驻栏一直可见，头像随时能当共享元素
+                        avatarHero = true,
                     )
                 }
             ) {
                 ChatPageContent(
                     onStartVoiceMode = startVoiceMode,
+                    onCreateNewChat = startNewChat,
                     inputState = inputState,
                     loadingJob = loadingJob,
                     processingStatus = processingStatus,
@@ -336,12 +340,16 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                         settings = setting,
                         onNewChat = startNewChat,
                         onOpenSettings = openSettingsFromDrawer,
+                        onCloseDrawer = { drawerState.close() },
+                        // 收起状态的模态抽屉在屏幕外，这时别让头像参与转场
+                        avatarHero = drawerState.isOpen,
                         hazeState = backgroundHazeState,
                     )
                 }
             ) {
                 ChatPageContent(
                     onStartVoiceMode = startVoiceMode,
+                    onCreateNewChat = startNewChat,
                     inputState = inputState,
                     loadingJob = loadingJob,
                     processingStatus = processingStatus,
@@ -372,6 +380,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
 @Composable
 private fun ChatPageContent(
     onStartVoiceMode: () -> Unit,
+    onCreateNewChat: () -> Unit,
     inputState: ChatInputState,
     loadingJob: Job?,
     processingStatus: String? = null,
@@ -975,6 +984,7 @@ private fun ChatPageContent(
                     conversation = conversation,
                     state = chatListState,
                     loading = loadingJob != null,
+                    onCreateNewChat = onCreateNewChat,
                     processingStatus = processingStatus,
                     previewMode = previewMode,
                     settings = setting,

@@ -103,8 +103,10 @@ import me.rerere.rikkahub.ui.components.ui.glassSurface
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
+import me.rerere.rikkahub.ui.hooks.DrawerSettingsAvatarKey
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.readBooleanPreference
+import me.rerere.rikkahub.ui.hooks.heroAnimation
 import me.rerere.rikkahub.ui.hooks.rememberSharedPreferenceBoolean
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.modifier.onClick
@@ -143,6 +145,10 @@ fun ChatDrawerContent(
     current: Conversation,
     onNewChat: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    // 大屏的抽屉是常驻栏，没有"收起来"这回事；只有模态抽屉会传这个
+    onCloseDrawer: (suspend () -> Unit)? = null,
+    // 头像能不能当共享元素：抽屉收起时它在屏幕外，参与转场会从界面外侧飞进来
+    avatarHero: Boolean = false,
     // 抽屉底板的玻璃取样源（聊天页的背景层）。没有源时 canGlassPane 返回 false，底板退回实色
     hazeState: HazeState? = null,
 ) {
@@ -337,8 +343,19 @@ fun ChatDrawerContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                onClick = {
-                    navigateToChatPage(navController, it.id)
+                onClick = { conversation ->
+                    // 点的是列表上半部分就从上方落进来，下半部分从下方升上来。
+                    // 列表里是日期分组和会话混排，只有 Item 那一条才带会话
+                    val index = (0 until conversations.itemCount)
+                        .firstOrNull {
+                            (conversations.peek(it) as? ConversationListItem.Item)?.conversation?.id == conversation.id
+                        }
+                    val fromTop = index != null && index * 2 < conversations.itemCount
+                    scope.launch {
+                        // 先把抽屉收回去再换会话，两段动画分开走，别叠在一起
+                        onCloseDrawer?.invoke()
+                        navigateToChatPage(navController, conversation.id, enterFromTop = fromTop)
+                    }
                 },
                 onRegenerateTitle = {
                     vm.generateTitle(it, true)
@@ -416,6 +433,7 @@ fun ChatDrawerContent(
                 name = settings.displaySetting.userNickname.ifBlank { stringResource(R.string.user_default_name) },
                 onNewChat = onNewChat,
                 onOpenSettings = onOpenSettings,
+                heroAvatar = avatarHero,
             )
         }
     }
@@ -835,6 +853,7 @@ private fun DrawerBottomBar(
     name: String,
     onNewChat: () -> Unit,
     onOpenSettings: () -> Unit,
+    heroAvatar: Boolean,
 ) {
     Row(
         modifier = Modifier
@@ -885,11 +904,14 @@ private fun DrawerBottomBar(
             name = name,
             value = avatar,
             avatarSize = 52.dp,
-            modifier = Modifier.graphicsLayer {
-                scaleX = DRAWER_AVATAR_SCALE
-                scaleY = DRAWER_AVATAR_SCALE
-                transformOrigin = TransformOrigin(1f, 1f)
-            },
+            modifier = Modifier
+                // 点开设置时这张头像飞到设置页顶部那个位置
+                .then(if (heroAvatar) Modifier.heroAnimation(DrawerSettingsAvatarKey) else Modifier)
+                .graphicsLayer {
+                    scaleX = DRAWER_AVATAR_SCALE
+                    scaleY = DRAWER_AVATAR_SCALE
+                    transformOrigin = TransformOrigin(1f, 1f)
+                },
             onClick = onOpenSettings,
         )
     }

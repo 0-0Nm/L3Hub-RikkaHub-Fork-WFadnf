@@ -42,6 +42,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -465,6 +466,9 @@ class RouteActivity : ComponentActivity() {
                         .semantics { testTagsAsResourceId = true }
                         .background(MaterialTheme.colorScheme.background)
                 ) {
+                    // 页面滑入/滑出用 expressive 的空间曲线（有加速有减速），
+                    // 默认那个弹簧偏匀速，看起来像线性
+                    val pageSlideSpec = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
                     NavDisplay(
                         backStack = backStack,
                         entryDecorators = listOf(
@@ -477,31 +481,35 @@ class RouteActivity : ComponentActivity() {
                         // 有源条目的页面：位移交给容器变换去演，这里只留淡入淡出，免得两层动画打架
                         // 没有源条目的页面（抽屉、聊天流里的入口）：从下方滑入、向下滑出，比纯淡出更有方向感
                         transitionSpec = {
-                            if ((targetState as? Screen)?.usesHeroTransition() == true) {
-                                fadeIn() togetherWith fadeOut()
-                            } else {
-                                (slideInVertically { it } + fadeIn()) togetherWith fadeOut()
+                            val target = targetState as? Screen
+                            val enterFromTop = (target as? Screen.Chat)?.enterFromTop
+                            when {
+                                // 侧边栏点进来的会话：抽屉先收回去，会话页再从点击项那一侧落下来
+                                enterFromTop != null ->
+                                    (slideInVertically(animationSpec = pageSlideSpec) { if (enterFromTop) -it else it } + fadeIn()) togetherWith fadeOut()
+
+                                target?.usesHeroTransition() == true -> fadeIn() togetherWith fadeOut()
+                                else -> (slideInVertically(animationSpec = pageSlideSpec) { it } + fadeIn()) togetherWith fadeOut()
                             }
                         },
                         popTransitionSpec = {
-                            if ((initialState as? Screen)?.usesHeroTransition() == true) {
-                                fadeIn() togetherWith fadeOut()
-                            } else {
-                                fadeIn() togetherWith (slideOutVertically { it } + fadeOut())
+                            val initial = initialState as? Screen
+                            when {
+                                initial?.usesHeroTransition() == true -> fadeIn() togetherWith fadeOut()
+                                else -> fadeIn() togetherWith (slideOutVertically(animationSpec = pageSlideSpec) { it } + fadeOut())
                             }
                         },
                         predictivePopTransitionSpec = {
-                            if ((initialState as? Screen)?.usesHeroTransition() == true) {
-                                fadeIn() togetherWith fadeOut()
-                            } else {
-                                fadeIn() togetherWith (slideOutVertically { it } + fadeOut())
+                            val initial = initialState as? Screen
+                            when {
+                                initial?.usesHeroTransition() == true -> fadeIn() togetherWith fadeOut()
+                                else -> fadeIn() togetherWith (slideOutVertically(animationSpec = pageSlideSpec) { it } + fadeOut())
                             }
                         },
                         entryProvider = entryProvider {
-                            entry<Screen.Chat>(
-                                metadata = NavDisplay.transitionSpec { fadeIn() togetherWith fadeOut() }
-                                    + NavDisplay.popTransitionSpec { fadeIn() togetherWith fadeOut() }
-                            ) { key ->
+                            // 转场交给 display 级的 transitionSpec：抽屉点进来的会话要按 enterFromTop
+                            // 从对应一侧落下，entry 级 metadata 会把整套 spec 盖掉
+                            entry<Screen.Chat> { key ->
                                 ChatPage(
                                     id = Uuid.parse(key.id),
                                     text = key.text,
@@ -832,7 +840,10 @@ sealed interface Screen : NavKey {
         val id: String,
         val text: String? = null,
         val files: List<String> = emptyList(),
-        val nodeId: String? = null
+        val nodeId: String? = null,
+        // 从侧边栏点进来时记下点击项在列表的上半还是下半，转场据此决定从上方还是下方落进来；
+        // 其它入口（新会话、收藏、搜索）留 null，走默认转场
+        val enterFromTop: Boolean? = null,
     ) : Screen
 
     @Serializable

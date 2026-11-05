@@ -22,6 +22,9 @@ import me.rerere.rikkahub.ui.theme.adaptiveCornerRadius
 /** 源条目侧的圆角。页面到位后收到 0，退场时再长回这个值。 */
 val HeroSourceCorner = 20.dp
 
+/** 抽屉底部头像 → 设置页顶部头像，同一张图飞过去。 */
+const val DrawerSettingsAvatarKey = "drawer_settings_avatar"
+
 @Composable
 fun Modifier.heroAnimation(
     key: Any,
