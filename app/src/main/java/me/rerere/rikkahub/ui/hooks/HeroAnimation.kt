@@ -9,17 +9,24 @@ import androidx.compose.animation.core.animateDp
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.ui.LocalNavAnimatedContentScope
+import me.rerere.rikkahub.data.datastore.AnimationSpeed
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.context.LocalSharedTransitionScope
 import me.rerere.rikkahub.ui.pages.mediacreation.mediaCreationHeroKey
+import me.rerere.rikkahub.ui.theme.LocalAnimationSpeed
+import me.rerere.rikkahub.ui.theme.rememberSpatialSpec
 import me.rerere.rikkahub.ui.theme.adaptiveCornerRadius
 
 /** 源条目侧的圆角。页面到位后收到 0，退场时再长回这个值。 */
@@ -35,8 +42,20 @@ const val DrawerSettingsAvatarKey = "drawer_settings_avatar"
  * 返回设置页时如果用户顺手把抽屉滑回去，目标会快速移出屏幕，默认那条软弹簧追不上，
  * 看起来就是头像落在后面。stiffness 拉高、damping 拉满，基本贴着目标走。
  */
-val DrawerAvatarBoundsTransform: BoundsTransform = { _, _ ->
-    spring(dampingRatio = 1f, stiffness = 1200f)
+@Composable
+fun rememberDrawerAvatarBoundsTransform(): BoundsTransform {
+    val motionScheme = MaterialTheme.motionScheme
+    val speed = LocalAnimationSpeed.current
+    return remember(motionScheme, speed) {
+        { _, _ ->
+            when (speed) {
+                // SYSTEM 走 motionScheme：关掉动效时它已经是 snap，这条自动跟着关
+                AnimationSpeed.SYSTEM -> motionScheme.defaultSpatialSpec()
+                AnimationSpeed.FAST -> spring<Rect>(dampingRatio = 1f, stiffness = 1800f)
+                AnimationSpeed.GENTLE -> spring<Rect>(dampingRatio = 1f, stiffness = 700f)
+            }
+        }
+    }
 }
 
 @Composable
@@ -90,7 +109,12 @@ fun HeroPage(
 ) {
     // 全宽组件模式下条目是直角，页面起始形状得跟着它，否则展开的第一帧会对不上
     val sourceCorner = adaptiveCornerRadius(HeroSourceCorner)
-    val corner by LocalNavAnimatedContentScope.current.transition.animateDp(label = "heroPageCorner") { state ->
+    // 圆角也用同一档速度，关掉动效时它是 snap，不会留一段 300ms 的收角
+    val cornerSpec = rememberSpatialSpec<Dp>()
+    val corner by LocalNavAnimatedContentScope.current.transition.animateDp(
+        transitionSpec = { cornerSpec },
+        label = "heroPageCorner",
+    ) { state ->
         if (state == EnterExitState.Visible) 0.dp else sourceCorner
     }
     Box(

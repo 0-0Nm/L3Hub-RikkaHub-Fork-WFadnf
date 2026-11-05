@@ -35,6 +35,7 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetState
+import android.os.SystemClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -103,7 +104,7 @@ import me.rerere.rikkahub.ui.components.ui.glassSurface
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
-import me.rerere.rikkahub.ui.hooks.DrawerAvatarBoundsTransform
+import me.rerere.rikkahub.ui.hooks.rememberDrawerAvatarBoundsTransform
 import me.rerere.rikkahub.ui.hooks.DrawerSettingsAvatarKey
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.readBooleanPreference
@@ -154,6 +155,8 @@ fun ChatDrawerContent(
     hazeState: HazeState? = null,
 ) {
     val scope = rememberCoroutineScope()
+    // 抽屉还在收起时列表仍然可点，两次点击的导航落地顺序由动画时长决定
+    var lastConversationOpenAt by remember { mutableStateOf(0L) }
     val context = LocalContext.current
     val toaster = LocalToaster.current
     val repo = koinInject<ConversationRepository>()
@@ -345,17 +348,21 @@ fun ChatDrawerContent(
                     .fillMaxWidth()
                     .weight(1f),
                 onClick = { conversation ->
-                    // 点的是列表上半部分就从上方落进来，下半部分从下方升上来。
-                    // 列表里是日期分组和会话混排，只有 Item 那一条才带会话
-                    val index = (0 until conversations.itemCount)
-                        .firstOrNull {
-                            (conversations.peek(it) as? ConversationListItem.Item)?.conversation?.id == conversation.id
+                    val now = SystemClock.uptimeMillis()
+                    if (now - lastConversationOpenAt >= 400L) {
+                        lastConversationOpenAt = now
+                        // 点的是列表上半部分就从上方落进来，下半部分从下方升上来。
+                        // 列表里是日期分组和会话混排，只有 Item 那一条才带会话
+                        val index = (0 until conversations.itemCount)
+                            .firstOrNull {
+                                (conversations.peek(it) as? ConversationListItem.Item)?.conversation?.id == conversation.id
+                            }
+                        val fromTop = index != null && index * 2 < conversations.itemCount
+                        scope.launch {
+                            // 先把抽屉收回去再换会话，两段动画分开走，别叠在一起
+                            onCloseDrawer?.invoke()
+                            navigateToChatPage(navController, conversation.id, enterFromTop = fromTop)
                         }
-                    val fromTop = index != null && index * 2 < conversations.itemCount
-                    scope.launch {
-                        // 先把抽屉收回去再换会话，两段动画分开走，别叠在一起
-                        onCloseDrawer?.invoke()
-                        navigateToChatPage(navController, conversation.id, enterFromTop = fromTop)
                     }
                 },
                 onRegenerateTitle = {
@@ -912,7 +919,7 @@ private fun DrawerBottomBar(
                         Modifier.heroAnimation(
                             key = DrawerSettingsAvatarKey,
                             // 抽屉被顺手滑回去时目标是快速移出屏幕的，用硬曲线贴着走，别落在后面
-                            boundsTransform = DrawerAvatarBoundsTransform,
+                            boundsTransform = rememberDrawerAvatarBoundsTransform(),
                         )
                     } else {
                         Modifier

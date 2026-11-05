@@ -453,8 +453,11 @@ class RouteActivity : ComponentActivity() {
         }
 
         SharedTransitionLayout {
+            // 每次重组新建一个 Navigator 会把防抖窗口和栈操作的节流全清掉，
+            // 而且 Local 的值一直在变，读它的页面会跟着整片重组
+            val navigator = remember(backStack) { Navigator(backStack) }
             CompositionLocalProvider(
-                LocalNavController provides Navigator(backStack),
+                LocalNavController provides navigator,
                 LocalSharedTransitionScope provides this,
                 LocalSettings provides settings,
                 LocalButtonShadow provides settings.displaySetting.buttonShadow,
@@ -478,6 +481,7 @@ class RouteActivity : ComponentActivity() {
                     // 页面滑入/滑出用 expressive 的空间曲线（有加速有减速），
                     // 默认那个弹簧偏匀速，看起来像线性
                     val pageSlideSpec = rememberSpatialSpec<IntOffset>()
+                    val navController = LocalNavController.current
                     NavDisplay(
                         backStack = backStack,
                         entryDecorators = listOf(
@@ -486,7 +490,9 @@ class RouteActivity : ComponentActivity() {
                         ),
                         modifier = Modifier.fillMaxSize(),
                         // 同一帧内连续两次返回时 NavDisplay 的返回状态还没更新，会多回调一次，不加判断会把栈弹空
-                        onBack = { if (backStack.size > 1) backStack.removeLastOrNull() },
+                        // 走 Navigator 而不是直接改 backStack：系统返回键也得过防抖，
+                        // 不然连按两下会一次退两层
+                        onBack = { navController.popBackStack() },
                         // 有源条目的页面：位移交给容器变换去演，这里只留淡入淡出，免得两层动画打架
                         // 没有源条目的页面（抽屉、聊天流里的入口）：从下方滑入、向下滑出，比纯淡出更有方向感
                         transitionSpec = {
@@ -503,14 +509,26 @@ class RouteActivity : ComponentActivity() {
                         },
                         popTransitionSpec = {
                             val initial = initialState as? Screen
+                            val enterFromTop = (initial as? Screen.Chat)?.enterFromTop
                             when {
+                                // 从上方落进来的会话，返回时要原路上去，不然方向不闭环
+                                enterFromTop != null -> fadeIn() togetherWith (slideOutVertically(
+                                    animationSpec = pageSlideSpec,
+                                ) { if (enterFromTop) -it else it } + fadeOut())
+
                                 initial?.usesHeroTransition() == true -> fadeIn() togetherWith fadeOut()
                                 else -> fadeIn() togetherWith (slideOutVertically(animationSpec = pageSlideSpec) { it } + fadeOut())
                             }
                         },
                         predictivePopTransitionSpec = {
                             val initial = initialState as? Screen
+                            val enterFromTop = (initial as? Screen.Chat)?.enterFromTop
                             when {
+                                // 从上方落进来的会话，返回时要原路上去，不然方向不闭环
+                                enterFromTop != null -> fadeIn() togetherWith (slideOutVertically(
+                                    animationSpec = pageSlideSpec,
+                                ) { if (enterFromTop) -it else it } + fadeOut())
+
                                 initial?.usesHeroTransition() == true -> fadeIn() togetherWith fadeOut()
                                 else -> fadeIn() togetherWith (slideOutVertically(animationSpec = pageSlideSpec) { it } + fadeOut())
                             }
