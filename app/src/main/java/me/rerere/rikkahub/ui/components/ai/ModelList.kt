@@ -25,6 +25,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -335,10 +336,15 @@ fun ModelListSheet(
         }
     }
 
+    // 页面被导航走时 hide() 会被取消，state.close() 就没机会跑，
+    // 回来时这张 sheet 会自己再冒出来。这里兜住这一种情况，动画照旧保留
+    DisposableEffect(Unit) {
+        onDispose { state.close() }
+    }
+
     ModalBottomSheet(
-        onDismissRequest = {
-            state.close()
-        },
+        // 走同一条有动画的路径，别让点外部和返回键瞬间消失
+        onDismissRequest = { dismiss() },
         sheetState = sheetState,
         // 列表本身要上下滑，sheet 的下拉手势很容易在滚动时误触关闭；
         // 只留两种关法：点弹窗外部，或点右上角 X

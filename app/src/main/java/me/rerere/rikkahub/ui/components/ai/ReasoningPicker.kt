@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
@@ -52,6 +53,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -183,13 +185,21 @@ fun ReasoningPicker(
     }
 
     ModalBottomSheet(
-        onDismissRequest = onDismissRequest,
+        // 返回键和点外部都走这里：先在面板内部退一级，退无可退才真关掉。
+        // 这样即使 BackHandler 被 Dialog 自己吃了，行为也是对的
+        onDismissRequest = {
+            if (showModelList) showModelList = false else onDismissRequest()
+        },
         sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)),
     ) sheet@{
+        // 在模型列表那一页按返回，先退回思考强度，别一下把整个面板关掉
+        BackHandler(enabled = showModelList) {
+            showModelList = false
+        }
         // 从思考强度面板切到模型列表时不关 sheet，直接换内容
         // 两页要叠在同一块区域上，所以套了 Box；Box 里是 BoxScope，直接写 AnimatedVisibility
         // 会落到 sheet 内容的 ColumnScope 那个重载上、被布局的 DSL marker 挡掉，这里显式指回去
-        Box(modifier = Modifier.animateContentSize()) {
+        Box(modifier = Modifier.animateContentSize().clipToBounds()) {
             this@sheet.AnimatedVisibility(
                 visible = !showModelList,
                 enter = slideInHorizontally { -it } + fadeIn(),

@@ -437,8 +437,10 @@ fun CardGroup(
                     } else {
                         CardGroupListItem(item = item, count = count, index = index)
                     }
-                    // 间距跟着条目一起收起，不然会留一道 2dp 的缝
-                    if (item.visible && index != count - 1) {
+                    // 间距放在收起动画里面，跟着条目一起缩；
+                    // 不要再加 item.visible：它在收起开始时就已经是 false，
+                    // 会让 2dp 瞬间消失、条目才开始慢慢缩，看起来硬跳一下
+                    if (index != count - 1) {
                         Spacer(modifier = Modifier.height(CardGroupItemSpacing))
                     }
                 }

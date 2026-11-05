@@ -56,6 +56,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -144,6 +145,7 @@ import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.plus
 import me.rerere.ui.components.RikkaConfirmDialog
 import me.rerere.ui.toast.ToastType
+import kotlinx.coroutines.delay
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import sh.calvin.reorderable.ReorderableItem
@@ -180,7 +182,18 @@ private enum class ModelFormTab(
 fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
-    val provider = settings.providers.find { it.id == id } ?: return
+    val provider = settings.providers.find { it.id == id }
+    if (provider == null) {
+        // 提供商在别处被删掉了：留一个能按返回的壳，别把用户丢在一张空白页上
+        LaunchedEffect(Unit) {
+            delay(400)
+            navController.popBackStack()
+        }
+        Box(modifier = Modifier.fillMaxSize()) {
+            BackButton(modifier = Modifier.padding(16.dp))
+        }
+        return
+    }
     val pager = rememberPagerState { ProviderDetailTab.entries.size }
     val toaster = LocalToaster.current
     val context = LocalContext.current
@@ -1845,21 +1858,29 @@ internal fun ModelEditorPage(
 ) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
-    val provider = settings.providers.find { it.id == providerId } ?: return
+    // 不在这里 early return：提供商被删掉时也得留一个能按返回的壳，
+    // 否则用户会卡在一张空白页上
+    val provider = settings.providers.find { it.id == providerId }
 
     val existing = remember(provider, modelId) {
-        modelId?.let { id -> provider.models.find { it.id.toString() == id } }
+        modelId?.let { id -> provider?.models?.find { it.id.toString() == id } }
     }
     var draft by remember(existing) { mutableStateOf(existing?.copy() ?: Model()) }
     val isEdit = existing != null
 
+    // 新建这条不幂等：addModel 是 models + model，不去重。转场那 300ms 里按钮还能点，
+    // 连点两下会写进两条同 id 的模型，列表的 LazyColumn 拿重复 key 会直接崩
+    var saving by remember { mutableStateOf(false) }
     fun save() {
+        if (saving) return
+        val target = provider ?: return
+        saving = true
         val edited = draft.copy(displayName = draft.displayName.trim())
         vm.updateSettings { latest ->
             latest.copy(
                 providers = latest.providers.map { item ->
                     when {
-                        item.id != provider.id -> item
+                        item.id != target.id -> item
                         isEdit -> item.editModel(edited)
                         else -> item.addModel(edited)
                     }
@@ -1891,7 +1912,7 @@ internal fun ModelEditorPage(
                 actions = {
                     TextButton(
                         // 新建时 modelId 也必须有，否则会写进一条点不动的空条目
-                        enabled = draft.displayName.isNotBlank() &&
+                        enabled = provider != null && draft.displayName.isNotBlank() &&
                             (isEdit || draft.modelId.isNotBlank()),
                         onClick = { save() },
                     ) {
