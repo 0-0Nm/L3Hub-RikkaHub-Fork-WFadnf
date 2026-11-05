@@ -176,7 +176,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val scope = rememberCoroutineScope()
 
     val setting by vm.settings.collectAsStateWithLifecycle()
-    val conversation by vm.conversationUi.collectAsStateWithLifecycle()
+    val conversation by vm.conversation.collectAsStateWithLifecycle()
     val loadingJob by vm.conversationJob.collectAsStateWithLifecycle()
     val processingStatus by vm.processingStatus.collectAsStateWithLifecycle()
     val currentChatModel by vm.currentChatModel.collectAsStateWithLifecycle()
@@ -367,9 +367,6 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     onDismissError = { vm.dismissError(it) },
                     onClearAllErrors = { vm.clearAllErrors() },
                 )
-            }
-            BackHandler(drawerState.isOpen) {
-                scope.launch { drawerState.close() }
             }
         }
     }
@@ -866,8 +863,6 @@ private fun ChatPageContent(
         if (!setting.displaySetting.terminalStyle) {
             AssistantBackground(
                 setting = setting,
-                // 生成中和滚动中背景完全不用动：这两段时间最缺主线程，62~110 秒周期的漂移停一会儿看不出来
-                animate = loadingJob == null && !chatListState.isScrollInProgress,
                 modifier = Modifier
                     .hazeSource(hazeState)
                     .hazeSource(backgroundHazeState),

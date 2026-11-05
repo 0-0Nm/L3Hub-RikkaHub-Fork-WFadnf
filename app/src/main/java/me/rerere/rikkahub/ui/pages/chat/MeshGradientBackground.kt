@@ -12,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -20,13 +21,11 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import kotlinx.coroutines.delay
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
-private const val MESH_FRAME_MILLIS = 50L
 private const val TWO_PI = 2f * PI.toFloat()
 
 /**
@@ -89,13 +88,11 @@ private fun MeshBlob.color(huePhase: Float): Color = Color.hsv(
 @Composable
 fun MeshGradientBackground(
     modifier: Modifier = Modifier,
-    animate: Boolean = true,
     content: @Composable BoxScope.() -> Unit = {},
 ) {
     var phases by remember { mutableStateOf(MeshPhases()) }
 
-    // 窗口不在前台时连定时器一起停掉：delay() 不受帧时钟约束，
-    // 不这么写的话应用切后台仍会每 50ms 醒一次并触发一次 draw。
+    // 窗口不在前台时连帧时钟一起停掉。
     val lifecycleOwner = LocalLifecycleOwner.current
     var resumed by remember(lifecycleOwner) {
         mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
@@ -108,17 +105,17 @@ fun MeshGradientBackground(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // 背景是几十秒周期的缓慢漂移，不需要跟屏幕刷新率同步：20fps 看不出差别，
-    // 而生成中、滚动中、切后台时整段停下来，省掉的正是最缺主线程的那段时间。
-    LaunchedEffect(animate, resumed) {
-        if (!animate || !resumed) return@LaunchedEffect
-        var lastNanos = System.nanoTime()
+    // 跟着帧时钟走：每帧按真实经过时间推进相位，与屏幕刷新同步。
+    LaunchedEffect(resumed) {
+        if (!resumed) return@LaunchedEffect
+        var lastNanos = 0L
         while (true) {
-            delay(MESH_FRAME_MILLIS)
-            val now = System.nanoTime()
-            val elapsedMillis = ((now - lastNanos) / 1_000_000L).coerceIn(1L, 500L)
+            val now = withFrameNanos { it }
+            if (lastNanos != 0L) {
+                val elapsedMillis = ((now - lastNanos) / 1_000_000L).coerceIn(1L, 500L)
+                phases = phases.advance(elapsedMillis.toFloat())
+            }
             lastNanos = now
-            phases = phases.advance(elapsedMillis.toFloat())
         }
     }
 

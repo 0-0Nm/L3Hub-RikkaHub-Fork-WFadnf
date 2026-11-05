@@ -18,10 +18,10 @@ import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.ui.theme.LocalUiSlots
 
 @Composable
-fun AssistantBackground(setting: Settings, modifier: Modifier, animate: Boolean = true) {
+fun AssistantBackground(setting: Settings, modifier: Modifier) {
     val assistant = setting.getCurrentAssistant()
     if (assistant.useGradientBackground) {
-        MeshGradientBackground(modifier = modifier, animate = animate)
+        MeshGradientBackground(modifier = modifier)
         return
     }
     if (assistant.background != null) {
