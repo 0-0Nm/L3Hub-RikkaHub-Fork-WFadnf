@@ -256,17 +256,18 @@ internal class InteractionsAPI(
     }.mergeCustomBody(params.customBody)
 
     // Interactions API 只接受 thinking_level，没有 thinkingBudget
-    private fun thinkingLevel(params: TextGenerationParams): String? = when (params.reasoningLevel) {
-        ReasoningLevel.AUTO -> null
-        ReasoningLevel.OFF -> {
-            val supportsMinimal = ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId) ||
-                ModelRegistry.GEMINI_4.match(modelId = params.model.modelId)
-            if (supportsMinimal) "minimal" else "low"
+    private fun thinkingLevel(params: TextGenerationParams): String? {
+        val supportsMinimal = ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId) ||
+            ModelRegistry.GEMINI_4.match(modelId = params.model.modelId)
+        return when (params.reasoningLevel) {
+            ReasoningLevel.AUTO -> null
+            ReasoningLevel.OFF -> if (supportsMinimal) "minimal" else "low"
+            ReasoningLevel.MINIMAL -> if (supportsMinimal) "minimal" else "low"
+            ReasoningLevel.LOW -> "low"
+            ReasoningLevel.MEDIUM -> "medium"
+            ReasoningLevel.ULTRA -> "ultra"
+            else -> "high" // HIGH, XHIGH, MAX
         }
-        ReasoningLevel.LOW -> "low"
-        ReasoningLevel.MEDIUM -> "medium"
-        ReasoningLevel.ULTRA -> "ultra"
-        else -> "high" // HIGH, XHIGH, MAX
     }
 
     internal fun buildInput(messages: List<UIMessage>): JsonArray = buildJsonArray {

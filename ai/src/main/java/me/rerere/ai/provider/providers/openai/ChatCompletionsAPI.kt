@@ -387,6 +387,8 @@ class ChatCompletionsAPI(
                             val effort = when (level) {
                                 ReasoningLevel.MEDIUM, ReasoningLevel.HIGH -> "high"
                                 ReasoningLevel.MAX -> "max"
+                                // DeepSeek 只认 low/高段位，Minimal 落到 low
+                                ReasoningLevel.MINIMAL -> "low"
                                 else -> level.effort
                             }
                             put("reasoning_effort", effort)
@@ -400,6 +402,7 @@ class ChatCompletionsAPI(
                                     ReasoningLevel.XHIGH, ReasoningLevel.MAX -> "max"
                                     ReasoningLevel.OFF -> "none"
                                     ReasoningLevel.ULTRA -> "ultra"
+                                    ReasoningLevel.MINIMAL -> "low"
                                     else -> "high"
                                 }
                                 put("reasoning_effort", effort)

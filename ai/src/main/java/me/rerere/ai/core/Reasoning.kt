@@ -14,6 +14,9 @@ enum class ReasoningLevel(
     @SerialName("auto")
     AUTO(-1, "auto"),
 
+    @SerialName("minimal")
+    MINIMAL(512, "minimal"),
+
     @SerialName("low")
     LOW(1_000, "low"),
 

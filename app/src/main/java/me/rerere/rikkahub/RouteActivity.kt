@@ -72,6 +72,7 @@ import me.rerere.ui.toast.Toaster
 import me.rerere.ui.toast.rememberToasterState
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import me.rerere.rikkahub.data.datastore.AnimationSpeed
 import me.rerere.rikkahub.data.datastore.AppLockStateStore
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.DatabaseMigrationTracker
@@ -158,7 +159,9 @@ import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
 import me.rerere.rikkahub.ui.pages.stats.StatsPage
 import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
 import me.rerere.rikkahub.ui.pages.webview.WebViewPage
+import me.rerere.rikkahub.ui.theme.LocalAnimationSpeed
 import me.rerere.rikkahub.ui.theme.LocalButtonShadow
+import me.rerere.rikkahub.ui.theme.rememberSpatialSpec
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.openUsageAccessSettings
@@ -456,6 +459,12 @@ class RouteActivity : ComponentActivity() {
                 LocalSettings provides settings,
                 LocalButtonShadow provides settings.displaySetting.buttonShadow,
                 LocalToaster provides toastState,
+                // 关了动效就固定回 SYSTEM：那时 motionScheme 是 snap，速度档位不该再生效
+                LocalAnimationSpeed provides if (settings.displaySetting.disableAnimations) {
+                    AnimationSpeed.SYSTEM
+                } else {
+                    settings.displaySetting.animationSpeed
+                },
                 LocalTTSState provides tts,
                 LocalASRState provides asr,
             ) {
@@ -468,7 +477,7 @@ class RouteActivity : ComponentActivity() {
                 ) {
                     // 页面滑入/滑出用 expressive 的空间曲线（有加速有减速），
                     // 默认那个弹簧偏匀速，看起来像线性
-                    val pageSlideSpec = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
+                    val pageSlideSpec = rememberSpatialSpec<IntOffset>()
                     NavDisplay(
                         backStack = backStack,
                         entryDecorators = listOf(

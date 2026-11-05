@@ -495,7 +495,12 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                         })
                         put("output_config", buildJsonObject {
                             // 档位原样发送：Ultra 就发 ultra，服务不认是用户自己的选择
-                            put("effort", params.reasoningLevel.effort)
+                            // Anthropic 的 effort 没有 minimal，这一档落到最低可用的 low
+                            put(
+                                "effort",
+                                if (params.reasoningLevel == ReasoningLevel.MINIMAL) "low"
+                                else params.reasoningLevel.effort
+                            )
                         })
                     }
                 }

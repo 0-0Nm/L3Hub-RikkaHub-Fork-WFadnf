@@ -79,6 +79,7 @@ import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceLabel
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.components.ui.shadow.Button
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.hooks.DrawerAvatarBoundsTransform
 import me.rerere.rikkahub.ui.hooks.DrawerSettingsAvatarKey
 import me.rerere.rikkahub.ui.hooks.heroAnimation
 import me.rerere.rikkahub.ui.hooks.rememberColorMode
@@ -141,7 +142,10 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         value = settings.displaySetting.userAvatar,
                         avatarSize = 88.dp,
                         // 和抽屉底部那张头像是同一个 key，页面切换时互相飞过去
-                        modifier = Modifier.heroAnimation(DrawerSettingsAvatarKey),
+                        modifier = Modifier.heroAnimation(
+                            key = DrawerSettingsAvatarKey,
+                            boundsTransform = DrawerAvatarBoundsTransform,
+                        ),
                         onUpdate = { avatar ->
                             vm.updateSettings {
                                 it.copy(displaySetting = it.displaySetting.copy(userAvatar = avatar))

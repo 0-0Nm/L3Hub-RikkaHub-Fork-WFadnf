@@ -184,6 +184,19 @@ enum class ContextMeterStyle {
     RING,
 }
 
+/** 页面/列表过渡的速度手感，只在没关动效时生效。 */
+@Serializable
+enum class AnimationSpeed {
+    /** 跟随 Material 的 expressive 曲线 */
+    SYSTEM,
+
+    /** 收紧：同样的位移用更短的时间走完 */
+    FAST,
+
+    /** 摊开：慢一点，尾段拖得长一点 */
+    GENTLE,
+}
+
 @Serializable
 data class DisplaySetting(
     val userAvatar: Avatar = Avatar.Dummy,
@@ -207,6 +220,8 @@ data class DisplaySetting(
     val usagePieChart: Boolean = false,
     // 关闭所有动效：Material 的 motionScheme 换成 snap，列表/卡片的过渡直接跳变
     val disableAnimations: Boolean = false,
+    // 页面转场和列表展开的速度手感；disableAnimations 打开时忽略这一项
+    val animationSpeed: AnimationSpeed = AnimationSpeed.SYSTEM,
     // 上下文预警条用绝对值(数字/数字)显示, 关闭时显示百分比
     val contextMeterAbsolute: Boolean = false,
     val showThinkingContent: Boolean = true,

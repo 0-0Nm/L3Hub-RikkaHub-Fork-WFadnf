@@ -523,6 +523,21 @@ fun ChatInput(
                                 } else {
                                     null
                                 },
+                                // 单行模式下点模型名不关面板，直接把模型列表滑进来
+                                modelContent = if (singleLine) {
+                                    { dismiss ->
+                                        ModelListContent(
+                                            state = modelListState,
+                                            onSelect = { model ->
+                                                onUpdateChatModel(model)
+                                                dismiss()
+                                            },
+                                            onDismiss = dismiss,
+                                        )
+                                    }
+                                } else {
+                                    null
+                                },
                                 useL3HubStyle = settings.displaySetting.useL3HubReasoningStyle,
                             )
                         }

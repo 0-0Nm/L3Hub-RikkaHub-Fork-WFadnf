@@ -67,6 +67,8 @@ class GrokProviderTest {
             grokBody(model, level)["reasoning"]?.jsonObject?.get("effort")?.jsonPrimitive?.content
 
         assertEquals("none", effort(ReasoningLevel.OFF))
+        // xAI 没有 minimal 档，落到 low
+        assertEquals("low", effort(ReasoningLevel.MINIMAL))
         assertEquals("medium", effort(ReasoningLevel.MEDIUM))
         assertEquals("high", effort(ReasoningLevel.XHIGH))
         assertEquals("high", effort(ReasoningLevel.MAX))

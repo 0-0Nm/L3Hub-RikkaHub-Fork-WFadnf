@@ -1,7 +1,10 @@
 package me.rerere.rikkahub.ui.hooks
 
+import androidx.compose.animation.BoundsTransform
+import androidx.compose.animation.DefaultBoundsTransform
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateDp
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,16 +28,29 @@ val HeroSourceCorner = 20.dp
 /** 抽屉底部头像 → 设置页顶部头像，同一张图飞过去。 */
 const val DrawerSettingsAvatarKey = "drawer_settings_avatar"
 
+/**
+ * 抽屉 ↔ 设置页头像的飞行曲线，故意做得很硬。
+ *
+ * 转场里那个跟着飞的层是按时间插值的，它每帧只把「目标当前坐标」当终点，不会硬贴上去。
+ * 返回设置页时如果用户顺手把抽屉滑回去，目标会快速移出屏幕，默认那条软弹簧追不上，
+ * 看起来就是头像落在后面。stiffness 拉高、damping 拉满，基本贴着目标走。
+ */
+val DrawerAvatarBoundsTransform: BoundsTransform = { _, _ ->
+    spring(dampingRatio = 1f, stiffness = 1200f)
+}
+
 @Composable
 fun Modifier.heroAnimation(
     key: Any,
+    boundsTransform: BoundsTransform = DefaultBoundsTransform,
 ): Modifier {
     val sharedTransitionScope = LocalSharedTransitionScope.current
     val animatedVisibilityScope = LocalNavAnimatedContentScope.current
     return with(sharedTransitionScope) {
         this@heroAnimation.sharedElement(
             sharedContentState = rememberSharedContentState(key),
-            animatedVisibilityScope = animatedVisibilityScope
+            animatedVisibilityScope = animatedVisibilityScope,
+            boundsTransform = boundsTransform,
         )
     }
 }

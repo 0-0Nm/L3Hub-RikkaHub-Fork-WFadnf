@@ -73,6 +73,8 @@ private fun grokEffort(level: ReasoningLevel, modelId: String): String? {
     return when (level) {
         ReasoningLevel.AUTO -> null
         ReasoningLevel.OFF -> "none"
+        // xAI 的 effort 只有 none/low/medium/high/xhigh，Minimal 落到 low
+        ReasoningLevel.MINIMAL -> "low"
         ReasoningLevel.LOW -> "low"
         ReasoningLevel.MEDIUM -> "medium"
         ReasoningLevel.HIGH -> "high"

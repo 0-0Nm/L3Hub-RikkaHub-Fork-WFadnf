@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.shrinkVertically
@@ -94,6 +93,7 @@ import me.rerere.rikkahub.ui.components.ui.shadow.FilledTonalButton
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.hooks.ChatInputState
+import me.rerere.rikkahub.ui.theme.rememberSpatialSpec
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.ui.terminal.IconButton
 import me.rerere.rikkahub.utils.formatNumber
@@ -242,7 +242,7 @@ internal fun FilesPicker(
                     (if (showWorkspace) cwdWorkspaces.size + 1 else 0) +
                     (if (showMcp) 1 else 0) +
                     (if (showCompress) 1 else 0)
-                val pickerExpandSpec = spring<IntSize>(dampingRatio = 0.72f, stiffness = 480f)
+                val pickerExpandSpec = rememberSpatialSpec<IntSize>()
                 var itemIndex = 0
                 // 收起的项在退出动画期间还在渲染，给它末项形状，免得拿到首项的大圆角
                 val hiddenShapeIndex = (itemCount - 1).coerceAtLeast(0)

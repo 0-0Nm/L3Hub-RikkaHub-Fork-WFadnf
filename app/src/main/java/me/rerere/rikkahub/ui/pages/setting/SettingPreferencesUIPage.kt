@@ -21,6 +21,7 @@ import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -50,6 +51,7 @@ import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.hugeicons.stroke.Delete02
 import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.AnimationSpeed
 import me.rerere.rikkahub.data.datastore.ChatFontFamily
 import me.rerere.rikkahub.data.datastore.ContextMeterStyle
 import me.rerere.rikkahub.data.datastore.DisplaySetting
@@ -305,6 +307,25 @@ fun SettingPreferencesUIPage(embedded: Boolean = false, vm: SettingVM = koinView
                     supportingContent = { Text(stringResource(R.string.setting_display_page_disable_animations_desc)) },
                     headlineContent = { Text(stringResource(R.string.setting_display_page_disable_animations_title)) },
                 )
+                // 关掉动效以后这一项没有意义，直接收起来
+                if (!displaySetting.disableAnimations) {
+                    AnimationSpeed.entries.forEach { speed ->
+                        item(
+                            onClick = {
+                                updateDisplaySetting(displaySetting.copy(animationSpeed = speed))
+                            },
+                            supportingContent = { Text(speed.description) },
+                            trailingContent = {
+                                RadioButton(
+                                    selected = displaySetting.animationSpeed == speed,
+                                    onClick = null,
+                                )
+                            },
+                        ) {
+                            Text(speed.label)
+                        }
+                    }
+                }
                 switchItem(
                     checked = displaySetting.showThinkingContent,
                     onCheckedChange = { updateDisplaySetting(displaySetting.copy(showThinkingContent = it)) },
@@ -672,3 +693,17 @@ private fun deleteCustomChatFontInternal(context: Context, relativePath: String)
         fontFile.delete()
     }
 }
+
+private val AnimationSpeed.label: String
+    get() = when (this) {
+        AnimationSpeed.SYSTEM -> "跟随系统"
+        AnimationSpeed.FAST -> "轻快"
+        AnimationSpeed.GENTLE -> "柔和"
+    }
+
+private val AnimationSpeed.description: String
+    get() = when (this) {
+        AnimationSpeed.SYSTEM -> "用 Material 自带的空间曲线"
+        AnimationSpeed.FAST -> "同样的位移用更短的时间走完"
+        AnimationSpeed.GENTLE -> "慢一点，尾段拖得更长"
+    }

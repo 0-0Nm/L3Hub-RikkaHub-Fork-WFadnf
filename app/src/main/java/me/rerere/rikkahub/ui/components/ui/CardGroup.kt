@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -58,14 +57,13 @@ import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.hooks.heroSource
 import me.rerere.rikkahub.ui.terminal.Switch
 import me.rerere.rikkahub.ui.terminal.TopAppBar
+import me.rerere.rikkahub.ui.theme.rememberSpatialSpec
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.adaptiveCornerRadius
 
 private val CardGroupCorner = 20.dp
 private val CardGroupItemSpacing = 2.dp
 private val CardGroupInnerCorner = 4.dp
-// 附加选项拉出来时用的弹簧：阻尼比压到 0.62，高度过冲后回弹一下才停
-private val CardGroupExpandSpring = spring<IntSize>(dampingRatio = 0.72f, stiffness = 480f)
 
 private data class CardGroupItem(
     val onClick: (() -> Unit)?,
@@ -418,7 +416,7 @@ fun CardGroup(
         val expandSpec = if (LocalSettings.current.displaySetting.disableAnimations) {
             snap<IntSize>()
         } else {
-            CardGroupExpandSpring
+            rememberSpatialSpec<IntSize>()
         }
         val fadeSpec = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
         val count = scope.items.count { it.visible }

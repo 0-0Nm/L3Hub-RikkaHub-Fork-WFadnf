@@ -15,6 +15,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -82,6 +88,8 @@ fun ReasoningButton(
     onUpdateReasoningLevel: (ReasoningLevel) -> Unit,
     modelName: String? = null,
     onOpenModelList: (() -> Unit)? = null,
+    // 不关面板直接换到模型列表：交给下层把内容塞进同一个 sheet
+    modelContent: (@Composable (dismiss: () -> Unit) -> Unit)? = null,
     useL3HubStyle: Boolean = false,
 ) {
     var showPicker by remember { mutableStateOf(false) }
@@ -93,6 +101,7 @@ fun ReasoningButton(
             onUpdateReasoningLevel = onUpdateReasoningLevel,
             modelName = modelName,
             onOpenModelList = onOpenModelList,
+            modelContent = modelContent,
             useL3HubStyle = useL3HubStyle,
         )
     }
@@ -142,8 +151,12 @@ fun ReasoningPicker(
     onUpdateReasoningLevel: (ReasoningLevel) -> Unit,
     modelName: String? = null,
     onOpenModelList: (() -> Unit)? = null,
+    // 不关面板直接换到模型列表时用这个，参数是「关掉整个面板」的回调
+    modelContent: (@Composable (dismiss: () -> Unit) -> Unit)? = null,
     useL3HubStyle: Boolean = false,
 ) {
+    // 面板内部切页：false 是思考强度，true 是模型列表
+    var showModelList by remember { mutableStateOf(false) }
     val currentIndex = levels.indexOf(reasoningLevel).coerceAtLeast(0)
     val sliderState = remember {
         SliderState(
@@ -173,108 +186,130 @@ fun ReasoningPicker(
         onDismissRequest = onDismissRequest,
         sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            if (onOpenModelList != null) {
-                Surface(
-                    onClick = {
-                        onDismissRequest()
-                        onOpenModelList()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        // 从思考强度面板切到模型列表时不关 sheet，直接换内容
+        Box(modifier = Modifier.animateContentSize()) {
+            AnimatedVisibility(
+                visible = !showModelList,
+                enter = slideInHorizontally { -it } + fadeIn(),
+                exit = slideOutHorizontally { -it } + fadeOut(),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                        .padding(bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    if (onOpenModelList != null || modelContent != null) {
+                        Surface(
+                            onClick = {
+                                if (modelContent != null) {
+                                    showModelList = true
+                                } else {
+                                    onDismissRequest()
+                                    onOpenModelList?.invoke()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Icon(
+                                    imageVector = HugeIcons.Brain02,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                Text(
+                                    text = modelName ?: stringResource(R.string.model_list_select_model),
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Text(
+                                    text = stringResource(R.string.reasoning_picker_model),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                    PickerValueHeader(
+                        title = stringResource(R.string.reasoning_picker_title),
+                        value = previewLevel,
+                        hint = stringResource(R.string.reasoning_picker_hint),
+                        label = { it.label() },
                     ) {
-                        Icon(
-                            imageVector = HugeIcons.Brain02,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
+                        // 等级越高形状越「激烈」
+                        PickerHero(
+                            shapes = levelShapes,
+                            index = levels.indexOf(previewLevel),
+                            icon = previewLevel.icon(),
+                            letter = if (useL3HubStyle) previewLevel.letter() else null,
+                            containerColor = when {
+                                useL3HubStyle -> previewLevel.indicatorColor()
+                                !previewLevel.isEnabled -> MaterialTheme.colorScheme.surfaceContainerHighest
+                                previewLevel >= ReasoningLevel.HIGH -> MaterialTheme.colorScheme.primary
+                                else -> MaterialTheme.colorScheme.primaryContainer
+                            },
+                            contentColor = when {
+                                useL3HubStyle -> Color.White
+                                !previewLevel.isEnabled -> MaterialTheme.colorScheme.onSurfaceVariant
+                                previewLevel >= ReasoningLevel.HIGH -> MaterialTheme.colorScheme.onPrimary
+                                else -> MaterialTheme.colorScheme.onPrimaryContainer
+                            },
                         )
-                        Text(
-                            text = modelName ?: stringResource(R.string.model_list_select_model),
-                            modifier = Modifier.weight(1f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.bodyMedium,
+                    }
+
+                    if (useL3HubStyle) {
+                        LinearReasoningSlider(
+                            level = previewLevel,
+                            onPreview = { sliderState.value = levels.indexOf(it).toFloat() },
+                            onCommit = { onUpdateReasoningLevel(it) },
+                            modifier = Modifier.align(Alignment.CenterHorizontally),
                         )
-                        Text(
-                            text = stringResource(R.string.reasoning_picker_model),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    } else {
+                        Slider(
+                            state = sliderState,
+                            onValueChange = { sliderState.value = it },
+                            onValueChangeFinished = {
+                                val snappedIndex = sliderState.value.roundToInt().coerceIn(0, levelCount - 1)
+                                sliderState.value = snappedIndex.toFloat()
+                                onUpdateReasoningLevel(levels[snappedIndex])
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            interactionSource = interactionSource,
+                            thumb = {
+                                SliderDefaults.Thumb(
+                                    interactionSource = interactionSource,
+                                    isVertical = false,
+                                    thumbSize = DpSize(4.dp, 52.dp),
+                                )
+                            },
+                            track = { sliderState ->
+                                SliderDefaults.Track(
+                                    sliderState = sliderState,
+                                    trackCornerSize = 12.dp,
+                                    modifier = Modifier.height(40.dp),
+                                )
+                            }
                         )
                     }
                 }
             }
-            PickerValueHeader(
-                title = stringResource(R.string.reasoning_picker_title),
-                value = previewLevel,
-                hint = stringResource(R.string.reasoning_picker_hint),
-                label = { it.label() },
-            ) {
-                // 等级越高形状越「激烈」
-                PickerHero(
-                    shapes = levelShapes,
-                    index = levels.indexOf(previewLevel),
-                    icon = previewLevel.icon(),
-                    letter = if (useL3HubStyle) previewLevel.letter() else null,
-                    containerColor = when {
-                        useL3HubStyle -> previewLevel.indicatorColor()
-                        !previewLevel.isEnabled -> MaterialTheme.colorScheme.surfaceContainerHighest
-                        previewLevel >= ReasoningLevel.HIGH -> MaterialTheme.colorScheme.primary
-                        else -> MaterialTheme.colorScheme.primaryContainer
-                    },
-                    contentColor = when {
-                        useL3HubStyle -> Color.White
-                        !previewLevel.isEnabled -> MaterialTheme.colorScheme.onSurfaceVariant
-                        previewLevel >= ReasoningLevel.HIGH -> MaterialTheme.colorScheme.onPrimary
-                        else -> MaterialTheme.colorScheme.onPrimaryContainer
-                    },
-                )
-            }
-
-            if (useL3HubStyle) {
-                LinearReasoningSlider(
-                    level = previewLevel,
-                    onPreview = { sliderState.value = levels.indexOf(it).toFloat() },
-                    onCommit = { onUpdateReasoningLevel(it) },
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                )
-            } else {
-                Slider(
-                    state = sliderState,
-                    onValueChange = { sliderState.value = it },
-                    onValueChangeFinished = {
-                        val snappedIndex = sliderState.value.roundToInt().coerceIn(0, levelCount - 1)
-                        sliderState.value = snappedIndex.toFloat()
-                        onUpdateReasoningLevel(levels[snappedIndex])
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    interactionSource = interactionSource,
-                    thumb = {
-                        SliderDefaults.Thumb(
-                            interactionSource = interactionSource,
-                            isVertical = false,
-                            thumbSize = DpSize(4.dp, 52.dp),
-                        )
-                    },
-                    track = { sliderState ->
-                        SliderDefaults.Track(
-                            sliderState = sliderState,
-                            trackCornerSize = 12.dp,
-                            modifier = Modifier.height(40.dp),
-                        )
-                    }
-                )
+            if (modelContent != null) {
+                AnimatedVisibility(
+                    visible = showModelList,
+                    enter = slideInHorizontally { it } + fadeIn(),
+                    exit = slideOutHorizontally { it } + fadeOut(),
+                ) {
+                    modelContent { onDismissRequest() }
+                }
             }
         }
     }
@@ -283,6 +318,7 @@ fun ReasoningPicker(
 private fun ReasoningLevel.icon(): ImageVector = when (this) {
     ReasoningLevel.OFF -> HugeIcons.Idea
     ReasoningLevel.AUTO -> HugeIcons.Idea01
+    ReasoningLevel.MINIMAL -> ReasoningLow
     ReasoningLevel.LOW -> ReasoningLow
     ReasoningLevel.MEDIUM -> ReasoningMedium
     ReasoningLevel.HIGH -> ReasoningHigh
@@ -294,6 +330,7 @@ private fun ReasoningLevel.icon(): ImageVector = when (this) {
 private fun ReasoningLevel.shape(): RoundedPolygon = when (this) {
     ReasoningLevel.OFF -> MaterialShapes.Circle
     ReasoningLevel.AUTO -> MaterialShapes.Cookie4Sided
+    ReasoningLevel.MINIMAL -> MaterialShapes.Clover4Leaf
     ReasoningLevel.LOW -> MaterialShapes.Cookie6Sided
     ReasoningLevel.MEDIUM -> MaterialShapes.Cookie7Sided
     ReasoningLevel.HIGH -> MaterialShapes.Cookie9Sided
@@ -306,6 +343,7 @@ private fun ReasoningLevel.shape(): RoundedPolygon = when (this) {
 private fun ReasoningLevel.label(): String = when (this) {
     ReasoningLevel.OFF -> stringResource(R.string.reasoning_off)
     ReasoningLevel.AUTO -> stringResource(R.string.reasoning_auto)
+    ReasoningLevel.MINIMAL -> stringResource(R.string.reasoning_minimal)
     ReasoningLevel.LOW -> stringResource(R.string.reasoning_light)
     ReasoningLevel.MEDIUM -> stringResource(R.string.reasoning_medium)
     ReasoningLevel.HIGH -> stringResource(R.string.reasoning_heavy)
@@ -317,6 +355,7 @@ private fun ReasoningLevel.label(): String = when (this) {
 private fun ReasoningLevel.badgeText(): String = when (this) {
     ReasoningLevel.OFF -> "OFF"
     ReasoningLevel.AUTO -> "AUTO"
+    ReasoningLevel.MINIMAL -> "MIN"
     ReasoningLevel.LOW -> "LOW"
     ReasoningLevel.MEDIUM -> "MED"
     ReasoningLevel.HIGH -> "HIGH"
@@ -328,6 +367,7 @@ private fun ReasoningLevel.badgeText(): String = when (this) {
 private fun ReasoningLevel.letter(): String = when (this) {
     ReasoningLevel.OFF -> "O"
     ReasoningLevel.AUTO -> "A"
+    ReasoningLevel.MINIMAL -> "MIN"
     ReasoningLevel.LOW -> "L"
     ReasoningLevel.MEDIUM -> "M"
     ReasoningLevel.HIGH -> "H"
@@ -339,6 +379,7 @@ private fun ReasoningLevel.letter(): String = when (this) {
 private fun ReasoningLevel.indicatorColor(): Color = when (this) {
     ReasoningLevel.OFF -> Color(0xFF8A8A8A)
     ReasoningLevel.AUTO -> Color(0xFF43A047)
+    ReasoningLevel.MINIMAL -> Color(0xFF66BB6A)
     ReasoningLevel.LOW -> Color(0xFF7CB342)
     ReasoningLevel.MEDIUM -> Color(0xFFC0CA33)
     ReasoningLevel.HIGH -> Color(0xFFFFB300)

@@ -335,10 +335,6 @@ fun ModelListSheet(
         }
     }
 
-    val settingsStore = koinInject<SettingsStore>()
-    val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
-    val navController = LocalNavController.current
-
     ModalBottomSheet(
         onDismissRequest = {
             state.close()
@@ -350,63 +346,87 @@ fun ModelListSheet(
         // 手势关了就别留把手，免得看起来能拖却拖不动
         dragHandle = null,
     ) {
-        Column(
-            modifier = Modifier
-                .padding(8.dp)
-                .fillMaxHeight(0.8f)
-                .imePadding(),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            // 关闭按钮在 ModelPickerTwoPane 的标题行右侧，这里不再重复放一个
-            ModelPickerTwoPane(
-                currentModel = state.modelId,
-                providers = state.filteredProviders,
-                modelType = state.type,
-                groups = settings.providerGroups,
-                assignments = settings.providerGroupAssignments,
-                favoriteIds = settings.favoriteModels,
-                onSelect = {
-                    onSelect(it)
-                    dismiss()
-                },
-                onReorderGroups = { ordered ->
-                    coroutineScope.launch {
-                        settingsStore.update { it.copy(providerGroups = ordered) }
-                    }
-                },
-                onToggleFavorite = { modelId ->
-                    coroutineScope.launch {
-                        settingsStore.update { current ->
-                            current.copy(
-                                favoriteModels = if (modelId in current.favoriteModels) {
-                                    current.favoriteModels - modelId
-                                } else {
-                                    current.favoriteModels + modelId
-                                }
-                            )
-                        }
-                    }
-                },
-                onDismiss = { dismiss() },
-                onOpenProvider = { provider ->
-                    dismiss()
-                    navController.navigate(Screen.SettingProviderDetail(provider.id.toString()))
-                },
-                onEditModel = { model, provider ->
-                    dismiss()
-                    navController.navigate(
-                        Screen.ModelEditor(
-                            providerId = provider.id.toString(),
-                            modelId = model.id.toString(),
+        ModelListContent(
+            state = state,
+            onSelect = onSelect,
+            onDismiss = { dismiss() },
+        )
+    }
+}
+
+/**
+ * 模型列表的内容，不含外层 sheet。
+ *
+ * 平时由 [ModelListSheet] 套一个 sheet；单行输入模式下从思考强度面板切过来时，
+ * 直接塞进那个已经打开的 sheet 里，省得关一个再开一个。
+ */
+@Composable
+fun ModelListContent(
+    state: ModelListState,
+    onSelect: (Model) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val coroutineScope = rememberCoroutineScope()
+    val settingsStore = koinInject<SettingsStore>()
+    val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
+    val navController = LocalNavController.current
+
+    Column(
+        modifier = Modifier
+            .padding(8.dp)
+            .fillMaxHeight(0.8f)
+            .imePadding(),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        // 关闭按钮在 ModelPickerTwoPane 的标题行右侧，这里不再重复放一个
+        ModelPickerTwoPane(
+            currentModel = state.modelId,
+            providers = state.filteredProviders,
+            modelType = state.type,
+            groups = settings.providerGroups,
+            assignments = settings.providerGroupAssignments,
+            favoriteIds = settings.favoriteModels,
+            onSelect = {
+                onSelect(it)
+                onDismiss()
+            },
+            onReorderGroups = { ordered ->
+                coroutineScope.launch {
+                    settingsStore.update { it.copy(providerGroups = ordered) }
+                }
+            },
+            onToggleFavorite = { modelId ->
+                coroutineScope.launch {
+                    settingsStore.update { current ->
+                        current.copy(
+                            favoriteModels = if (modelId in current.favoriteModels) {
+                                current.favoriteModels - modelId
+                            } else {
+                                current.favoriteModels + modelId
+                            }
                         )
+                    }
+                }
+            },
+            onDismiss = onDismiss,
+            onOpenProvider = { provider ->
+                onDismiss()
+                navController.navigate(Screen.SettingProviderDetail(provider.id.toString()))
+            },
+            onEditModel = { model, provider ->
+                onDismiss()
+                navController.navigate(
+                    Screen.ModelEditor(
+                        providerId = provider.id.toString(),
+                        modelId = model.id.toString(),
                     )
-                },
-                onOpenProviderSettings = {
-                    dismiss()
-                    navController.navigate(Screen.SettingProvider)
-                },
-            )
-        }
+                )
+            },
+            onOpenProviderSettings = {
+                onDismiss()
+                navController.navigate(Screen.SettingProvider)
+            },
+        )
     }
 }
 

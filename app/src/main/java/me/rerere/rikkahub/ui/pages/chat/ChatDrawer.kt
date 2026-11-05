@@ -103,6 +103,7 @@ import me.rerere.rikkahub.ui.components.ui.glassSurface
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
+import me.rerere.rikkahub.ui.hooks.DrawerAvatarBoundsTransform
 import me.rerere.rikkahub.ui.hooks.DrawerSettingsAvatarKey
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.readBooleanPreference
@@ -906,7 +907,17 @@ private fun DrawerBottomBar(
             avatarSize = 52.dp,
             modifier = Modifier
                 // 点开设置时这张头像飞到设置页顶部那个位置
-                .then(if (heroAvatar) Modifier.heroAnimation(DrawerSettingsAvatarKey) else Modifier)
+                .then(
+                    if (heroAvatar) {
+                        Modifier.heroAnimation(
+                            key = DrawerSettingsAvatarKey,
+                            // 抽屉被顺手滑回去时目标是快速移出屏幕的，用硬曲线贴着走，别落在后面
+                            boundsTransform = DrawerAvatarBoundsTransform,
+                        )
+                    } else {
+                        Modifier
+                    }
+                )
                 .graphicsLayer {
                     scaleX = DRAWER_AVATAR_SCALE
                     scaleY = DRAWER_AVATAR_SCALE
