@@ -563,8 +563,9 @@ debug 里 dex 有 38 个、release 压缩后只剩 2 个，差的就是 R8。上
    `L.<tag 去掉 v 与 -preview.NN>.` 开头，`versionCode` 必须大于上一个正式版 tag 的值。
    忘了改版本号、或者 tag 打错一位，都在出包前就红，不会发出去一个 versionCode 没涨、
    装上等于没更新的包。tag 本身解析不到（没推上去、浅克隆没拿到）也直接红；
-   只有「上一个正式版 tag 上还没有 `app/build.gradle.kts`、或读不到 `versionCode`」
-   这两种早期历史才会跳过递增校验
+   只有三种早期历史会跳过递增校验：根本没有上一个正式版 tag、上一个 tag 上还没有
+   `app/build.gradle.kts`、上一个 tag 里读不到 `versionCode`（跳过时会在 Actions 里
+   留一条 warning）。正式版的 tag 必须写成 `vX.Y.Z` 三段，少打一段直接红
 3. `build-apk.yml` 自动跑：checkout（含子模块）→ 核对 tag 与版本号 → pnpm 装 web-ui → `tools/build-apk.sh`
    （按 `VARIANT` 选 `:app:assembleGithubRelease` / `:app:assembleGithubDebug`，跳过 lint vital）→ 重命名产物 → 建 Release
 
