@@ -449,6 +449,13 @@ CompositionLocal，页面只读它，不各自去判断 `Settings`。
 - 助手列表头像原来的 `heroAnimation` 去掉了，整卡已经是容器变换，两层叠加互相打架
 - `Screen.MediaCreation` 复用 `mediaCreationHeroKey()`，和会话列表那侧同一个 key
 
+转场期间离场的那一页还会吃点击：navigation3 1.2.0 的 `NavDisplay` 在 exit 动画结束前把离场的 entry
+留在 `AnimatedContent` 里继续组合，却不拦它的指针输入。pop 时它 zIndex 更高（淡出早完了、位移还没收尾），
+看起来是空的，点下去算点它。`ui/hooks/NavInputGuard.kt` 的 `rememberNavInputGuardDecorator()` 给
+「目标状态不是 Visible」的 entry 盖一层 `Box`，在 `PointerEventPass.Initial` 把指针事件消费掉；
+正在进场的那一页不拦，它自己的位移是 `graphicsLayer` 做的，命中区域跟着视觉位置走。
+代价是纯 fade 的退场（`usesHeroTransition()` 为 false 的那几个页面）在 pop 时整屏有约一个动画时长的空窗。
+
 `CardGroup` 跟着加了两样：
 
 - `item(heroScreen = ...)`：这一行点击后展开成对应页面，形状由条目自己算（中间项是 4dp 不是 20dp）
