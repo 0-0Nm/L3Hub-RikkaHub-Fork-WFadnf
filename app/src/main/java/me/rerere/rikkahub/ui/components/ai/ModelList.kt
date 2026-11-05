@@ -357,21 +357,7 @@ fun ModelListSheet(
                 .imePadding(),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(
-                    onClick = { dismiss() },
-                    modifier = Modifier.size(40.dp),
-                ) {
-                    Icon(
-                        imageVector = HugeIcons.Cancel01,
-                        contentDescription = stringResource(R.string.close),
-                    )
-                }
-            }
+            // 关闭按钮在 ModelPickerTwoPane 的标题行右侧，这里不再重复放一个
             ModelPickerTwoPane(
                 currentModel = state.modelId,
                 providers = state.filteredProviders,
