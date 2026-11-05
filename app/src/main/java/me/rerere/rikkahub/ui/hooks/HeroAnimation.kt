@@ -1,8 +1,8 @@
 package me.rerere.rikkahub.ui.hooks
 
 import androidx.compose.animation.BoundsTransform
-import androidx.compose.animation.DefaultBoundsTransform
 import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.SharedTransitionDefaults
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateDp
@@ -42,7 +42,7 @@ val DrawerAvatarBoundsTransform: BoundsTransform = { _, _ ->
 @Composable
 fun Modifier.heroAnimation(
     key: Any,
-    boundsTransform: BoundsTransform = DefaultBoundsTransform,
+    boundsTransform: BoundsTransform = SharedTransitionDefaults.BoundsTransform,
 ): Modifier {
     val sharedTransitionScope = LocalSharedTransitionScope.current
     val animatedVisibilityScope = LocalNavAnimatedContentScope.current

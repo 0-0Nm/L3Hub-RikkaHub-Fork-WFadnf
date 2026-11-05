@@ -185,10 +185,12 @@ fun ReasoningPicker(
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)),
-    ) {
+    ) sheet@{
         // 从思考强度面板切到模型列表时不关 sheet，直接换内容
+        // 两页要叠在同一块区域上，所以套了 Box；Box 里是 BoxScope，直接写 AnimatedVisibility
+        // 会落到 sheet 内容的 ColumnScope 那个重载上、被布局的 DSL marker 挡掉，这里显式指回去
         Box(modifier = Modifier.animateContentSize()) {
-            AnimatedVisibility(
+            this@sheet.AnimatedVisibility(
                 visible = !showModelList,
                 enter = slideInHorizontally { -it } + fadeIn(),
                 exit = slideOutHorizontally { -it } + fadeOut(),
@@ -303,7 +305,7 @@ fun ReasoningPicker(
                 }
             }
             if (modelContent != null) {
-                AnimatedVisibility(
+                this@sheet.AnimatedVisibility(
                     visible = showModelList,
                     enter = slideInHorizontally { it } + fadeIn(),
                     exit = slideOutHorizontally { it } + fadeOut(),
