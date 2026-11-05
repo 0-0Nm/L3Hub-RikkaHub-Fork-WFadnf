@@ -47,7 +47,9 @@ fun rememberDrawerAvatarBoundsTransform(): BoundsTransform {
     val motionScheme = MaterialTheme.motionScheme
     val speed = LocalAnimationSpeed.current
     return remember(motionScheme, speed) {
-        { _, _ ->
+        // 显式标一层 BoundsTransform：remember 的返回值推断不出 lambda 的参数类型，
+        // 直接写在 remember 里会报 Cannot infer type for implicit value parameter 'it'
+        val transform: BoundsTransform = { _, _ ->
             when (speed) {
                 // SYSTEM 走 motionScheme：关掉动效时它已经是 snap，这条自动跟着关
                 AnimationSpeed.SYSTEM -> motionScheme.defaultSpatialSpec()
@@ -55,6 +57,7 @@ fun rememberDrawerAvatarBoundsTransform(): BoundsTransform {
                 AnimationSpeed.GENTLE -> spring<Rect>(dampingRatio = 1f, stiffness = 700f)
             }
         }
+        transform
     }
 }
 
