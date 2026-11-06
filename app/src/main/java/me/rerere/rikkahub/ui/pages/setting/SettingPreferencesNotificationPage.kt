@@ -19,7 +19,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -46,6 +45,8 @@ import me.rerere.rikkahub.data.datastore.DisplaySetting
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.CardGroupValue
+import me.rerere.rikkahub.ui.components.ui.NumberSlider
+import me.rerere.rikkahub.ui.components.ui.PercentNumberSlider
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionNotification
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
@@ -233,14 +234,13 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
                         CardGroupValue(FloatingPanelSizing.percentLabel(draftPanelWidth))
                     },
                 ) {
-                    Slider(
+                    PercentNumberSlider(
                         value = draftPanelWidth,
                         onValueChange = { draftPanelWidth = FloatingPanelSizing.clampWidthRatio(it) },
                         onValueChangeFinished = {
                             updateDisplaySetting(displaySetting.copy(floatingPanelWidthRatio = draftPanelWidth))
                         },
                         valueRange = FloatingPanelSizing.MIN_WIDTH_RATIO..FloatingPanelSizing.MAX_WIDTH_RATIO,
-                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
                 formItem(
@@ -250,14 +250,13 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
                         CardGroupValue(FloatingPanelSizing.percentLabel(draftPanelHeight))
                     },
                 ) {
-                    Slider(
+                    PercentNumberSlider(
                         value = draftPanelHeight,
                         onValueChange = { draftPanelHeight = FloatingPanelSizing.clampHeightRatio(it) },
                         onValueChangeFinished = {
                             updateDisplaySetting(displaySetting.copy(floatingPanelHeightRatio = draftPanelHeight))
                         },
                         valueRange = FloatingPanelSizing.MIN_HEIGHT_RATIO..FloatingPanelSizing.MAX_HEIGHT_RATIO,
-                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
                 formItem(
@@ -269,9 +268,9 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
                         )
                     },
                 ) {
-                    Slider(
-                        value = draftPreviewHeight,
-                        onValueChange = { draftPreviewHeight = it },
+                    NumberSlider(
+                        value = draftPreviewHeight.roundToInt(),
+                        onValueChange = { draftPreviewHeight = it.toFloat() },
                         onValueChangeFinished = {
                             updateDisplaySetting(
                                 displaySetting.copy(
@@ -280,9 +279,10 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
                                 )
                             )
                         },
-                        valueRange = FloatingPanelSizing.MIN_PREVIEW_HEIGHT_DP.toFloat()..
-                            FloatingPanelSizing.MAX_PREVIEW_HEIGHT_DP.toFloat(),
-                        modifier = Modifier.fillMaxWidth(),
+                        valueRange = FloatingPanelSizing.MIN_PREVIEW_HEIGHT_DP..
+                            FloatingPanelSizing.MAX_PREVIEW_HEIGHT_DP,
+                        suffix = "dp",
+                        steps = 0,
                     )
                 }
                 item(

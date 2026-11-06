@@ -63,6 +63,7 @@ import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.CardGroupValue
 import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceButtons
 import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceLabel
+import me.rerere.rikkahub.ui.components.ui.NumberSlider
 import me.rerere.rikkahub.ui.components.ui.switchItem
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.terminal.IconButton
@@ -270,14 +271,12 @@ fun SettingPreferencesUIPage(embedded: Boolean = false, vm: SettingVM = koinView
                     headlineContent = { Text(stringResource(R.string.setting_display_page_ui_corner_radius_title)) },
                     supportingContent = { Text(stringResource(R.string.setting_display_page_ui_corner_radius_desc, displaySetting.uiCornerRadius)) },
                 ) {
-                    Slider(
-                        value = displaySetting.uiCornerRadius.toFloat(),
+                    NumberSlider(
+                        value = displaySetting.uiCornerRadius,
                         onValueChange = {
-                            updateDisplaySetting(displaySetting.copy(uiCornerRadius = it.roundToInt()))
+                            updateDisplaySetting(displaySetting.copy(uiCornerRadius = it))
                         },
-                        valueRange = 0f..32f,
-                        steps = 31,
-                        modifier = Modifier.fillMaxWidth(),
+                        valueRange = 0..32,
                     )
                 }
                 formItem(
