@@ -1,8 +1,83 @@
 name: Greed Coexist Build
+
 on:
   workflow_dispatch:
+
 jobs:
-  probe:
+  build:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
-      - run: echo probe
+      - uses: actions/checkout@v4
+        with:
+          ref: greed-coexist
+          fetch-depth: 1
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Cache NDK
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/android/sdk/ndk/28.2.13676358
+          key: ndk-28.2.13676358-ubuntu
+
+      - name: Validate NDK
+        run: |
+          ndk=/usr/local/lib/android/sdk/ndk/28.2.13676358
+          if [ -e "$ndk" ] && { [ ! -f "$ndk/source.properties" ] || \
+             [ ! -x "$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" ]; }; then
+            echo "incomplete ndk cache, removing"; rm -rf "$ndk"
+          fi
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-ui/pnpm-lock.yaml
+
+      - name: Install web-ui deps
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Build (unsigned release)
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+          WITH_WEB_UI: '1'
+          VARIANT: release
+        run: |
+          set -euo pipefail
+          chmod +x gradlew tools/build-apk.sh
+          ./tools/build-apk.sh
+          ls -l app/build/outputs/apk/github/release/
+
+      - name: Report package and signing state
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+        run: |
+          set -euo pipefail
+          apk=$(ls app/build/outputs/apk/github/release/*.apk | head -1)
+          bt=$(ls -d "$ANDROID_HOME/build-tools/"*/ | sort -V | tail -1)
+          echo "APK=$apk"
+          sha256sum "$apk"
+          "${bt}aapt2" dump packagename "$apk" || true
+          "${bt}aapt2" dump badging "$apk" 2>/dev/null | grep -E '^(package|application-label|sdkVersion|targetSdkVersion)' || true
+          "${bt}apksigner" verify --print-certs "$apk" || echo "unsigned (expected)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: l3hub-greed-unsigned
+          path: app/build/outputs/apk/github/release/*.apk
+          if-no-files-found: error
