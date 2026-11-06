@@ -5,7 +5,9 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import android.view.ViewTreeObserver
 import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -29,8 +31,11 @@ import com.petterp.floatingx.core.feature.FxFeature
 import com.petterp.floatingx.core.feature.FxFeatureScope
 import com.petterp.floatingx.core.gesture.FxDrag
 import com.petterp.floatingx.core.gesture.FxGesture
+import com.petterp.floatingx.core.gesture.FxRegion
 import com.petterp.floatingx.core.layout.FxAdsorb
+import com.petterp.floatingx.core.layout.FxAnchor
 import com.petterp.floatingx.core.layout.FxGravity
+import com.petterp.floatingx.core.layout.FxLayoutInput
 import com.petterp.floatingx.core.storage.FxSpStorage
 import com.petterp.floatingx.system.container.FxWindowContainer
 import com.petterp.floatingx.system.permission.FxPermission
@@ -68,6 +73,16 @@ private const val TAG = "ChatFloatingWindows"
 private const val BUBBLE_TAG = "chat_floating_bubble"
 private const val PANEL_TAG = "chat_floating_panel"
 private const val PANEL_TOP_OFFSET_DP = 8f
+
+// 面板自己的上下留白（8+8）+ 手柄和它上面的间距（6+48）。封顶时要一起扣掉：
+// 窗口比屏幕还高的话，整块屏幕都成了它的触摸区
+private const val PANEL_CHROME_DP = 70f
+
+// 顶部标题栏那一块可以整块拖动面板。y 从内容顶端算起，而窗口高度 = 内容高度，
+// 所以这个值同时也等于“从窗口顶端往下多少”是拖动区。
+// 标题栏默认到 64dp（8 外留白 + 16 内留白 + 40 图标），大字体时会被撑高，留到 72dp；
+// 预览区从 76dp 才开始，往上一两个 dp 也不会抢它的滚动手势
+private const val PANEL_DRAG_REGION_DP = 72f
 
 /**
  * 把 [ChatFloatingTracker] 的结果显示成系统悬浮窗：收起时是贴边的小图标，展开是固定在顶部的面板。
@@ -168,10 +183,17 @@ class ChatFloatingWindows(
         compose {
             WindowContent { state, display ->
                 val conversationId = state.conversationId
-                // 面板宽度变化（拖动、设置页滑块、旋转）时同步窗口宽度
-                val screenWidthPx = panelWidthPx(1f)
-                LaunchedEffect(display.floatingPanelWidthRatio, screenWidthPx) {
-                    panelFeature?.setWindowWidth(panelWidthPx(display.floatingPanelWidthRatio))
+                // 换屏（旋转 / 分屏）改了可用宽度：宽度按新屏幕换算，横向重新居中。
+                // 不能拿旋转前的坐标去推——那个位置在新可用区里已经对不上了。
+                // 显式读一次 LocalConfiguration：配置一变这个 lambda 就重组，下面的 effect 才会重跑
+                val configuration = LocalConfiguration.current
+                val screenWidthPx = remember(configuration) { panelWidthPx(1f) }
+                LaunchedEffect(screenWidthPx) {
+                    panelFeature?.recenter(panelWidthPx(display.floatingPanelWidthRatio))
+                }
+                // 设置页滑块改了比例：以原来的中轴线为中心收缩 / 展开
+                LaunchedEffect(display.floatingPanelWidthRatio) {
+                    panelFeature?.setWindowWidthCentered(panelWidthPx(display.floatingPanelWidthRatio))
                 }
                 ChatFloatingPanel(
                     state = state,
@@ -179,7 +201,7 @@ class ChatFloatingWindows(
                     heightFraction = display.floatingPanelHeightRatio,
                     maxHeight = rememberPanelMaxHeight(),
                     previewMaxHeight = display.floatingPreviewMaxHeight.dp,
-                    onWidthChanged = { ratio -> panelFeature?.setWindowWidth(panelWidthPx(ratio)) },
+                    onWidthChanged = { ratio -> panelFeature?.resizeWindow(panelWidthPx(ratio)) },
                     onReplyFocusChanged = { focused -> panelFeature?.setWindowFocusable(focused) },
                     onResize = { width, height, previewHeight ->
                         appScope.launch {
@@ -206,8 +228,19 @@ class ChatFloatingWindows(
                 )
             }
         }
-        anchor(FxGravity.TOP_CENTER, dy = dp(PANEL_TOP_OFFSET_DP))
-        gesture(FxGesture(click = false, longPress = false, drag = FxDrag.DISABLED))
+        // 锚点贴物理左边缘（LTR 用 START，RTL 由 PanelWindowFeature 换成 END）：
+        // 改宽度时只有右边那条边动，左边钉在原处。
+        // 初始横向偏移取“居中”，看起来和以前一样，但不再是居中锚点
+        anchor(FxGravity.TOP_START, dx = panelStartPx(initialWidthRatio()), dy = dp(PANEL_TOP_OFFSET_DP))
+        // 面板可以整块拖：只有顶部标题栏那一块能起拖，预览区滚动、输入框和按钮照常收自己的手势
+        gesture(
+            FxGesture(
+                click = false,
+                longPress = false,
+                drag = FxDrag.IMMEDIATE,
+                dragRegion = FxRegion.rect(0f, 0f, Float.MAX_VALUE, dp(PANEL_DRAG_REGION_DP)),
+            )
+        )
         animation(FxAnimations.fade())
         PanelWindowFeature().also { feature ->
             panelFeature = feature
@@ -220,7 +253,10 @@ class ChatFloatingWindows(
                 // 全屏宽会把面板两侧的透明区也变成吃触摸的区域，缩窄后窗口外的触摸才归下面的窗口。
                 // 这里只给首帧一个初值（wrap_content 的窗口会先按对话框宽度约 320dp 测量，
                 // 面板会被压窄），之后宽度由 PanelWindowFeature 随设置/拖动实时同步。
-                it.width = panelWidthPx(settingsStore.settingsFlow.value.displaySetting.floatingPanelWidthRatio)
+                it.width = panelWidthPx(initialWidthRatio())
+                // 库的默认 flags 本来就带 NOT_TOUCH_MODAL，这里再显式写一次：
+                // 以后谁改 flags（比如弹键盘时清 NOT_FOCUSABLE）也别把“窗口外触摸透传”丢掉
+                it.flags = it.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
             }
             onBackPressed {
                 tracker.collapse()
@@ -230,31 +266,86 @@ class ChatFloatingWindows(
     }
 
     /**
-     * 面板窗口的两个运行期状态都在这里改：
-     * - 宽度：窗口矩形只覆盖面板可见部分，面板两侧的透明区不再拦截触摸；
-     * - 焦点：只在输入框按下/聚焦时临时放开（弹键盘用），失焦或收起立即恢复，
-     *   面板展开本身不抢前台应用的按键/输入法焦点。
-     * 系统窗口默认 flags 里始终带着 NOT_TOUCH_MODAL，窗口外的触摸本来就透传。
+     * 面板窗口的运行期状态都收在这里：
+     * - 尺寸：窗口矩形只覆盖面板本身，面板之外的触摸归下面的应用；
+     * - 位置：改宽度前把锚点钉回起点边，于是只有被拖的那条边动，另一条边不动；
+     * - 焦点：只在回复框按下 / 聚焦时临时放开（弹键盘用）。窗口一失焦或收起立刻让回去——
+     *   系统窗口一直握着焦点的话，别的应用既收不到键盘，点一下也像被吃掉。
      */
     private class PanelWindowFeature : FxFeature {
         private var container: FxWindowContainer? = null
+        private var scope: FxFeatureScope? = null
+        private var windowFocusObserver: ViewTreeObserver? = null
+
+        // 用户去点了别的应用：把可聚焦和输入法一起让回去
+        private val windowFocusListener = ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
+            if (!hasFocus) releaseWindowFocus()
+        }
 
         override fun onAttach(scope: FxFeatureScope) {
-            container = scope.container as? FxWindowContainer
+            this.scope = scope
+            val c = scope.container as? FxWindowContainer ?: return
+            container = c
+            val observer = c.viewTreeObserver
+            windowFocusObserver = observer
+            observer.addOnWindowFocusChangeListener(windowFocusListener)
         }
 
         override fun onDetach() {
+            windowFocusObserver?.takeIf { it.isAlive }?.removeOnWindowFocusChangeListener(windowFocusListener)
+            windowFocusObserver = null
             container = null
+            scope = null
         }
 
-        fun setWindowWidth(px: Int) {
+        /** 拖手柄改宽度：只换宽度，位置不动，所以起点边钉在原处 */
+        fun resizeWindow(px: Int) {
             val c = container ?: return
             val width = px.coerceAtLeast(1)
+            // 已经拖到上下限时不必每帧都再摆一次窗口
             if (c.windowParams.width == width) return
+            val s = scope ?: return
+            val input = s.layoutInput() ?: return
+            val pos = c.contentPosition()
+            val anchor = startAnchored(input, pos.x, pos.y)
             c.windowParams.width = width
-            // 改宽度要走 updateViewLayout，applyLayout 顺带按锚点(TOP_CENTER)重算坐标；
-            // 内容重测后 core 还会按新尺寸再校正一次位置
-            c.applyLayout(c.contentPosition().x, c.contentPosition().y, FxGravity.TOP_CENTER, c.isLtr)
+            s.commitAnchor(anchor)
+            s.requestRelayout()
+        }
+
+        /** 设置页滑块改比例：面板以原来的中轴线为中心收缩 / 展开 */
+        fun setWindowWidthCentered(px: Int) {
+            val c = container ?: return
+            val width = px.coerceAtLeast(1)
+            val old = c.windowParams.width
+            if (old == width) return
+            // 宽度还不是有效像素值（宿主刚重建 / 被改成了 WRAP_CONTENT）：没有旧宽度可依，按新宽度居中
+            if (old <= 0) {
+                recenter(width)
+                return
+            }
+            val s = scope ?: return
+            val input = s.layoutInput() ?: return
+            val pos = c.contentPosition()
+            val anchor = startAnchored(input, pos.x, pos.y)
+            val shift = FloatingPanelSizing.centeredStartOffset(anchor.dx, old.toFloat(), width.toFloat())
+            c.windowParams.width = width
+            s.commitAnchor(anchor.copy(dx = shift))
+            s.requestRelayout()
+        }
+
+        /** 换屏（旋转 / 分屏）之后：宽度按新屏幕换算，横向按新的可用区重新居中 */
+        fun recenter(px: Int) {
+            val s = scope ?: return
+            val c = container ?: return
+            val input = s.layoutInput() ?: return
+            val width = px.coerceAtLeast(1)
+            val pos = c.contentPosition()
+            c.windowParams.width = width
+            // 直接按新宽度居中：旋转前的坐标在新可用区里已经没有意义了
+            val left = ((input.area.width - width) / 2f).coerceAtLeast(0f)
+            s.commitAnchor(leftEdgeAnchored(input, left, pos.y - input.area.top))
+            s.requestRelayout()
         }
 
         fun setWindowFocusable(focusable: Boolean) {
@@ -262,8 +353,36 @@ class ChatFloatingWindows(
         }
 
         override fun onHide() {
-            // 收起后窗口不再接收输入，把按键/输入法焦点让回去
+            releaseWindowFocus()
+        }
+
+        /**
+         * 当前左上角换算成“贴起点边”的锚点。
+         *
+         * 拖动结束时库按最近的边记锚点（横向只会是 START 或 END），面板停在右半边就会记成 END，
+         * 之后一改宽度窗口就从右边长——正是“只能按中轴线调大小”的来源。
+         * 每次改宽度之前统一钉回 TOP_START，宽度就只往末端长。
+         */
+        private fun startAnchored(input: FxLayoutInput, x: Float, y: Float): FxAnchor =
+            leftEdgeAnchored(input, x - input.area.left, y - input.area.top)
+
+        /**
+         * 贴物理左边缘的锚点：LTR 用 START，RTL 下 START 会被库翻成右边缘，所以改用 END。
+         *
+         * 锚在物理左边，改宽度时窗口自己不动，拖右边手柄的位移才是 1:1 的
+         * （锚在右边的话窗口会跟着变宽往左移，和手指的位移互相抵消，RTL 下尤其明显）。
+         */
+        private fun leftEdgeAnchored(input: FxLayoutInput, left: Float, top: Float): FxAnchor {
+            val gravity = if (input.ltr) FxGravity.TOP_START else FxGravity.TOP_END
+            return FxAnchor(gravity, left, top)
+        }
+
+        private fun releaseWindowFocus() {
             container?.setWindowFocusable(false)
+            val c = container ?: return
+            // 键盘跟着一起收：留在别的应用上面，会把下半屏的点击全吃掉
+            c.context.getSystemService(InputMethodManager::class.java)
+                ?.hideSoftInputFromWindow(c.windowToken, 0)
         }
     }
 
@@ -275,20 +394,23 @@ class ChatFloatingWindows(
         val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle(
             minActiveState = Lifecycle.State.RESUMED,
         )
-        RikkahubTheme {
+        // wrapContent：内容不许铺满父容器。铺满时 wrap_content 的系统窗口会被撑到整块屏幕，
+        // 窗口就是触摸区，窗口外的滑动和点击全被浮窗接走（“滑哪都在拖悬浮球”就是这么来的）
+        RikkahubTheme(wrapContent = true) {
             CompositionLocalProvider(LocalUriHandler provides uriHandler) {
                 state?.let { content(it, settings.displaySetting) }
             }
         }
     }
 
-    // 面板窗口是 wrap_content 且不受屏幕限制（FloatingX 用了 NO_LIMITS），内容多了会伸出屏幕底部，按可用高度封顶
+    // 面板窗口是 wrap_content 且不受屏幕限制（FloatingX 用了 NO_LIMITS），内容多了会伸出屏幕底部。
+    // 上限连面板自己的留白和下方手柄一起扣：窗口比屏幕还高，整块屏幕就都是它的触摸区了
     @Composable
     private fun rememberPanelMaxHeight(): Dp {
         val configuration = LocalConfiguration.current
         val density = LocalDensity.current
         return remember(configuration, density) {
-            with(density) { (safeScreenHeight() - dp(PANEL_TOP_OFFSET_DP)).toDp() }
+            with(density) { (safeScreenHeight() - dp(PANEL_TOP_OFFSET_DP + PANEL_CHROME_DP)).toDp() }
         }
     }
 
@@ -310,13 +432,19 @@ class ChatFloatingWindows(
 
     private fun dp(value: Float): Float = value * context.resources.displayMetrics.density
 
+    private fun initialWidthRatio(): Float =
+        settingsStore.settingsFlow.value.displaySetting.floatingPanelWidthRatio
+
+    /** 面板的初始位置：在可用宽度里居中；之后用户拖到哪算哪 */
+    private fun panelStartPx(ratio: Float): Float = (panelWidthPx(1f) - panelWidthPx(ratio)) / 2f
+
     // 用与 Compose 侧同一份尺寸（screenWidthDp * density）算窗口宽度，两边才能真正对齐；
     // 直接用 widthPixels 在个别机型上会和 LocalConfiguration.screenWidthDp 差几像素，
     // 窗口窄了会裁掉面板，宽了又会多出吃触摸的透明区
     private fun panelWidthPx(ratio: Float): Int {
         val configuration = context.resources.configuration
         val screenWidthPx = configuration.screenWidthDp * context.resources.displayMetrics.density
-        return (screenWidthPx * FloatingPanelSizing.clampWidthRatio(ratio)).toInt().coerceAtLeast(1)
+        return FloatingPanelSizing.windowWidthPx(screenWidthPx, ratio)
     }
 }
 

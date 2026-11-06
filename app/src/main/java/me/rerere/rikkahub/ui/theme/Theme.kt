@@ -84,6 +84,13 @@ enum class ColorMode {
 @Composable
 fun RikkahubTheme(
     colorMode: ColorMode = rememberCurrentColorMode(),
+    /**
+     * 内容是外面量出来的尺寸（悬浮窗）：不铺满父容器，也不盖取色层。
+     *
+     * 铺满的话，wrap_content 的系统窗口会被撑到整块屏幕——窗口矩形就是触摸区，
+     * 窗口外的滑动和点击都会先落到浮窗身上，下面的应用再也收不到。
+     */
+    wrapContent: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val settings by rememberUserSettingsState()
@@ -185,10 +192,14 @@ fun RikkahubTheme(
                 else -> MaterialTheme.shapes
             },
             content = {
-                // 编辑模式：全屏盖一层取色器，点哪算哪
-                Box(modifier = Modifier.fillMaxSize()) {
+                if (wrapContent) {
                     content()
-                    ColorProbeOverlay()
+                } else {
+                    // 编辑模式：全屏盖一层取色器，点哪算哪
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        content()
+                        ColorProbeOverlay()
+                    }
                 }
             },
             motionScheme = if (settings.displaySetting.disableAnimations) {

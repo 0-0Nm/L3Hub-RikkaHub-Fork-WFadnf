@@ -39,7 +39,9 @@ fun FloatingWindow(
             anchor(FxGravity.BOTTOM_START, dx = 20f, dy = 20f)
             animation(FxAnimations.fade())
             compose {
-                RikkahubTheme {
+                // 内容跟着自己的大小量：铺满父容器的话，wrap_content 的窗口会被撑到整块屏幕，
+                // 窗口外的触摸全被浮窗接走
+                RikkahubTheme(wrapContent = true) {
                     currentContent()
                 }
             }

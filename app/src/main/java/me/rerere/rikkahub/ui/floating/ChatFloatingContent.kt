@@ -12,7 +12,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -38,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -53,6 +54,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -60,9 +62,12 @@ import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -71,6 +76,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -350,7 +356,7 @@ private fun BoxScope.StatusBadge(icon: ImageVector, containerColor: Color, conte
  * 展开后的面板：看进度、审批工具、停止生成和快速回复。
  * [widthFraction] 是面板宽度占屏幕宽度的比例；[maxHeight] 是可用满高，乘 [heightFraction] 之后才是面板上限；
  * [previewMaxHeight] 是预览区能拖到的最大高度。
- * 面板下方的手柄左右拖改宽度、上下拖改预览区高度，松手才通过 [onResize] 写回设置。
+ * 面板下方的手柄左右拖改宽度（只动这一条边）、上下拖改预览区高度，松手才通过 [onResize] 写回设置。
  */
 @Composable
 fun ChatFloatingPanel(
@@ -360,7 +366,7 @@ fun ChatFloatingPanel(
     maxHeight: Dp,
     previewMaxHeight: Dp,
     onResize: (widthFraction: Float, heightFraction: Float, previewHeightDp: Int) -> Unit,
-    /** 拖动中实时通知窗口层改宽度，不然面板会被窗口边缘裁掉 */
+    /** 拖动中实时通知窗口层改宽度；窗口只换宽度、不动位置，所以另一条边钉在原地 */
     onWidthChanged: (Float) -> Unit,
     /** 输入框按下/失焦时通知窗口层切换可聚焦（弹键盘用） */
     onReplyFocusChanged: (Boolean) -> Unit,
@@ -393,8 +399,62 @@ fun ChatFloatingPanel(
     // weight + verticalScroll 吸收，标题栏和回复栏不会被挤出去
     val panelMaxHeight = maxHeight * height
 
+    // 手柄的拖动位移只能按窗口坐标算：手柄自己跟着手指走（面板变宽、预览变高），
+    // 用节点局部坐标量出来的位移会互相抵消，拖到第二帧就不动了。
+    // 外框铺满窗口、原点不动，把起手判定和拖动都挂在外框上，坐标就是窗口坐标。
+    val handleGeometry = remember { PanelHandleGeometry() }
+    val latestOnWidthChanged by rememberUpdatedState(onWidthChanged)
+    val latestOnResize by rememberUpdatedState(onResize)
+
+    fun dragHandleBy(delta: Offset) {
+        // 手柄在面板的物理右侧、窗口钉住物理左边缘：横向走了多少宽度就变多少。
+        // 窗口那条边不动，所以位移不会被窗口自己的移动吃掉；也不会像以前那样
+        // 两条边一起从中轴线往两边长
+        width = FloatingPanelSizing.draggedPanelWidthRatio(
+            current = width,
+            deltaDp = delta.x / density.density,
+            extentDp = screenWidthDp,
+        )
+        latestOnWidthChanged(width)
+        previewHeight = FloatingPanelSizing.draggedPreviewHeight(
+            currentDp = previewHeight,
+            deltaDp = delta.y / density.density,
+        )
+    }
+
+    fun finishHandleDrag() = latestOnResize(width, height, previewHeight.toInt())
+
     // 窗口宽度已经收窄到面板本身，这里的 fillMaxWidth 不会超出可见区域
-    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .onGloballyPositioned { handleGeometry.boxOrigin = it.positionInWindow() }
+            // 这些值都是按值捕获进手势协程的：换会话、转屏、改字体时都要重启
+            .pointerInput(state.conversationId, screenWidthDp, density.density) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    // 手势坐标是外框局部坐标，加上外框在窗口里的原点才是窗口坐标，
+                    // 才能和手柄那份窗口矩形比。起手点不在手柄上就原样放过去：
+                    // 标题栏按钮、预览区滚动都还要用它
+                    val downInWindow = down.position + handleGeometry.boxOrigin
+                    if (!handleGeometry.handle.contains(downInWindow)) return@awaitEachGesture
+                    var last = down.position
+                    var dragged = false
+                    drag(down.id) { change ->
+                        val delta = change.position - last
+                        last = change.position
+                        if (delta != Offset.Zero) {
+                            dragged = true
+                            change.consume()
+                            dragHandleBy(delta)
+                        }
+                    }
+                    // 只点了一下手柄、没真拖动时不用写一次设置
+                    if (dragged) finishHandleDrag()
+                }
+            },
+        contentAlignment = Alignment.TopCenter,
+    ) {
         // 手柄放在面板下方而不是叠在角落里：叠着会盖住回复栏的发送按钮
         Column(
             modifier = Modifier
@@ -461,55 +521,48 @@ fun ChatFloatingPanel(
                     )
                 }
             }
-            ResizeHandle(
-                modifier = Modifier.padding(top = 6.dp),
-                onDragFinished = { onResize(width, height, previewHeight.toInt()) },
-                onDrag = { delta ->
-                    // 面板居中，宽度涨 Δ 时右边缘只走 Δ/2：拖动量乘 2，手柄才跟着手指走
-                    width = FloatingPanelSizing.draggedRatio(
-                        current = width,
-                        deltaDp = delta.x * 2f / density.density,
-                        extentDp = screenWidthDp,
-                        min = FloatingPanelSizing.MIN_WIDTH_RATIO,
-                        max = FloatingPanelSizing.MAX_WIDTH_RATIO,
-                    )
-                    onWidthChanged(width)
-                    previewHeight = FloatingPanelSizing.draggedPreviewHeight(
-                        currentDp = previewHeight,
-                        deltaDp = delta.y / density.density,
-                    )
-                },
-            )
+            // 手柄固定在面板的物理右下角。窗口锚点钉的是物理左边缘，拖右边这一侧才不会
+            // 因为窗口自己也在跟着动而把位移抵消掉（RTL 下会变成只长一半）。
+            // 这里的 LTR 只用来把 Row 的子项摆到物理右边，手柄本身没有文字，不受方向影响
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    PanelResizeHandle(modifier = Modifier.padding(top = 6.dp), geometry = handleGeometry)
+                }
+            }
         }
     }
 }
 
-/** 面板下方的拖拽手柄：左右改宽度，上下改预览区高度，松手才写回设置 */
+/**
+ * 手柄和外框在窗口里的位置。手势挂在外框上，比之前先把起手点换算到窗口坐标。
+ *
+ * 默认值给一个空矩形：首帧还没量出来时正好按在左上角，不能被当成“按住手柄”。
+ */
+private class PanelHandleGeometry {
+    var handle: Rect = Rect(0f, 0f, -1f, -1f)
+    var boxOrigin: Offset = Offset.Zero
+}
+
+/** 面板下方的拖拽手柄：左右改宽度，上下改预览区高度，松手才写回设置。这里只负责画，手势由面板外框接 */
 @Composable
-private fun ResizeHandle(
-    modifier: Modifier,
-    onDrag: (Offset) -> Unit,
-    onDragFinished: () -> Unit,
-) {
-    // 手柄在 Box 的点击区之外还要参与布局，闭包里拿到的必须是最新的回调
-    val latestOnDrag by rememberUpdatedState(onDrag)
-    val latestOnDragFinished by rememberUpdatedState(onDragFinished)
+private fun PanelResizeHandle(modifier: Modifier, geometry: PanelHandleGeometry) {
     val colors = MaterialTheme.colorScheme
     val resizeLabel = stringResource(R.string.floating_panel_resize)
     // 可见的圆保持 34dp，外面套 48dp 接手势：34dp 低于最小触控尺寸，手指不好按
     Box(
         modifier = modifier
             .size(48.dp)
-            .semantics { contentDescription = resizeLabel }
-            .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragEnd = { latestOnDragFinished() },
-                    onDragCancel = { latestOnDragFinished() },
-                ) { change, dragAmount ->
-                    change.consume()
-                    latestOnDrag(dragAmount)
-                }
-            },
+            .onGloballyPositioned { coordinates ->
+                val origin = coordinates.positionInWindow()
+                val size = coordinates.size
+                geometry.handle = Rect(
+                    origin.x,
+                    origin.y,
+                    origin.x + size.width.toFloat(),
+                    origin.y + size.height.toFloat(),
+                )
+            }
+            .semantics { contentDescription = resizeLabel },
         contentAlignment = Alignment.Center,
     ) {
         Box(
