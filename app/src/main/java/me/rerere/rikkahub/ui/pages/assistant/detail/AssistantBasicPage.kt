@@ -40,15 +40,17 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.ai.provider.ModelType
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.BubbleChat
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.ExecutionPermission
-import me.rerere.rikkahub.ui.components.ai.ModelField
 import me.rerere.rikkahub.ui.components.ai.ModelListSheet
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
 import me.rerere.rikkahub.ui.components.ai.WorkspaceSelectSheet
+import me.rerere.rikkahub.ui.components.ai.modelSettingItem
 import me.rerere.rikkahub.ui.components.ai.rememberModelListState
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -282,15 +284,12 @@ internal fun AssistantBasicContent(
         }
 
         CardGroup {
-            formItem(
-                headlineContent = { Text(stringResource(R.string.assistant_page_chat_model)) },
-                supportingContent = { Text(stringResource(R.string.assistant_page_chat_model_desc)) },
-            ) {
-                ModelField(
-                    model = modelListState.currentModel,
-                    onClick = { modelListState.open() },
-                )
-            }
+            modelSettingItem(
+                icon = HugeIcons.BubbleChat,
+                title = R.string.assistant_page_chat_model,
+                description = R.string.assistant_page_chat_model_desc,
+                state = modelListState,
+            )
             item(
                 headlineContent = { Text(stringResource(R.string.assistant_page_thinking_budget)) },
                 trailingContent = {

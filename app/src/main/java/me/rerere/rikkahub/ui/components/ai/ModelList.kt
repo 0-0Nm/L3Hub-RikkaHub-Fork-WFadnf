@@ -272,6 +272,7 @@ internal fun ModelField(
     modifier: Modifier = Modifier,
     placeholder: String = stringResource(R.string.model_list_select_model),
     onClear: (() -> Unit)? = null,
+    clearContentDescription: String? = null,
 ) {
     Surface(
         onClick = onClick,
@@ -301,7 +302,7 @@ internal fun ModelField(
             if (onClear != null && model != null) {
                 Icon(
                     imageVector = HugeIcons.Cancel01,
-                    contentDescription = "Clear",
+                    contentDescription = clearContentDescription ?: "Clear",
                     modifier = Modifier
                         .clip(CircleShape)
                         .clickable(onClick = onClear),

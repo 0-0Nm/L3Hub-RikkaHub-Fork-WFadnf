@@ -62,7 +62,6 @@ import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowUp01
 import me.rerere.hugeicons.stroke.Brain02
-import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.rikkahub.R
@@ -78,6 +77,7 @@ import me.rerere.rikkahub.data.model.memoryTitleOf
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
 import me.rerere.rikkahub.ui.components.ai.ModelListSheet
+import me.rerere.rikkahub.ui.components.ai.modelSettingItem
 import me.rerere.rikkahub.ui.components.ai.rememberModelListState
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -473,30 +473,16 @@ private fun MemorySettingsTab(
                 supportingContent = { Text(stringResource(R.string.assistant_page_memory_auto_dream_desc)) },
                 headlineContent = { Text(stringResource(R.string.assistant_page_memory_auto_dream)) },
             )
-            item(
-                onClick = { dreamingModelState.open() },
-                headlineContent = { Text(stringResource(R.string.assistant_page_dreaming_model)) },
-                supportingContent = { Text(stringResource(R.string.assistant_page_dreaming_model_desc)) },
-                trailingContent = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = dreamingModelState.currentModel?.displayName
-                                ?: stringResource(R.string.assistant_page_dreaming_model_follow_global),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        if (assistant.dreamingModelId != null) {
-                            IconButton(
-                                onClick = { onUpdateAssistant(assistant.copy(dreamingModelId = null)) },
-                            ) {
-                                Icon(
-                                    imageVector = HugeIcons.Cancel01,
-                                    contentDescription = stringResource(R.string.assistant_page_dreaming_model_follow_global),
-                                )
-                            }
-                        }
-                    }
-                },
+            modelSettingItem(
+                icon = HugeIcons.Brain02,
+                title = R.string.assistant_page_dreaming_model,
+                description = R.string.assistant_page_dreaming_model_desc,
+                state = dreamingModelState,
+                iconContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                iconContentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                placeholder = R.string.assistant_page_dreaming_model_follow_global,
+                onClear = { onUpdateAssistant(assistant.copy(dreamingModelId = null)) },
+                clearContentDescription = R.string.assistant_page_dreaming_model_follow_global,
             )
             switchItem(
                 checked = assistant.enableRecentChatsReference,

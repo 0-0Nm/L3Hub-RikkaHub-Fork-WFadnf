@@ -2,24 +2,20 @@ package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
@@ -27,11 +23,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.ai.provider.ModelType
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.hugeicons.stroke.Clock01
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.model.HeartbeatSetting
 import me.rerere.rikkahub.ui.components.ai.ModelListSheet
+import me.rerere.rikkahub.ui.components.ai.modelSettingItem
 import me.rerere.rikkahub.ui.components.ai.rememberModelListState
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -60,7 +56,6 @@ fun AssistantHeartbeatPage(id: String) {
         providers = settings.providers,
         type = ModelType.CHAT,
     )
-    val modelName = settings.findModelById(heartbeat.modelId)?.displayName
 
     fun update(block: (HeartbeatSetting) -> HeartbeatSetting) {
         vm.update(assistant.copy(heartbeat = block(heartbeat)))
@@ -171,31 +166,15 @@ fun AssistantHeartbeatPage(id: String) {
             }
 
             CardGroup {
-                item(
-                    onClick = { modelState.open() },
-                    headlineContent = { Text(stringResource(R.string.heartbeat_page_model_title)) },
-                    supportingContent = {
-                        Text(modelName ?: stringResource(R.string.heartbeat_page_model_desc))
-                    },
-                    trailingContent = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (heartbeat.modelId != null) {
-                                TextButton(
-                                    onClick = { update { it.copy(modelId = null) } },
-                                ) {
-                                    Text(
-                                        text = stringResource(R.string.heartbeat_page_model_clear),
-                                        style = MaterialTheme.typography.labelMedium,
-                                    )
-                                }
-                            }
-                            Icon(
-                                imageVector = HugeIcons.ArrowRight01,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    },
+                modelSettingItem(
+                    icon = HugeIcons.Clock01,
+                    title = R.string.heartbeat_page_model_title,
+                    state = modelState,
+                    iconContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    iconContentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    placeholder = R.string.heartbeat_page_model_desc,
+                    onClear = { update { it.copy(modelId = null) } },
+                    clearContentDescription = R.string.heartbeat_page_model_clear,
                 )
             }
         }

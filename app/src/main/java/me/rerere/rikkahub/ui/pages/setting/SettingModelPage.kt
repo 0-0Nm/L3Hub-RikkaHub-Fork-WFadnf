@@ -18,7 +18,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
@@ -36,15 +35,12 @@ import me.rerere.hugeicons.stroke.Translate
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
-import me.rerere.rikkahub.ui.components.ai.ModelField
 import me.rerere.rikkahub.ui.components.ai.ModelListSheet
-import me.rerere.rikkahub.ui.components.ai.ModelListState
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
+import me.rerere.rikkahub.ui.components.ai.modelSettingItem
 import me.rerere.rikkahub.ui.components.ai.rememberModelListState
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
-import me.rerere.rikkahub.ui.components.ui.CardGroupIcon
-import me.rerere.rikkahub.ui.components.ui.CardGroupScope
 import me.rerere.rikkahub.ui.components.ui.PagerTab
 import me.rerere.rikkahub.ui.components.ui.PagerTabs
 import me.rerere.rikkahub.ui.components.ui.switchItem
@@ -161,7 +157,7 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
             val containerColor = MaterialTheme.colorScheme.primaryContainer
             val contentColor = MaterialTheme.colorScheme.onPrimaryContainer
             CardGroup {
-                modelItem(
+                modelSettingItem(
                     icon = HugeIcons.BubbleChat,
                     title = R.string.setting_model_page_chat_model,
                     description = R.string.setting_model_page_chat_model_desc,
@@ -176,7 +172,7 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
             val contentColor = MaterialTheme.colorScheme.onTertiaryContainer
             // 标题和聊天建议都由快速模型生成，相关的选项跟它放在一组
             CardGroup {
-                modelItem(
+                modelSettingItem(
                     icon = HugeIcons.Zap,
                     title = R.string.setting_model_page_fast_model,
                     description = R.string.setting_model_page_fast_model_desc,
@@ -218,7 +214,7 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
             val contentColor = MaterialTheme.colorScheme.onTertiaryContainer
             CardGroup {
                 // 不设置时跟着快速模型走，所以要能清掉
-                modelItem(
+                modelSettingItem(
                     icon = HugeIcons.Brain02,
                     title = R.string.setting_model_page_memory_model,
                     description = R.string.setting_model_page_memory_model_desc,
@@ -227,6 +223,7 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
                     iconContentColor = contentColor,
                     placeholder = R.string.setting_model_page_memory_model_follow_fast,
                     onClear = { vm.updateSettings { latest -> latest.copy(memoryModelId = null) } },
+                    clearContentDescription = R.string.setting_model_page_memory_model_follow_fast,
                 )
                 // 没设置时推理强度也跟着快速模型
                 item(
@@ -248,7 +245,7 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
             val containerColor = MaterialTheme.colorScheme.secondaryContainer
             val contentColor = MaterialTheme.colorScheme.onSecondaryContainer
             CardGroup {
-                modelItem(
+                modelSettingItem(
                     icon = HugeIcons.Translate,
                     title = R.string.setting_model_page_translate_model,
                     description = R.string.setting_model_page_translate_model_desc,
@@ -256,7 +253,7 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
                     iconContainerColor = containerColor,
                     iconContentColor = contentColor,
                 )
-                modelItem(
+                modelSettingItem(
                     icon = HugeIcons.ScanText,
                     title = R.string.setting_model_page_ocr_model,
                     description = R.string.setting_model_page_ocr_model_desc,
@@ -289,36 +286,4 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
     ModelListSheet(state = ocrModel) {
         vm.updateSettings { latest -> latest.copy(ocrModelId = it.id) }
     }
-}
-
-// 一项默认模型：图标、用途说明，下面是显示当前模型的选择按钮
-private fun CardGroupScope.modelItem(
-    icon: ImageVector,
-    @StringRes title: Int,
-    @StringRes description: Int,
-    state: ModelListState,
-    iconContainerColor: Color,
-    iconContentColor: Color,
-    @StringRes placeholder: Int = R.string.model_list_select_model,
-    onClear: (() -> Unit)? = null,
-    // 传 id 不传字符串：调用方要在这里拼 res 名，省得每个调用点各写一份
-    @StringRes warning: Int? = null,
-) = formItem(
-    headlineContent = { Text(stringResource(title)) },
-    supportingContent = {
-        Column {
-            Text(stringResource(description))
-            warning?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
-        }
-    },
-    leadingContent = {
-        CardGroupIcon(icon, containerColor = iconContainerColor, contentColor = iconContentColor)
-    },
-) {
-    ModelField(
-        model = state.currentModel,
-        onClick = { state.open() },
-        placeholder = stringResource(placeholder),
-        onClear = onClear,
-    )
 }
