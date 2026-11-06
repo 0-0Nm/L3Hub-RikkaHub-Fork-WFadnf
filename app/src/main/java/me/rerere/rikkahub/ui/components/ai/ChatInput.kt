@@ -157,6 +157,8 @@ fun ChatInput(
     chatModel: Model?,
     // 会话任务清单, 由 todo_write 工具维护, 显示在输入区最上方
     todos: List<TodoItem> = emptyList(),
+    // 用户手动改清单（点完成、加一条、取消一条）; null 表示这张卡片只读
+    onTodosChange: ((List<TodoItem>) -> Unit)? = null,
     // 当前会话已占用的上下文 token(最近一次回复的真实用量)
     contextTokens: Int? = null,
     usageTokenSpeed: Float? = null,
@@ -294,13 +296,14 @@ fun ChatInput(
                 .animateContentSize(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // 清单只在「还没做完」的时候占位置。全部完成后收起来，
-            // 回看走输入框左边的 + 号菜单（FilesPicker 里始终能看到完整清单）。
+            // 清单只在「还没做完」的时候占位置。全部完成后收起来；
+            // 想再看回来（比如手动点错了、要取消完成）就关掉设置里的「完成后收起任务清单」。
             val hideCompletedTodos = LocalSettings.current.displaySetting.hideCompletedTodoCard &&
                 todos.isNotEmpty() && todos.all { it.status == TodoStatus.COMPLETED }
             if (todos.isNotEmpty() && !hideCompletedTodos) {
                 ConversationTodoCard(
                     todos = todos,
+                    onTodosChange = onTodosChange,
                     modifier = Modifier
                         .fillMaxWidth()
                         .adaptiveHorizontalPadding(12.dp)

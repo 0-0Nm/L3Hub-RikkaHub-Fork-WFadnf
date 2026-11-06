@@ -18,6 +18,7 @@ class TodoToolsTest {
             TodoItem("读代码", TodoStatus.COMPLETED),
             TodoItem("改实现", TodoStatus.IN_PROGRESS),
             TodoItem("跑测试", TodoStatus.PENDING),
+            TodoItem("不做的", TodoStatus.CANCELLED),
         )
 
         val prompt = buildTodoPrompt(todos)
@@ -25,7 +26,10 @@ class TodoToolsTest {
         assertTrue(prompt.contains("- [x] 读代码"))
         assertTrue(prompt.contains("- [>] 改实现"))
         assertTrue(prompt.contains("- [ ] 跑测试"))
+        assertTrue(prompt.contains("- [-] 不做的"))
         assertTrue(prompt.contains("todo_write"))
+        // [-] 才认得出来是用户取消的，得配一行图例
+        assertTrue(prompt.contains("[-] cancelled by the user"))
     }
 
     @Test
@@ -33,6 +37,7 @@ class TodoToolsTest {
         val todos = listOf(
             TodoItem("a", TodoStatus.IN_PROGRESS),
             TodoItem("b", TodoStatus.COMPLETED),
+            TodoItem("c", TodoStatus.CANCELLED),
         )
 
         val json = JsonInstant.encodeToString(todos)
@@ -41,6 +46,8 @@ class TodoToolsTest {
         assertEquals(todos, decoded)
         assertTrue(json.contains("in_progress"))
         assertTrue(json.contains("completed"))
+        // 新加的 cancelled 也要钉住线上格式：旧的存量数据靠它判断降级后还能不能读
+        assertTrue(json.contains("cancelled"))
     }
 
     @Test
@@ -57,6 +64,9 @@ class TodoToolsTest {
         assertEquals(TodoStatus.COMPLETED, status("FINISHED"))
         assertEquals(TodoStatus.COMPLETED, status("completed"))
         // 认不出来的写法一律当未开始, 不要猜成进行中
+        assertEquals(TodoStatus.CANCELLED, status("cancelled"))
+        assertEquals(TodoStatus.CANCELLED, status("Canceled"))
+        assertEquals(TodoStatus.CANCELLED, status("dropped"))
         assertEquals(TodoStatus.PENDING, status("whatever"))
         assertEquals(TodoStatus.PENDING, status(null))
     }

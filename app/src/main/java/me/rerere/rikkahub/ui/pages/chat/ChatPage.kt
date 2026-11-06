@@ -795,6 +795,7 @@ private fun ChatPageContent(
             assistant = assistant,
             chatModel = currentChatModel,
             todos = todos,
+            onTodosChange = vm::updateTodos,
             contextTokens = contextTokens,
             usageTokenSpeed = usageTokenSpeed,
             onUpdateContextMeterStyle = { style ->

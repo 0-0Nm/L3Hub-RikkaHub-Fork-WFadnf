@@ -213,7 +213,9 @@ fun TerminalChatInput(
             val completed = todos.count { it.status == TodoStatus.COMPLETED }
             val current = todos.firstOrNull { it.status == TodoStatus.IN_PROGRESS }?.content
             Text(
-                text = "todos $completed/${todos.size}" + if (current != null) " · $current" else "",
+                // 取消掉的不进分母，跟卡片那边保持一致
+                text = "todos $completed/${todos.count { it.status != TodoStatus.CANCELLED }}" +
+                    if (current != null) " · $current" else "",
                 style = TerminalTextStyle,
                 color = TerminalPalette.GreenDim,
                 maxLines = 1,

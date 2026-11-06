@@ -37,6 +37,7 @@ import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.NodeFavoriteTarget
+import me.rerere.rikkahub.data.model.TodoItem
 import me.rerere.rikkahub.data.model.getAssistantOf
 import me.rerere.rikkahub.data.model.getChatModelOf
 import me.rerere.rikkahub.data.repository.FavoriteRepository
@@ -143,6 +144,16 @@ class ChatVM(
         chatService.finishEditQueuedMessage(_conversationId, id, parts)
 
     fun resumeMessageQueue() = chatService.resumeMessageQueue(_conversationId)
+
+    /**
+     * 清单的手动编辑入口：用户在任务卡片上点完成、加一条、取消一条时走这里。
+     * 和 todo_write 共用 ChatService.updateTodos 这一个写入口，内存和库里只有一份真值。
+     */
+    fun updateTodos(todos: List<TodoItem>) {
+        // keepOwner：手改的清单不属于任何一条消息，别把归属挪到最新节点上，
+        // 否则重新生成那条消息会连清单一起清掉
+        viewModelScope.launch { chatService.updateTodos(_conversationId, todos, keepOwner = true) }
+    }
 
     // 生成完成
     val generationDoneFlow: SharedFlow<Uuid> = chatService.generationDoneFlow

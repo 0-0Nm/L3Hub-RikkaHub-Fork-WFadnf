@@ -219,7 +219,7 @@ fun SettingPreferencesUIPage(embedded: Boolean = false, vm: SettingVM = koinView
                     onCheckedChange = {
                         updateDisplaySetting(displaySetting.copy(hideCompletedTodoCard = it))
                     },
-                    supportingContent = { Text("任务全部完成后从输入框上方收起；随时可以从「+」菜单里回看") },
+                    supportingContent = { Text("任务全部完成后从输入框上方收起；关掉这个开关就能随时看到") },
                     headlineContent = { Text("完成后收起任务清单") },
                 )
                 switchItem(

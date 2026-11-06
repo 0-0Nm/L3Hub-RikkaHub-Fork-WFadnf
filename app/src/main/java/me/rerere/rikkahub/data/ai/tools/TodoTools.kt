@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.ai.tools
 
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -11,17 +12,22 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.model.MAX_TODO_ITEMS
+import me.rerere.rikkahub.data.model.MAX_TODO_TEXT_CHARS
 import me.rerere.rikkahub.data.model.TodoItem
 import me.rerere.rikkahub.data.model.TodoStatus
+import me.rerere.rikkahub.data.model.newTodoId
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import org.koin.java.KoinJavaComponent.getKoin
 import kotlin.uuid.Uuid
 
+/** 两个工具参数里共用的状态枚举, 加新状态只改这一处 */
+private val TODO_STATUS_ENUM: JsonArray = buildJsonArray {
+    TodoStatus.entries.forEach { add(JsonPrimitive(it.name.lowercase())) }
+}
+
 const val TODO_WRITE_TOOL_NAME = "todo_write"
 const val TODO_UPDATE_TOOL_NAME = "todo_update"
-
-private const val MAX_TODO_ITEMS = 50
-private const val MAX_TODO_TEXT_CHARS = 300
 
 /**
  * 会话级任务清单工具。
@@ -38,7 +44,8 @@ fun createTodoTools(
         description = """
             Create or replace the task list for this conversation. Use it for multi-step work so progress survives context compression.
             Pass the full list every time: it replaces the previous one. Keep exactly one item in_progress, mark items completed as soon as they are done,
-            and keep items short and concrete (one line each). The list is shown to the user as a pinned card in the chat.
+            and keep items short and concrete (one line each). The list is shown to the user as a pinned card in the chat, and the user can also edit it
+            by hand between turns — if a status looks different from what you set, the user changed it; trust that, and never re-open a `cancelled` item.
         """.trimIndent().replace("\n", " "),
         parameters = {
             InputSchema.Obj(
@@ -60,14 +67,10 @@ fun createTodoTools(
                                 })
                                 put("status", buildJsonObject {
                                     put("type", "string")
-                                    put("enum", buildJsonArray {
-                                        add(kotlinx.serialization.json.JsonPrimitive("pending"))
-                                        add(kotlinx.serialization.json.JsonPrimitive("in_progress"))
-                                        add(kotlinx.serialization.json.JsonPrimitive("completed"))
-                                    })
+                                    put("enum", TODO_STATUS_ENUM)
                                 })
                             })
-                            put("required", buildJsonArray { add(kotlinx.serialization.json.JsonPrimitive("content")) })
+                            put("required", buildJsonArray { add(JsonPrimitive("content")) })
                         })
                     })
                 },
@@ -95,7 +98,7 @@ fun createTodoTools(
                 val id = obj.get("id")?.jsonPrimitive?.contentOrNull
                     ?.trim()
                     ?.takeIf { it.isNotEmpty() }
-                    ?: Uuid.random().toString().take(8)
+                    ?: newTodoId()
                 TodoItem(content = content, status = obj.parseStatus(), id = id)
             }
             // 截断和丢弃都不能静默：模型以为自己写了 60 条，实际只存了 50 条，
@@ -106,12 +109,13 @@ fun createTodoTools(
             writeTodos(conversationRepository, conversationId, items)
 
             val completed = items.count { it.status == TodoStatus.COMPLETED }
+            val cancelled = items.count { it.status == TodoStatus.CANCELLED }
             val inProgress = items.count { it.status == TodoStatus.IN_PROGRESS }
             listOf(
                 UIMessagePart.Text(
                     buildString {
                         appendLine(
-                            "total=${items.size} completed=$completed " +
+                            "total=${items.size} completed=$completed cancelled=$cancelled " +
                                 "inProgress=${items.firstOrNull { it.status == TodoStatus.IN_PROGRESS }?.content ?: "none"}"
                         )
                         if (dropped > 0) {
@@ -174,11 +178,7 @@ private fun createTodoUpdateTool(
                 })
                 put("status", buildJsonObject {
                     put("type", "string")
-                    put("enum", buildJsonArray {
-                        add(kotlinx.serialization.json.JsonPrimitive("pending"))
-                        add(kotlinx.serialization.json.JsonPrimitive("in_progress"))
-                        add(kotlinx.serialization.json.JsonPrimitive("completed"))
-                    })
+                    put("enum", TODO_STATUS_ENUM)
                 })
             },
             required = listOf("id", "status"),
@@ -203,12 +203,15 @@ private fun createTodoUpdateTool(
         writeTodos(conversationRepository, conversationId, updated)
 
         val completed = updated.count { it.status == TodoStatus.COMPLETED }
+        val cancelled = updated.count { it.status == TodoStatus.CANCELLED }
         val inProgress = updated.count { it.status == TodoStatus.IN_PROGRESS }
         listOf(
             UIMessagePart.Text(
                 buildString {
                     appendLine("updated id=$id status=${status.name.lowercase()}")
-                    appendLine("total=${updated.size} completed=$completed inProgress=$inProgress")
+                    appendLine(
+                        "total=${updated.size} completed=$completed cancelled=$cancelled inProgress=$inProgress"
+                    )
                     if (inProgress > 1) appendLine("warning: $inProgress items are in_progress, keep exactly one")
                     append("Current todo list:\n")
                     append(formatTodoLines(updated))
@@ -241,6 +244,7 @@ internal fun JsonObject.parseStatus(): TodoStatus {
     return when (value) {
         "in_progress", "inprogress", "running", "doing", "active", "current" -> TodoStatus.IN_PROGRESS
         "completed", "complete", "done", "finished", "resolved" -> TodoStatus.COMPLETED
+        "cancelled", "canceled", "cancel", "dropped", "skipped", "abandoned" -> TodoStatus.CANCELLED
         else -> TodoStatus.PENDING
     }
 }
@@ -248,8 +252,12 @@ internal fun JsonObject.parseStatus(): TodoStatus {
 /** 拼进系统提示词的任务清单, 用纯文本以免模型误以为是工具结果 */
 fun buildTodoPrompt(todos: List<TodoItem>): String = buildString {
     appendLine("## Current task list")
+    append(
+        "Marks: [x] done, [>] in progress, [ ] pending, " +
+            "[-] cancelled by the user (dropped on purpose, do not redo it).\n"
+    )
     append(formatTodoLines(todos))
-    append("Keep this list up to date with todo_write as you make progress. It survives context compression; the user sees it as a pinned card.")
+    append("Keep this list up to date with todo_write as you make progress. It survives context compression; the user sees it as a pinned card and can tick items off by hand, so the statuses here are the shared truth.")
 }
 
 /** 清单的纯文本形式：一行一条，带状态标记 */
@@ -259,6 +267,7 @@ private fun formatTodoLines(todos: List<TodoItem>): String = buildString {
             TodoStatus.COMPLETED -> "[x]"
             TodoStatus.IN_PROGRESS -> "[>]"
             TodoStatus.PENDING -> "[ ]"
+            TodoStatus.CANCELLED -> "[-]"
         }
         val id = item.id?.let { "$it " }.orEmpty()
         appendLine("- $mark $id${item.content}")

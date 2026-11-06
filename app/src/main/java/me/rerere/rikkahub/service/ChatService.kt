@@ -223,17 +223,36 @@ class ChatService(
      * 中间任何一次 flush 都会把旧清单整条写回去；而内存里算出来的归属节点要等下一次整条保存
      * 才落库，进程在这之间被杀就丢了归属（压缩恰好会删掉那条 todo_write 消息）。
      * 这里按会话的既有规矩走：先 update 再 flush。
+     *
+     * @param keepOwner 用户手动改清单时为 true。模型写的清单跟着那条 todo_write 消息走，
+     *   手动改的清单不属于任何消息——沿用原归属。否则归属会被搬到最新一条消息上，
+     *   之后重新生成或删除那条消息，会连用户自己写进去的任务一起清掉。
      */
-    suspend fun updateTodos(conversationId: Uuid, todos: List<TodoItem>) {
+    suspend fun updateTodos(
+        conversationId: Uuid,
+        todos: List<TodoItem>,
+        keepOwner: Boolean = false,
+    ) {
         val session = sessionManager.get(conversationId)
         if (session == null) {
-            // 会话没加载（比如从终端/Web 入口触发），只能直接落库
-            conversationRepo.updateTodos(conversationId, todos)
+            // 会话没加载（比如从终端/Web 入口触发），只能直接落库。
+            // keepOwner 时得先把库里的归属读出来再写回去：传 null 等于把归属清掉，
+            // 之后读出清单会退回「最后一个 todo_write 节点」的推断，重新生成那条消息照样会清掉手改的内容。
+            val owner = if (keepOwner) {
+                conversationRepo.getConversationSummary(conversationId)?.todosOwnerNodeId
+            } else {
+                null
+            }
+            conversationRepo.updateTodos(conversationId, todos, owner)
             return
         }
         session.update { current ->
             // 清单跟着写下它的那条消息走：记住写入时的最后一个节点
-            val ownerNodeId = current.messageNodes.lastOrNull()?.id
+            val ownerNodeId = if (keepOwner) {
+                current.todosOwnerNodeId
+            } else {
+                current.messageNodes.lastOrNull()?.id
+            }
             if (current.todos == todos && current.todosOwnerNodeId == ownerNodeId) {
                 current
             } else {
