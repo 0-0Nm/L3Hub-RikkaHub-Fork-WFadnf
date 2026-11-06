@@ -21,7 +21,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.rikkahub.l3hub.wfadnf"
+        applicationId = "com.greed.l3hub"
         minSdk = 26
         targetSdk = 37
         versionCode = 295
