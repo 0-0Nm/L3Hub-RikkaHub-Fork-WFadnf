@@ -3,6 +3,9 @@ package me.rerere.rikkahub.ui.pages.chat
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -89,6 +92,7 @@ import androidx.compose.ui.zIndex
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.rerere.ai.core.MessageRole
@@ -360,31 +364,74 @@ private fun ChatListNormal(
     var createPullArmed by remember { mutableStateOf(false) }
     // 回调每次重组都是新实例，当 remember 的 key 用会让连接对象每帧重建
     val createNewChat = rememberUpdatedState(onCreateNewChat)
+    // 松手没拉满时，让进度条顺着原路退回去，而不是凭空消失
+    val createPullSettleSpec = remember { tween<Float>(durationMillis = 240, easing = FastOutSlowInEasing) }
     val createPullConnection = remember(state, createPullMax) {
         object : NestedScrollConnection {
+            private var settleJob: Job? = null
+
+            // 手势重新接管：正在进行的回退立刻停手，交给下面的手写数值
+            private fun takeOverPull() {
+                settleJob?.cancel()
+                settleJob = null
+            }
+
+            // 顺着原路退回 0。带一段短动画，松手时胶囊是缩回去的，不是一下消失
+            private fun settlePullBack() {
+                createPullArmed = false
+                if (createPull <= 0f) {
+                    createPull = 0f
+                    return
+                }
+                if (settleJob?.isActive == true) return
+                val start = createPull
+                settleJob = scope.launch {
+                    animate(
+                        initialValue = start,
+                        targetValue = 0f,
+                        animationSpec = createPullSettleSpec,
+                    ) { value, _ ->
+                        createPull = value
+                    }
+                    createPull = 0f
+                }
+            }
+
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source != NestedScrollSource.UserInput) {
+                    return Offset.Zero
+                }
                 // 手指往反方向走（往下）：先把已经拉开的那段按位移收回去，列表先不动。
                 // 收完了才轮到列表往下滚，所以进度条是一点点退回去的，不会一碰就清零。
-                if (source != NestedScrollSource.UserInput ||
-                    available.y <= 0f ||
-                    createPull <= 0f
-                ) {
-                    return Offset.Zero
+                if (available.y > 0f && createPull > 0f) {
+                    // 这里没有上拉新建、或者已经离开底部：进度条不该再挂着，
+                    // 直接作废，别让它静静吃掉一段向下滚动
+                    if (createNewChat.value == null || state.canScrollForward) {
+                        takeOverPull()
+                        createPull = 0f
+                        createPullArmed = false
+                        return Offset.Zero
+                    }
+                    val retract = minOf(createPull, available.y)
+                    takeOverPull()
+                    createPull -= retract
+                    createPullArmed = createPull >= createPullMax
+                    return Offset(0f, retract)
                 }
-                // 已经离开底部（或者这里根本没有上拉新建、内容不足一屏）：进度条不该再挂着，
-                // 直接作废，别让它静静吃掉一段向下滚动
-                if (createNewChat.value == null ||
-                    state.canScrollForward ||
+                // 内容不足一屏时列表两个方向都滚不动，onPostScroll 那条路不一定轮得到，
+                // 这里先把上拉这段收下来
+                if (available.y < 0f &&
+                    createNewChat.value != null &&
+                    conversationUpdated.messageNodes.isNotEmpty() &&
+                    !state.canScrollForward &&
                     !state.canScrollBackward
                 ) {
-                    createPull = 0f
-                    createPullArmed = false
-                    return Offset.Zero
+                    takeOverPull()
+                    createPull = (createPull - available.y).coerceAtMost(createPullMax)
+                    createPullArmed = createPull >= createPullMax
+                    return Offset(0f, available.y)
                 }
-                val retract = minOf(createPull, available.y)
-                createPull -= retract
-                createPullArmed = createPull >= createPullMax
-                return Offset(0f, retract)
+                return Offset.Zero
             }
 
             override fun onPostScroll(
@@ -395,26 +442,34 @@ private fun ChatListNormal(
                 if (createNewChat.value == null || source != NestedScrollSource.UserInput) {
                     return Offset.Zero
                 }
-                // 还得真的是「能滚、且已经到底」：内容不足一屏时两个方向都滚不动，
-                // 随手一滑也会留下余量，不能算拉到底
-                if (available.y < 0f && !state.canScrollForward && state.canScrollBackward) {
+                // 到底了就算：能往下滚说明有内容且滚到了末尾；两个方向都滚不动说明内容不足一屏，
+                // 这种短会话以前被排除在外，上拉一直没反应
+                if (available.y < 0f &&
+                    !state.canScrollForward &&
+                    conversationUpdated.messageNodes.isNotEmpty()
+                ) {
+                    takeOverPull()
                     createPull = (createPull - available.y).coerceAtMost(createPullMax)
                     createPullArmed = createPull >= createPullMax
                     return Offset(0f, available.y)
                 }
-                // 已经离开「到底、且还能往下滚」的状态（往回滚了，或者内容变了），
-                // 残留的拉伸量不该继续挂着，不然胶囊会一直亮着
-                if (createPull > 0f && (state.canScrollForward || !state.canScrollBackward)) {
-                    createPull = 0f
-                    createPullArmed = false
+                // 已经离开底部（往回滚了，或者内容变长），残留的拉伸量顺着原路退回去
+                if (createPull > 0f && state.canScrollForward) {
+                    settlePullBack()
                 }
                 return Offset.Zero
             }
 
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-                if (createPullArmed) createNewChat.value?.invoke()
-                createPull = 0f
-                createPullArmed = false
+                if (createPullArmed) {
+                    createNewChat.value?.invoke()
+                    takeOverPull()
+                    createPull = 0f
+                    createPullArmed = false
+                } else {
+                    // 没拉满就松手：胶囊原路弹回，而不是直接消失
+                    settlePullBack()
+                }
                 return Velocity.Zero
             }
         }
