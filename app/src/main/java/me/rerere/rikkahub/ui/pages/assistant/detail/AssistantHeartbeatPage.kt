@@ -165,13 +165,16 @@ fun AssistantHeartbeatPage(id: String) {
                 }
             }
 
+            // 颜色要在 CardGroup 外面读：它的 content 不是 @Composable 作用域
+            val modelIconContainer = MaterialTheme.colorScheme.tertiaryContainer
+            val modelIconContent = MaterialTheme.colorScheme.onTertiaryContainer
             CardGroup {
                 modelSettingItem(
                     icon = HugeIcons.Clock01,
                     title = R.string.heartbeat_page_model_title,
                     state = modelState,
-                    iconContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    iconContentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    iconContainerColor = modelIconContainer,
+                    iconContentColor = modelIconContent,
                     placeholder = R.string.heartbeat_page_model_desc,
                     onClear = { update { it.copy(modelId = null) } },
                     clearContentDescription = R.string.heartbeat_page_model_clear,

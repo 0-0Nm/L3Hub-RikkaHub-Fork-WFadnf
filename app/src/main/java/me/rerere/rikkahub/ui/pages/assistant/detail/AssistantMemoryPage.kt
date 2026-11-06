@@ -434,6 +434,9 @@ private fun MemorySettingsTab(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // 颜色要在 CardGroup 外面读：它的 content 不是 @Composable 作用域
+        val modelIconContainer = MaterialTheme.colorScheme.tertiaryContainer
+        val modelIconContent = MaterialTheme.colorScheme.onTertiaryContainer
         CardGroup {
             switchItem(
                 checked = assistant.enableMemory,
@@ -478,8 +481,8 @@ private fun MemorySettingsTab(
                 title = R.string.assistant_page_dreaming_model,
                 description = R.string.assistant_page_dreaming_model_desc,
                 state = dreamingModelState,
-                iconContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                iconContentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                iconContainerColor = modelIconContainer,
+                iconContentColor = modelIconContent,
                 placeholder = R.string.assistant_page_dreaming_model_follow_global,
                 onClear = { onUpdateAssistant(assistant.copy(dreamingModelId = null)) },
                 clearContentDescription = R.string.assistant_page_dreaming_model_follow_global,
