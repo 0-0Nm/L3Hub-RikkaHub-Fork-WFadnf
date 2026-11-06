@@ -16,22 +16,46 @@ private const val TAG = "SubAgentResultStore"
 private const val RESULT_SUFFIX = ".json"
 private const val RESULT_TEMP_SUFFIX = ".json.tmp"
 
-/** 一条待投递结果：谁产出的（子会话 id），正文是什么 */
+/** 一段还没回传给父会话的子代理正文：哪条子会话产出的、正文是什么 */
 private data class PendingSubAgentResult(
     val conversationId: String,
     val text: String,
 )
 
+/** 读出来的队列：条目按到达顺序，欠账按子会话 */
+private class QueuedResults(
+    val entries: MutableList<PendingSubAgentResult>,
+    val holds: MutableMap<String, Int>,
+)
+
+/**
+ * 一次投递的快照。
+ *
+ * [texts] 是这次要当通知送给父会话的正文；[settledChildren] 是这批里结清了账的子会话（送完就清掉
+ * 它们的排队结果和欠账）；[snapshotSize] 是快照覆盖了几条，投递期间新到的在队尾、不会被带上。
+ */
+class SubAgentResultBatch internal constructor(
+    val texts: List<String>,
+    internal val snapshotSize: Int,
+    internal val settledChildren: Set<String>,
+) {
+    val isEmpty: Boolean get() = texts.isEmpty()
+}
+
 /**
  * 磁盘上的格式。
  *
  * [results] 与 [conversationIds] 按位置对齐；分开存是为了兼容只有 `results` 的老文件——
- * 老文件读出来 conversationId 为空串，await_sub_agent 认不出它属于谁，只能按普通通知投递。
+ * 老文件读出来 conversationId 为空串，只能按普通通知投递。
+ *
+ * [holds] 是每个子会话的欠账：子代理异常中止一次记一笔，抵掉它下一次正常结尾的自动回传。
+ * 没有这个 key 的老文件按 0 补齐。
  */
 @Serializable
 internal data class PendingSubAgentResults(
     val results: List<String> = emptyList(),
     val conversationIds: List<String> = emptyList(),
+    val holds: Map<String, Int> = emptyMap(),
 )
 
 /**
@@ -45,8 +69,18 @@ internal data class PendingSubAgentResults(
  * 当作没有待投递结果——坏掉的一份结果不值得让整个会话再也开不了。写盘失败会记 error 并返回
  * false：这一条只在本进程内能投出去，进程重启后就没有了，除此之外没有补偿手段。
  *
- * 投递用 [peek] + [drop] 两步：先取出一批，父会话收下之后再丢掉队首。投递被拒（上下文已满）
+ * 投递用 [peekDeliverable] + [commit] 两步：先取出一批，父会话收下之后再丢掉这批。投递被拒（上下文已满）
  * 或者进程在两步之间被杀，结果都还在文件里，下一轮会重新投递。
+ *
+ * 每个子会话的账：`还在排队的结果数 - 欠账数`。
+ * - 正常跑完一轮（不管自动跑的还是用户手动拉起的）→ +1，多一段排队的结果
+ * - 被 await_sub_agent 当场接走 → +1 之后立刻 -1，不进队列
+ * - 异常中止（中断、被掐断、待审批、空回复）→ -1，记一笔欠账
+ * - 回传被父会话收下 → 清掉这一段（也就是 -1），这批涉及的子会话欠账一起归零
+ * - 用户手动把停下来的任务重新拉起 → 不动账；正常结尾、取走、异常中止、回传这四件事才会改它
+ *
+ * 所以「账 > 0」才回传：刚中止过一次的子代理，下一次正常结尾只排队、不打扰父会话，
+ * 留到再下一次正常结尾一起送。
  */
 class SubAgentResultStore(
     private val root: File,
@@ -55,7 +89,9 @@ class SubAgentResultStore(
     private val fileMutex = Mutex()
 
     /**
-     * 追加一条结果；父会话的多条结果按到达顺序排队，投递时合并成一条消息。
+     * 记下一段正常结尾；父会话的多条结果按到达顺序排队，投递时合并成一条消息。
+     *
+     * 要不要现在回传由 [peekDeliverable] 按每个子会话的账决定，不由调用方判断。
      *
      * @return 是否落盘成功。false 表示这一条只在本进程里排队，进程被杀就没了
      */
@@ -65,47 +101,80 @@ class SubAgentResultStore(
         result: String,
     ): Boolean = withContext(dispatcher) {
         fileMutex.withLock {
-            write(
-                parentConversationId,
-                read(parentConversationId) + PendingSubAgentResult(childConversationId.toString(), result),
-            )
+            val queue = read(parentConversationId)
+            queue.entries += PendingSubAgentResult(childConversationId.toString(), result)
+            write(parentConversationId, queue)
         }
     }
 
-    /** 取出当前排队的结果正文，但不删除；父会话收下后由 [drop] 丢掉 */
-    suspend fun peek(parentConversationId: Uuid): List<String> = withContext(dispatcher) {
-        fileMutex.withLock { read(parentConversationId).map { it.text } }
+    /** 子代理异常中止：记一笔欠账，抵掉它下一次正常结尾的自动回传 */
+    suspend fun recordAbort(
+        parentConversationId: Uuid,
+        childConversationId: Uuid,
+    ) = withContext(dispatcher) {
+        fileMutex.withLock {
+            val queue = read(parentConversationId)
+            val child = childConversationId.toString()
+            queue.holds[child] = (queue.holds[child] ?: 0) + 1
+            write(parentConversationId, queue)
+            Unit
+        }
     }
 
     /**
-     * 某条子会话最早一份还没投递的结果，不取走。
+     * 取走某条子会话最早一段还没回传的正文（await_sub_agent 用）。
      *
-     * await_sub_agent 先用它把已经完成、还排着队的那一份直接返回；正文仍留在队列里，
-     * 等工具输出真的写进会话后，投递时会按正文认出来再剔掉，中间被掐断也不会丢。
+     * 取走就算回传：这一段不再当通知投递，对应的账同时 -1。
+     *
+     * @return 取到的正文；这条子会话没有待投递结果时返回 null
      */
-    suspend fun findFor(parentConversationId: Uuid, childConversationId: Uuid): String? =
+    suspend fun take(
+        parentConversationId: Uuid,
+        childConversationId: Uuid,
+    ): String? = withContext(dispatcher) {
+        fileMutex.withLock {
+            val queue = read(parentConversationId)
+            val child = childConversationId.toString()
+            val index = queue.entries.indexOfFirst { it.conversationId == child }
+            if (index < 0) return@withLock null
+            val taken = queue.entries.removeAt(index)
+            write(parentConversationId, queue)
+            taken.text
+        }
+    }
+
+    /** 取出这一批要当通知送出去的正文，但不删除；父会话收下后由 [commit] 丢掉 */
+    suspend fun peekDeliverable(parentConversationId: Uuid): SubAgentResultBatch =
         withContext(dispatcher) {
             fileMutex.withLock {
-                read(parentConversationId)
-                    .firstOrNull { it.conversationId == childConversationId.toString() }
-                    ?.text
+                val queue = read(parentConversationId)
+                val counts = queue.entries.groupingBy { it.conversationId }.eachCount()
+                // 账 > 0 的子会话才回传：排队的结果比欠账多，说明至少有一段是欠父会话的
+                val settled = counts.filterValues { count -> count - (queue.holds[it] ?: 0) > 0 }.keys
+                SubAgentResultBatch(
+                    texts = queue.entries.filter { it.conversationId in settled }.map { it.text },
+                    snapshotSize = queue.entries.size,
+                    settledChildren = settled,
+                )
             }
         }
 
     /**
-     * 丢掉队首的前 [count] 条。
+     * 投递完成：把这批送出去的清掉，涉及到的子会话欠账归零。
      *
      * 按条数而不是整个文件清空：投递期间新到的结果追加在队尾，不能跟着一起删掉。
+     * 这一批里没被选中的子会话（账 <= 0，正被欠账压着）保持原样，留到下一次。
      */
-    suspend fun drop(conversationId: Uuid, count: Int) = withContext(dispatcher) {
+    suspend fun commit(parentConversationId: Uuid, batch: SubAgentResultBatch) = withContext(dispatcher) {
         fileMutex.withLock {
-            val rest = read(conversationId).drop(count)
-            if (rest.isEmpty()) {
-                file(conversationId).delete()
-                tempFile(conversationId).delete()
-            } else {
-                write(conversationId, rest)
-            }
+            val queue = read(parentConversationId)
+            val count = minOf(batch.snapshotSize, queue.entries.size)
+            val kept = queue.entries.take(count).filterNot { it.conversationId in batch.settledChildren } +
+                queue.entries.drop(count)
+            batch.settledChildren.forEach { queue.holds.remove(it) }
+            queue.entries.clear()
+            queue.entries += kept
+            write(parentConversationId, queue)
             Unit
         }
     }
@@ -128,25 +197,34 @@ class SubAgentResultStore(
             .toList()
     }
 
-    private fun read(conversationId: Uuid): List<PendingSubAgentResult> {
+    private fun read(conversationId: Uuid): QueuedResults {
         val file = file(conversationId)
-        if (!file.isFile) return emptyList()
-        return runCatching {
-            val stored = JsonInstant.decodeFromString(PendingSubAgentResults.serializer(), file.readText())
-            stored.results.mapIndexed { index, text ->
-                PendingSubAgentResult(
-                    conversationId = stored.conversationIds.getOrNull(index).orEmpty(),
-                    text = text,
-                )
-            }
+        if (!file.isFile) return QueuedResults(mutableListOf(), mutableMapOf())
+        val stored = runCatching {
+            JsonInstant.decodeFromString(PendingSubAgentResults.serializer(), file.readText())
         }.onFailure {
             // 解析失败意味着这一队结果一起没了，至少把丢掉的规模记下来
             Log.e(TAG, "read: dropping unreadable results of $conversationId (${file.length()} bytes)", it)
             file.delete()
-        }.getOrDefault(emptyList())
+        }.getOrNull() ?: return QueuedResults(mutableListOf(), mutableMapOf())
+
+        val entries = stored.results.mapIndexed { index, text ->
+            PendingSubAgentResult(
+                conversationId = stored.conversationIds.getOrNull(index).orEmpty(),
+                text = text,
+            )
+        }.toMutableList()
+        // 只保留正的欠账；老文件没有这一列，等于全是 0
+        val holds = stored.holds.filterValues { it > 0 }.toMutableMap()
+        return QueuedResults(entries, holds)
     }
 
-    private fun write(conversationId: Uuid, results: List<PendingSubAgentResult>): Boolean {
+    private fun write(conversationId: Uuid, queue: QueuedResults): Boolean {
+        if (queue.entries.isEmpty() && queue.holds.isEmpty()) {
+            file(conversationId).delete()
+            tempFile(conversationId).delete()
+            return true
+        }
         val target = file(conversationId)
         return runCatching {
             val parent = target.parentFile
@@ -156,8 +234,9 @@ class SubAgentResultStore(
                 JsonInstant.encodeToString(
                     PendingSubAgentResults.serializer(),
                     PendingSubAgentResults(
-                        results = results.map { it.text },
-                        conversationIds = results.map { it.conversationId },
+                        results = queue.entries.map { it.text },
+                        conversationIds = queue.entries.map { it.conversationId },
+                        holds = queue.holds.toMap(),
                     ),
                 )
             )
@@ -167,7 +246,7 @@ class SubAgentResultStore(
                 temp.delete()
             }
         }.onFailure {
-            Log.e(TAG, "write: failed for $conversationId, ${results.size} result(s) not persisted", it)
+            Log.e(TAG, "write: failed for $conversationId, ${queue.entries.size} result(s) not persisted", it)
         }.isSuccess
     }
 

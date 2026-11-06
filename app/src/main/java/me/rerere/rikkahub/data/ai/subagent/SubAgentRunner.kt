@@ -146,8 +146,9 @@ class SubAgentRunner(
             subAgentWaits.unregister(child.id, waiter)
             return "Sub-agent \"${subAgentLabel(candidate)}\" is still running after ${timeout.inWholeSeconds} seconds. Its result will be delivered back to this conversation when it finishes; do not wait for it again."
         }
-        // 落盘的那一份不在这里撤：工具输出还要经过 AgentLoop 才写进会话，这中间被掐断
-        // 就两头空。下一次投递会在会话里认出这条正文，再把它从队列里剔掉
+        // 这一份的账由子代理那一侧记：有人在等，它就按「已经通过 await 回传」认领，
+        // 落地的那一份留在队里当兜底；父回合在这之后被掐断时认领会撤回，照常当通知补投。
+        // 这里只负责把正文交回去
         return received
     }
 
@@ -161,8 +162,8 @@ class SubAgentRunner(
      * 5. 失败 → 直接返回失败说明。
      *
      * 先登记再查询：子代理可能正好在查询和登记之间跑完，先登记就不会漏掉那一轮。
-     * 队列里的正文只读不取——等工具输出真的写进会话后，投递时会按正文认出来再剔掉，
-     * 中途被掐断时那一份仍然会被当成通知补投。
+     * 队列里那一份在这一步取走：取走就算回传（不再当通知投递）；父回合中途被掐断时
+     * 会把正文退回待回传，照常补投。
      */
     suspend fun awaitResult(
         parentConversationId: Uuid,
@@ -187,7 +188,7 @@ class SubAgentRunner(
             // 还在跑就先等这一轮：队列里可能压着上一轮没投递的结果，但那是旧轮次，不能当成
             // 「下一轮」返回；它会在本轮结束后照常当通知送到
             if (state != SUB_AGENT_STATE_RUNNING) {
-                val pending = chatService.findPendingSubAgentResult(parentConversationId, childConversationId)
+                val pending = chatService.takePendingSubAgentResult(parentConversationId, childConversationId)
                 if (pending != null) {
                     return "This result was produced before the wait started and has not been delivered yet; it is from an earlier round, not a new one.\n\n$pending"
                 }
