@@ -363,13 +363,28 @@ private fun ChatListNormal(
     val createPullConnection = remember(state, createPullMax) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                // 反向拖动说明这次不是上拉：之前累积的（可能因手势被打断没走到 onPostFling）作废，
-                // 不然胶囊会一直亮着，下一次随便一划就新建会话
-                if (available.y > 0f) {
+                // 手指往反方向走（往下）：先把已经拉开的那段按位移收回去，列表先不动。
+                // 收完了才轮到列表往下滚，所以进度条是一点点退回去的，不会一碰就清零。
+                if (source != NestedScrollSource.UserInput ||
+                    available.y <= 0f ||
+                    createPull <= 0f
+                ) {
+                    return Offset.Zero
+                }
+                // 已经离开底部（或者这里根本没有上拉新建、内容不足一屏）：进度条不该再挂着，
+                // 直接作废，别让它静静吃掉一段向下滚动
+                if (createNewChat.value == null ||
+                    state.canScrollForward ||
+                    !state.canScrollBackward
+                ) {
                     createPull = 0f
                     createPullArmed = false
+                    return Offset.Zero
                 }
-                return Offset.Zero
+                val retract = minOf(createPull, available.y)
+                createPull -= retract
+                createPullArmed = createPull >= createPullMax
+                return Offset(0f, retract)
             }
 
             override fun onPostScroll(
@@ -387,8 +402,12 @@ private fun ChatListNormal(
                     createPullArmed = createPull >= createPullMax
                     return Offset(0f, available.y)
                 }
-                createPull = 0f
-                createPullArmed = false
+                // 已经离开「到底、且还能往下滚」的状态（往回滚了，或者内容变了），
+                // 残留的拉伸量不该继续挂着，不然胶囊会一直亮着
+                if (createPull > 0f && (state.canScrollForward || !state.canScrollBackward)) {
+                    createPull = 0f
+                    createPullArmed = false
+                }
                 return Offset.Zero
             }
 
