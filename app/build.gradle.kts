@@ -79,7 +79,8 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            // [greed-coexist] release 包由本地 apksigner 统一签名，CI 只产出 unsigned APK（避免双重签名）
+            // signingConfig = signingConfigs.getByName("release")
             optimization {
                 enable = true
             }
