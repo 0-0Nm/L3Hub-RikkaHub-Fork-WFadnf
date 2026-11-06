@@ -150,7 +150,7 @@ class SubAgentResultStore(
                 val queue = read(parentConversationId)
                 val counts = queue.entries.groupingBy { it.conversationId }.eachCount()
                 // 账 > 0 的子会话才回传：排队的结果比欠账多，说明至少有一段是欠父会话的
-                val settled = counts.filterValues { count -> count - (queue.holds[it] ?: 0) > 0 }.keys
+                val settled = counts.filter { (child, count) -> count - (queue.holds[child] ?: 0) > 0 }.keys
                 SubAgentResultBatch(
                     texts = queue.entries.filter { it.conversationId in settled }.map { it.text },
                     snapshotSize = queue.entries.size,
