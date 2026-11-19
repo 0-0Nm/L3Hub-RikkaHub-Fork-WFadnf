@@ -24,7 +24,7 @@ android {
         applicationId = "com.grd.l3hub"
         minSdk = 26
         targetSdk = 37
-        versionCode = 333
+        versionCode = 334
         versionName = "L.3.2.14.153-e"
         buildConfigField("boolean", "UPDATE_CHECK_ENABLED", "false")
 

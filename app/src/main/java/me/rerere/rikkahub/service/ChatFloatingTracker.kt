@@ -32,6 +32,7 @@ data class FloatingChatWindow(val conversationId: Uuid, val expanded: Boolean)
  *
  * 只在开关打开、应用在后台时工作：切到后台时正在生成的会话，以及之后开始生成的会话成为目标；
  * 生成结束后继续显示，方便直接回复推进，用户关掉后等下一个开始生成的会话。
+ * 子代理会话先结束而父会话还在生成时，窗口跟着回到父会话，不把还在跑的主任务晾在已完成的孩子后面。
  * 用了 Phone Use 的一轮结束时自动展开成面板。
  * 回到前台时全部重置，在应用里看着生成完的会话，切到后台不会再弹出来。
  */
@@ -97,8 +98,13 @@ class ChatFloatingTracker(
     // 每次切到后台从头开始，这时已经在生成的会话也算刚开始
     private fun trackInBackground(): Flow<FloatingChatWindow?> =
         merge(chatService.getConversationJobs().map { Action.JobsChanged(it.keys) }, actions)
-            .scan(TrackingState()) { state, action -> state.reduce(action, ::usedPhoneUse) }
+            .scan(TrackingState()) { state, action -> state.reduce(action, ::parentOf, ::usedPhoneUse) }
             .map { it.window }
+
+    // 子会话在派发时就通过 parentConversationId 挂在父会话下面；只对 jobs 里的会话及其祖先读取，
+    // 这些会话此刻都有会话状态，直接读即可
+    private fun parentOf(conversationId: Uuid): Uuid? =
+        chatService.getConversationFlow(conversationId).value.parentConversationId
 
     // 生成结束时本轮的回复还留着，下一轮开始才清掉
     private fun usedPhoneUse(conversationId: Uuid): Boolean {
@@ -130,21 +136,41 @@ class ChatFloatingTracker(
          * Phone Use 的轮次停下来（做完、出错、等审批或等回答）时用户正看着别的应用，结果或要处理的事直接展开给他看；
          * 普通聊天不展开，切出去做别的事时不被打断。
          */
-        fun reduce(action: Action, expandWhenFinished: (Uuid) -> Boolean = { false }): TrackingState = when (action) {
+        fun reduce(
+            action: Action,
+            parentOf: (Uuid) -> Uuid? = { null },
+            expandWhenFinished: (Uuid) -> Boolean = { false },
+        ): TrackingState = when (action) {
             is Action.JobsChanged -> {
                 // 同时开始的会话任取一个
                 val started = (action.running - running).lastOrNull()
                 val finished = target?.takeIf { started == null && it in running && it !in action.running }
+                // 目标（如子代理会话）结束而父链上还有在生成的祖先时，目标交接给最近的那个：
+                // 界面继续反映真正在跑的主任务，也避免父任务收尾时被已完成的孩子挡住。
+                // 父链上没有在生成的祖先（独立会话、父会话已收尾）就保留原目标，收尾行为不变
+                val handover = finished?.let { nearestRunningAncestor(it, action.running, parentOf) }
                 copy(
                     running = action.running,
-                    target = started ?: target,
-                    expanded = expanded || (finished != null && expandWhenFinished(finished)),
+                    target = started ?: handover ?: target,
+                    expanded = expanded || (finished != null && handover == null && expandWhenFinished(finished)),
                 )
             }
 
             Action.Expand -> copy(expanded = target != null)
             Action.Collapse -> copy(expanded = false)
             Action.Dismiss -> copy(target = null, expanded = false)
+        }
+
+        /** 沿父链找还在生成的最近祖先；[parentOf] 查不到父会话、父链走完或出现循环父链（visited 防护）时返回 null */
+        private fun nearestRunningAncestor(finished: Uuid, running: Set<Uuid>, parentOf: (Uuid) -> Uuid?): Uuid? {
+            val visited = mutableSetOf(finished)
+            var current = parentOf(finished)
+            while (current != null) {
+                if (current in running) return current
+                if (!visited.add(current)) return null
+                current = parentOf(current)
+            }
+            return null
         }
     }
 }
