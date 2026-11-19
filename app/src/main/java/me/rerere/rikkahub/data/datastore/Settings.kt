@@ -218,6 +218,19 @@ enum class AnimationSpeed {
     GENTLE,
 }
 
+/**
+ * 悬浮球外壳动画（E335）：图案与外壳解耦后，外壳用哪套动画单独选。
+ * 复用既有算法：花形 = LogoBubble 的旋转+花瓣形变，圆形呼吸 = BubbleWithIcon 的脉冲缩放。
+ */
+@Serializable
+enum class FloatingBubbleAnimation {
+    /** 花形旋转 + 花瓣形变（LogoBubble 的形变节奏） */
+    FLOWER,
+
+    /** 圆形呼吸缩放（BubbleWithIcon 的脉冲节奏） */
+    PULSE,
+}
+
 /** 整套界面走哪套组件：原生 Material 3，或 Miuix（HyperOS 风格）。 */
 @Serializable
 enum class UiStyle {
@@ -323,6 +336,12 @@ data class DisplaySetting(
     // 面板里预览区的最大高度(dp)，超出后在预览区内部滚动
     val floatingPreviewMaxHeight: Int = 200,
     val floatingBubbleIcon: FloatingBubbleIcon = FloatingBubbleIcon.AppLogo,
+    // 悬浮球整体（球+角标）缩放比例；100% 是现有 52dp 的样子，触控区不跟着缩
+    val floatingBubbleScale: Float = 1.0f,
+    // 悬浮面板内详情文字（标题/状态/预览正文等）的缩放比例；100% 是现有效果
+    val floatingDetailTextScale: Float = 1.0f,
+    // 悬浮球外壳动画：花形（旋转+花瓣形变）或圆形呼吸，与图案解耦
+    val floatingBubbleAnimation: FloatingBubbleAnimation = FloatingBubbleAnimation.FLOWER,
     val codeBlockAutoWrap: Boolean = false,
     val codeBlockAutoCollapse: Boolean = false,
     val showLineNumbers: Boolean = false,

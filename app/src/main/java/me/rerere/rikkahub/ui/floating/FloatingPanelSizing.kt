@@ -72,4 +72,19 @@ internal object FloatingPanelSizing {
         (screenWidthPx * clampWidthRatio(ratio)).roundToInt().coerceAtLeast(1)
 
     fun percentLabel(ratio: Float): String = "${(ratio * 100).roundToInt()}%"
+
+    // ---- E335：悬浮球缩放与面板详情文字缩放 ----
+
+    const val MIN_BUBBLE_SCALE = 0.3f
+    const val MAX_BUBBLE_SCALE = 1.2f
+    const val MIN_DETAIL_TEXT_SCALE = 0.3f
+    const val MAX_DETAIL_TEXT_SCALE = 1f
+
+    /** 悬浮球整体缩放；NaN / 越界值钳回默认 1f（旧设置加载兼容） */
+    fun clampBubbleScale(value: Float): Float =
+        if (!value.isFinite()) 1f else value.coerceIn(MIN_BUBBLE_SCALE, MAX_BUBBLE_SCALE)
+
+    /** 面板详情文字缩放；NaN / 越界值钳回默认 1f，上限就是 1（只缩不放） */
+    fun clampDetailTextScale(value: Float): Float =
+        if (!value.isFinite()) 1f else value.coerceIn(MIN_DETAIL_TEXT_SCALE, MAX_DETAIL_TEXT_SCALE)
 }

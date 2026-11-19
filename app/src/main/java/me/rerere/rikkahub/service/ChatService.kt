@@ -307,6 +307,11 @@ class ChatService(
         onSessionRemoved = memoryConsolidationScheduler::onConversationLeft,
     )
 
+    // 子代理轮次结局流（E335 角标）：在 reportSubAgentRound 的判定点发射，
+    // 消费方（悬浮球角标）按子会话 ID 去重计数；重复发射同 id 由消费方去重
+    private val _subAgentRoundEvents = MutableSharedFlow<SubAgentRoundEvent>(extraBufferCapacity = 16)
+    val subAgentRoundEvents: SharedFlow<SubAgentRoundEvent> = _subAgentRoundEvents.asSharedFlow()
+
     // 错误状态
     private val _errors = MutableStateFlow<List<ChatError>>(emptyList())
     val errors: StateFlow<List<ChatError>> = _errors.asStateFlow()
@@ -845,6 +850,15 @@ class ChatService(
         try {
             session.update { it.copy(subAgentState = state) }
             session.flush()
+            // 角标事件在真实落库后发射：消费方按子会话 ID 去重，同一份完成回传/await/通知只计一次
+            if (session.state.value.parentConversationId != null) {
+                _subAgentRoundEvents.tryEmit(
+                    SubAgentRoundEvent(
+                        childId = session.id,
+                        completed = state == SUB_AGENT_STATE_COMPLETED,
+                    )
+                )
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -2372,3 +2386,9 @@ class ChatService(
         draftStore.clear(conversationId)
     }
 }
+
+/** 子代理一轮的结局事件（悬浮球角标用）：completed=false 表示失败/取消，不计成功 */
+data class SubAgentRoundEvent(
+    val childId: Uuid,
+    val completed: Boolean,
+)
