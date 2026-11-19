@@ -64,7 +64,7 @@ import java.util.Locale
 import kotlin.uuid.Uuid
 
 private const val UNGROUPED_KEY = "__ungrouped"
-private const val SIDEBAR_WIDTH_DP = 88
+private const val SIDEBAR_WIDTH_DP = 80
 private const val COMPACT_WIDTH_DP = 360
 
 /**
@@ -286,7 +286,13 @@ fun ModelPickerTwoPane(
                     .weight(1f)
                     .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
-                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 12.dp),
+                // 侧栏展开时右侧更窄，start 收到 6dp；折叠时维持 12dp
+                contentPadding = PaddingValues(
+                    start = if (sidebarExpanded) 6.dp else 12.dp,
+                    end = 12.dp,
+                    top = 4.dp,
+                    bottom = 12.dp,
+                ),
             ) {
                 if (providers.isEmpty()) {
                     item(key = "empty_providers") {
@@ -323,7 +329,7 @@ fun ModelPickerTwoPane(
                         tail = {
                             IconButton(
                                 onClick = { onToggleFavorite(model.id) },
-                                modifier = Modifier.size(40.dp),
+                                modifier = Modifier.size(48.dp),
                             ) {
                                 Icon(
                                     imageVector = HeartIcon,
@@ -380,8 +386,7 @@ private fun ModelPickerSidebar(
         IconButton(
             onClick = onCollapse,
             modifier = Modifier
-                .align(Alignment.Start)
-                .padding(start = 2.dp, top = 2.dp)
+                .padding(top = 2.dp)
                 .size(36.dp),
         ) {
             Icon(
@@ -394,6 +399,7 @@ private fun ModelPickerSidebar(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(2.dp),
             contentPadding = PaddingValues(vertical = 2.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (showFavoritesEntry) {
                 item(key = "favorites") {
@@ -486,7 +492,6 @@ private fun GroupLabel(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp)
             .clip(MaterialTheme.shapes.small)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 2.dp, vertical = 6.dp),

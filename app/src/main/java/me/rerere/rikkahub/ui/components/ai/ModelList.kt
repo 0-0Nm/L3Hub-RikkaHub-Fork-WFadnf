@@ -456,8 +456,10 @@ internal fun ModelItem(
     subtitle: (@Composable () -> Unit)? = null,
 ) {
     val navController = LocalNavController.current
-    val interactionSource = remember { MutableInteractionSource() }
-    val clickable = Modifier.combinedClickable(
+    // 上排和下排各留一个独立的 interactionSource，共用会让按一行时两行一起出涟漪
+    val selectInteraction = remember { MutableInteractionSource() }
+    val infoInteraction = remember { MutableInteractionSource() }
+    fun cardClick(interactionSource: MutableInteractionSource) = Modifier.combinedClickable(
         enabled = true,
         onLongClick = onLongClick ?: {
             onDismiss()
@@ -478,65 +480,53 @@ internal fun ModelItem(
             contentColor = if (select) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
         )
     ) {
-        Row(
+        // L 形布局：上排只有图标和模型名，名称一直铺到卡片右内边距；下排底部对齐，
+        // 左侧是副标题/标签，右侧是收藏这类行尾操作。卡片自然增高，不再靠叠盖或 offset
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            if (compact) {
+            Row(
+                modifier = Modifier.then(cardClick(selectInteraction)),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(if (compact) 10.dp else 12.dp),
+            ) {
+                ModelIconBadge(model = model, compact = compact)
+                ModelName(
+                    model = model,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .then(clickable),
+                        .then(cardClick(infoInteraction)),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        ModelIconBadge(model = model, compact = true)
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            ModelName(model = model)
-                            subtitle?.invoke()
-                        }
-                    }
+                    subtitle?.invoke()
                     ModelTags(model = model)
                 }
-            } else {
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .then(clickable),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    ModelIconBadge(model = model, compact = false)
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        ModelName(model = model)
-                        subtitle?.invoke()
-                        ModelTags(model = model)
-                    }
-                }
+                // 收藏在独立的行尾槽里，点击不会冒泡成选中/关闭
+                tail()
             }
-            tail()
         }
     }
 }
 
 @Composable
-private fun ModelName(model: Model) {
+private fun ModelName(model: Model, modifier: Modifier = Modifier) {
     Text(
         text = model.displayName,
         style = MaterialTheme.typography.titleSmall,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
+        modifier = modifier,
     )
 }
 
