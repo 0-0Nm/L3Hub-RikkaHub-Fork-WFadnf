@@ -116,6 +116,7 @@ class ChatFloatingTrackerTest {
     fun `handover walks up past finished middle generations`() {
         // 三代：root -> mid -> leaf。mid 结束时 leaf 还在跑，root 也在跑 → 跳过 mid 交给 root
         val mid = Uuid.random()
+        val leaf = Uuid.random()
         val parentOf = { id: Uuid ->
             when (id) {
                 leaf -> mid
@@ -123,7 +124,6 @@ class ChatFloatingTrackerTest {
                 else -> null
             }
         }
-        val leaf = Uuid.random()
         val state = reduce(
             Action.JobsChanged(setOf(root, mid)),
             Action.JobsChanged(setOf(root, mid, leaf)),
