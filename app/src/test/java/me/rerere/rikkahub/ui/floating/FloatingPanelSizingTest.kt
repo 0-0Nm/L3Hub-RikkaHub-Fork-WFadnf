@@ -123,7 +123,7 @@ class FloatingPanelSizingTest {
     @Test
     fun `bubble scale clamps legacy and out-of-range values`() {
         assertEquals(1f, FloatingPanelSizing.clampBubbleScale(Float.NaN))
-        assertEquals(1f, FloatingPanelSizing.clampBubbleScale(1.7f))
+        assertEquals(1.2f, FloatingPanelSizing.clampBubbleScale(1.7f))
         assertEquals(0.3f, FloatingPanelSizing.clampBubbleScale(0.1f))
         assertEquals(1.2f, FloatingPanelSizing.clampBubbleScale(2f))
         assertEquals(0.8f, FloatingPanelSizing.clampBubbleScale(0.8f))

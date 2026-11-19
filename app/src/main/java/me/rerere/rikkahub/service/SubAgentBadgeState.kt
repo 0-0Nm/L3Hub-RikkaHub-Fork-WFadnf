@@ -103,11 +103,12 @@ internal class SubAgentBadgeState(
     /** 时间推进后的当前快照；GREEN 到期转色在这里判定，不靠进出会话 */
     fun snapshot(now: Long = clock()): Snapshot {
         val anyRunning = anyScopeRunning()
+        // 绿色只在暂留窗口内成立；从未成功过（含失败）或暂留到期都转橙
         val phaseNow = when {
             children.isEmpty() -> Phase.HIDDEN
-            anyRunning -> if (phase == Phase.GREEN && now >= greenUntil) Phase.ORANGE else phase
-            succeeded.isNotEmpty() -> Phase.GREEN
-            else -> if (phase == Phase.GREEN && now < greenUntil) Phase.GREEN else Phase.ORANGE
+            phase == Phase.GREEN && now < greenUntil -> Phase.GREEN
+            succeeded.isNotEmpty() && !anyRunning -> Phase.GREEN
+            else -> Phase.ORANGE
         }
         if (phaseNow != Phase.GREEN) greenUntil = 0L
         return Snapshot(
