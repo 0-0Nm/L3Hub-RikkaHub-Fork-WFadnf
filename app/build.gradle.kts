@@ -21,11 +21,11 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.rikkahub.l3hub.wfadnf"
+        applicationId = "com.grd.l3hub"
         minSdk = 26
         targetSdk = 37
-        versionCode = 331
-        versionName = "L.3.2.14.153"
+        versionCode = 332
+        versionName = "L.3.2.14.153-e"
         buildConfigField("boolean", "UPDATE_CHECK_ENABLED", "false")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -79,7 +79,7 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            // E 基线: unsigned release，签名由本地 GREED 流程负责（不读取 local.properties keystore）
             optimization {
                 enable = true
             }
