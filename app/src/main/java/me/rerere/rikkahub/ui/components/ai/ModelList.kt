@@ -459,6 +459,9 @@ internal fun ModelItem(
     // 上排和下排各留一个独立的 interactionSource，共用会让按一行时两行一起出涟漪
     val selectInteraction = remember { MutableInteractionSource() }
     val infoInteraction = remember { MutableInteractionSource() }
+    // LocalIndication.current 是 Composable getter，只能在 Composable 作用域取值；
+    // 局部普通函数 cardClick 只捕获该值，直接在函数体内调用会编译报错
+    val indication = LocalIndication.current
     fun cardClick(interactionSource: MutableInteractionSource) = Modifier.combinedClickable(
         enabled = true,
         onLongClick = onLongClick ?: {
@@ -471,7 +474,7 @@ internal fun ModelItem(
         },
         onClick = { onSelect(model) },
         interactionSource = interactionSource,
-        indication = LocalIndication.current
+        indication = indication
     )
     Card(
         modifier = modifier,
