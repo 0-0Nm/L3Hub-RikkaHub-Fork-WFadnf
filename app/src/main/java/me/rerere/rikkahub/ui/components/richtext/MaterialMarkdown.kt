@@ -20,6 +20,8 @@ import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,6 +67,8 @@ import me.rerere.bettertext.markdown.Markdown as BetterMarkdown
  * @param streaming 内容还在生成时为 true，末尾没写完的语法（如 `**加粗`、`$\frac{`）会被补全或隐藏
  * @param onLinkClick 链接点击回调，为 null 时交给系统的 UriHandler 打开
  */
+private val LocalExplicitMarkdownTextScale = staticCompositionLocalOf { 1f }
+
 @Composable
 fun MaterialMarkdown(
     content: String,
@@ -75,21 +79,25 @@ fun MaterialMarkdown(
     softBreakAsLineBreak: Boolean = true,
     streaming: Boolean = false,
     onLinkClick: ((url: String) -> Unit)? = null,
+    /** Scale only explicitly styled embedded text; main body already uses [style]. */
+    explicitTextScale: Float = 1f,
 ) {
     val merged = LocalTextStyle.current.merge(style)
     val resolved = merged.copy(color = merged.color.takeOrElse { LocalContentColor.current })
     // 插槽里的组件（代码块、表格工具栏等）用 Material 的 Text，让它们也拿到正文样式
-    ProvideTextStyle(resolved) {
-        BetterMarkdown(
-            content = content,
-            modifier = modifier,
-            style = resolved,
-            theme = theme,
-            components = components,
-            softBreakAsLineBreak = softBreakAsLineBreak,
-            streaming = streaming,
-            onLinkClick = onLinkClick,
-        )
+    CompositionLocalProvider(LocalExplicitMarkdownTextScale provides explicitTextScale) {
+        ProvideTextStyle(resolved) {
+            BetterMarkdown(
+                content = content,
+                modifier = modifier,
+                style = resolved,
+                theme = theme,
+                components = components,
+                softBreakAsLineBreak = softBreakAsLineBreak,
+                streaming = streaming,
+                onLinkClick = onLinkClick,
+            )
+        }
     }
 }
 
@@ -176,6 +184,9 @@ object MaterialMarkdownDefaults {
     /** 不带语法高亮的代码块 */
     @Composable
     fun CodeBlock(block: MarkdownBlock.CodeBlock, modifier: Modifier = Modifier) {
+        val scale = LocalExplicitMarkdownTextScale.current
+        fun scaled(style: TextStyle): TextStyle = if (scale == 1f) style else
+            style.copy(fontSize = style.fontSize * scale, lineHeight = style.lineHeight * scale)
         Surface(
             modifier = modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.medium,
@@ -188,14 +199,14 @@ object MaterialMarkdownDefaults {
                 block.language?.let { language ->
                     Text(
                         text = language,
-                        style = MaterialTheme.typography.labelSmall,
+                        style = scaled(MaterialTheme.typography.labelSmall),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Text(
                     text = block.code,
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    style = scaled(MaterialTheme.typography.bodySmall).copy(fontFamily = FontFamily.Monospace),
                     softWrap = false,
                 )
             }

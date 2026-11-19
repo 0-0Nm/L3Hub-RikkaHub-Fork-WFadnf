@@ -49,6 +49,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -264,41 +265,31 @@ fun ChatFloatingBubble(
     // 收起到面板时窗口隐藏，帧还在跑，停下动画
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val animating = state.generating && lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
-    // 不用 Surface：它会吃掉触摸事件，拖动交给 FloatingX 处理
-    Box(modifier = Modifier.padding(6.dp)) {
-        if (icon is FloatingBubbleIcon.AppLogo) {
-            BubbleShell(
-                animation = animation,
-                animating = animating,
-                scale = scale,
-                onClick = onClick,
-            ) { logoShape ->
-                LogoBubbleContent(logoShape = logoShape)
-            }
-        } else {
-            BubbleShell(
-                animation = animation,
-                animating = animating,
-                scale = scale,
-                onClick = onClick,
-            ) { logoShape ->
-                BubbleIconPattern(logoShape = logoShape, icon = icon)
-            }
-        }
-        // 角标和球同乘一个 scale：不擅自加视觉最小值破坏 D/4 / D/8 的比例
-        when {
-            childBadge != null || mainBadgeVisible != null -> {
-                TaskBadges(
-                    mainVisible = mainBadgeVisible == true,
-                    child = childBadge,
-                    scale = scale,
-                    mirror = mirrorBadges,
-                )
-            }
-            state.generating -> {}
-            state.error != null -> StatusBadge(HugeIcons.Alert01, colors.error, colors.onError, scale = scale)
-            state.pendingTools.isNotEmpty() -> StatusBadge(HugeIcons.Wrench01, colors.error, colors.onError, scale = scale)
-            state.hasReply -> StatusBadge(HugeIcons.Tick01, colors.primary, colors.onPrimary, scale = scale)
+    // All three visual elements live in one scaled layer. Touch target stays usable.
+    Box(modifier = Modifier.padding(10.dp)) {
+        BubbleShell(
+            animation = animation,
+            animating = animating,
+            scale = scale,
+            onClick = onClick,
+            overlays = {
+                when {
+                    state.error != null && !state.generating ->
+                        StatusBadge(HugeIcons.Alert01, colors.error, colors.onError, mirror = mirrorBadges)
+                    state.pendingTools.isNotEmpty() && !state.generating ->
+                        StatusBadge(HugeIcons.Wrench01, colors.error, colors.onError, mirror = mirrorBadges)
+                    else -> TaskBadges(
+                        mainVisible = !state.generating &&
+                            (mainBadgeVisible ?: state.hasReply),
+                        child = childBadge,
+                        scale = 1f,
+                        mirror = mirrorBadges,
+                    )
+                }
+            },
+        ) { shellShape ->
+            if (icon is FloatingBubbleIcon.AppLogo) LogoBubbleContent(shellShape)
+            else BubbleIconPattern(shellShape, icon)
         }
     }
 }
@@ -329,6 +320,7 @@ private fun BubbleShell(
     animating: Boolean,
     scale: Float,
     onClick: () -> Unit,
+    overlays: @Composable BoxScope.() -> Unit = {},
     content: @Composable (Shape) -> Unit,
 ) {
     val flowerShape = remember { Animatable(0f) }
@@ -389,6 +381,7 @@ private fun BubbleShell(
             contentAlignment = Alignment.Center,
         ) {
             content(shellShape)
+            overlays()
         }
     }
 }
@@ -433,10 +426,11 @@ private fun BoxScope.StatusBadge(
     containerColor: Color,
     contentColor: Color,
     scale: Float = 1f,
+    mirror: Boolean = false,
 ) {
     Box(
         modifier = Modifier
-            .align(Alignment.TopEnd)
+            .align(if (mirror) AbsoluteAlignment.TopLeft else AbsoluteAlignment.TopRight)
             .size(20.dp * scale)
             .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
             .padding(2.dp)
@@ -460,14 +454,15 @@ private fun BoxScope.TaskBadges(
     scale: Float,
     mirror: Boolean,
 ) {
-    val align = if (mirror) Alignment.TopStart else Alignment.TopEnd
-    val crossAlign = if (mirror) Alignment.Start else Alignment.End
+    val align = if (mirror) AbsoluteAlignment.TopLeft else AbsoluteAlignment.TopRight
+    val crossAlign = if (mirror) AbsoluteAlignment.Left else AbsoluteAlignment.Right
     Column(
         modifier = Modifier.align(align),
         horizontalAlignment = crossAlign,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         if (mainVisible) MainDoneBadge(scale = scale)
+        else if (child != null) Box(Modifier.size(BUBBLE_SIZE / 4 * scale))
         if (child != null) ChildCountBadge(count = child.count, green = child.green, scale = scale)
     }
 }
@@ -858,6 +853,7 @@ private fun MessagePreview(
             content = text,
             // 显式字号随正文一起缩；Markdown 主题里的 em 相对字号按合并后的 style 推导
             style = MaterialTheme.typography.bodyMedium.scaledBy(detailTextScale),
+            explicitTextScale = detailTextScale,
             streaming = generating,
             modifier = Modifier
                 .fillMaxWidth()
@@ -971,6 +967,7 @@ private fun ReplyBar(
         TextField(
             value = text,
             onValueChange = { text = it },
+            textStyle = MaterialTheme.typography.bodyLarge.scaledBy(detailTextScale),
             modifier = Modifier
                 .weight(1f)
                 // 窗口平时不可聚焦，手指按下时先临时放开，键盘才有办法弹出来
@@ -1063,12 +1060,20 @@ fun FloatingBubblePreview(
     animating: Boolean = false,
     mirrorBadges: Boolean = false,
 ) {
-    Box(modifier = Modifier.padding(6.dp)) {
+    Box(modifier = Modifier.padding(10.dp)) {
         BubbleShell(
             animation = animation,
             animating = animating,
             scale = scale,
             onClick = {},
+            overlays = {
+                TaskBadges(
+                    mainVisible = true,
+                    child = ChildBadgeUi(count = 3, green = true),
+                    scale = 1f,
+                    mirror = mirrorBadges,
+                )
+            },
         ) { logoShape ->
             if (icon is FloatingBubbleIcon.AppLogo) {
                 LogoBubbleContent(logoShape = logoShape)

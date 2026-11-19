@@ -308,9 +308,16 @@ class ChatService(
     )
 
     // 子代理轮次结局流（E335 角标）：在 reportSubAgentRound 的判定点发射，
-    // 消费方（悬浮球角标）按子会话 ID 去重计数；重复发射同 id 由消费方去重
+    // 消费方（悬浮球角标）按子会话 ID 去重计数；重复发射同 id 由消费方去重。
+    // E335 审核修复：事件带单调递增 sequence，消费方只处理比已见序号大的事件，
+    // flow 重建/combine 重跑不会把同一个事件消费两次（重复刷新绿暂留）
     private val _subAgentRoundEvents = MutableSharedFlow<SubAgentRoundEvent>(extraBufferCapacity = 16)
     val subAgentRoundEvents: SharedFlow<SubAgentRoundEvent> = _subAgentRoundEvents.asSharedFlow()
+    // 与 _subAgentRoundEvents 同锁递增：setSubAgentState 每次真实判定才推进
+    private val subAgentEventSequence = java.util.concurrent.atomic.AtomicLong()
+    /** 服务侧保留的最近事件（含序号），供角标作用域建立时恢复状态，不依赖 SharedFlow 的无 replay */
+    private val _subAgentRoundEventsSnapshot = MutableStateFlow<List<SubAgentRoundEvent>>(emptyList())
+    val subAgentRoundEventsSnapshot: StateFlow<List<SubAgentRoundEvent>> = _subAgentRoundEventsSnapshot.asStateFlow()
 
     // 错误状态
     private val _errors = MutableStateFlow<List<ChatError>>(emptyList())
@@ -410,6 +417,20 @@ class ChatService(
     suspend fun getConversation(conversationId: Uuid): Conversation? =
         sessionManager.get(conversationId)?.takeIf { it.isInitialized }?.state?.value
             ?: conversationRepo.getConversationById(conversationId)
+
+    /**
+     * 只读解析真实根会话，不通过 getConversationFlow/getOrCreate 创建空会话。
+     * 悬浮球目标可能是子会话；角标必须按这个稳定根作用域累计。
+     */
+    suspend fun resolveRootConversationId(conversationId: Uuid): Uuid? {
+        var current = getConversation(conversationId) ?: return null
+        val visited = HashSet<Uuid>()
+        while (visited.add(current.id)) {
+            val parentId = current.parentConversationId ?: return current.id
+            current = getConversation(parentId) ?: return null
+        }
+        return null
+    }
 
     /** 会话详情里展示的请求快照：工具、系统提示词和本轮注入，按当前设置重新解析一次 */
     suspend fun buildRequestPreview(conversationId: Uuid): ChatRequestPreview =
@@ -850,14 +871,30 @@ class ChatService(
         try {
             session.update { it.copy(subAgentState = state) }
             session.flush()
-            // 角标事件在真实落库后发射：消费方按子会话 ID 去重，同一份完成回传/await/通知只计一次
+            // 角标事件在真实落库后发射：消费方按序号只消费一次，按子会话 ID 去重计数。
+            // 每次发射同步落进 subAgentRoundEventsSnapshot：角标作用域重建（UI 后台才订阅、
+            // 切根 flatMapLatest 重启）时从快照恢复，不靠无 replay 的 SharedFlow
             if (session.state.value.parentConversationId != null) {
-                _subAgentRoundEvents.tryEmit(
-                    SubAgentRoundEvent(
-                        childId = session.id,
-                        completed = state == SUB_AGENT_STATE_COMPLETED,
-                    )
+                val rootId = resolveRootConversationId(session.id) ?: return
+                val event = SubAgentRoundEvent(
+                    childId = session.id,
+                    completed = state == SUB_AGENT_STATE_COMPLETED,
+                    sequence = subAgentEventSequence.incrementAndGet(),
+                    rootId = rootId,
+                    occurredAtMillis = android.os.SystemClock.elapsedRealtime(),
                 )
+                // Keep at most one successful and one failed outcome per child, not an
+                // unbounded log of continuation rounds. The latest real timestamps survive
+                // UI subscription changes; no replay restarts the three-second timer.
+                _subAgentRoundEventsSnapshot.update { previous ->
+                    val newer = previous.any {
+                        it.childId == event.childId && it.completed == event.completed && it.sequence > event.sequence
+                    }
+                    if (newer) previous else previous.filterNot {
+                        it.childId == event.childId && it.completed == event.completed
+                    } + event
+                }
+                _subAgentRoundEvents.tryEmit(event)
             }
         } catch (e: CancellationException) {
             throw e
@@ -2391,4 +2428,9 @@ class ChatService(
 data class SubAgentRoundEvent(
     val childId: Uuid,
     val completed: Boolean,
+    /** 单调递增序号，同一进程内唯一；消费方据此只消费每个事件一次 */
+    val sequence: Long,
+    /** Stable owner and original monotonic completion time; never resolved at replay time. */
+    val rootId: Uuid,
+    val occurredAtMillis: Long,
 )

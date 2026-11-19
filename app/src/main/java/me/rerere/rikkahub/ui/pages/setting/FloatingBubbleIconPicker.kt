@@ -61,7 +61,7 @@ import org.koin.compose.koinInject
 @Composable
 internal fun FloatingBubbleIconPicker(
     current: FloatingBubbleIcon,
-    /** 拖动预览草稿：大小滑块/动画选择改的是这份本地草稿，松手才通过 [onDraftCommitted] 保存 */
+    /** 拖动预览草稿：大小滑块/动画选择改的是这份本地草稿，松手才通过 [onDraftChanged] 保存 */
     initialScale: Float = 1f,
     initialAnimation: FloatingBubbleAnimation = FloatingBubbleAnimation.FLOWER,
     onDraftChanged: (scale: Float, animation: FloatingBubbleAnimation) -> Unit = { _, _ -> },
@@ -93,7 +93,6 @@ internal fun FloatingBubbleIconPicker(
                     return@launch
                 }
                 onSelect(FloatingBubbleIcon.Image(local.toString()))
-                onDismiss()
             }
         }
     }
@@ -103,7 +102,7 @@ internal fun FloatingBubbleIconPicker(
             EmojiPicker(
                 onEmojiSelected = { emoji ->
                     onSelect(FloatingBubbleIcon.Emoji(emoji.emoji))
-                    onDismiss()
+                    showEmojiPicker = false
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -136,7 +135,6 @@ internal fun FloatingBubbleIconPicker(
                         label = stringResource(R.string.floating_bubble_icon_app_logo),
                         onClick = {
                             onSelect(FloatingBubbleIcon.AppLogo)
-                            onDismiss()
                         },
                     ) {
                         BubbleIconPreview(FloatingBubbleIcon.AppLogo)
@@ -147,7 +145,6 @@ internal fun FloatingBubbleIconPicker(
                             label = preset.name,
                             onClick = {
                                 onSelect(FloatingBubbleIcon.Preset(preset.name))
-                                onDismiss()
                             },
                         ) {
                             BubbleIconPreview(FloatingBubbleIcon.Preset(preset.name))
@@ -181,8 +178,7 @@ internal fun FloatingBubbleIconPicker(
                     )
                 }
                 // ---- 实时预览 + 大小 + 动画（E335 需求 1/2）----
-                // 只在自定义图案（Emoji / 图片）后展示：预设网格与上级缩略图不跟缩放
-                if (current is FloatingBubbleIcon.Emoji || current is FloatingBubbleIcon.Image) {
+                // Controls apply to every pattern, independently of the preset grid.
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(
                             text = stringResource(R.string.floating_bubble_preview_section),
@@ -200,7 +196,7 @@ internal fun FloatingBubbleIconPicker(
                                 icon = current,
                                 scale = draftScale,
                                 animation = draftAnimation,
-                                animating = false,
+                                animating = true,
                             )
                         }
                         Text(
@@ -213,7 +209,6 @@ internal fun FloatingBubbleIconPicker(
                             // 拖动实时更新预览草稿
                             onValueChange = { scale ->
                                 draftScale = FloatingPanelSizing.clampBubbleScale(scale)
-                                onDraftChanged(draftScale, draftAnimation)
                             },
                             // 松手（或输入框提交）再保存
                             onValueChangeFinished = { onDraftChanged(draftScale, draftAnimation) },
@@ -247,7 +242,6 @@ internal fun FloatingBubbleIconPicker(
                             }
                         }
                     }
-                }
             }
         }
     }

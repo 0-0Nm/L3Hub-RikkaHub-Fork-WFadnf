@@ -58,7 +58,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.rerere.ai.ui.UIMessagePart
@@ -76,7 +76,6 @@ import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatFloatingTracker
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.SubAgentBadgeState
-import me.rerere.rikkahub.service.SubAgentRoundEvent
 import me.rerere.rikkahub.ui.floating.FloatingPanelSizing
 import me.rerere.rikkahub.service.InboxState
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
@@ -131,8 +130,11 @@ class ChatFloatingWindows(
      */
     private val badge: StateFlow<SubAgentBadgeState.Snapshot?> = tracker.window
         .map { it?.conversationId }
+        // tracker 可能先选 child，或在 E334 切到 parent；先只读解析真实根，
+        // 再 distinct，child/parent 切换到同一根不会重建角标状态。
+        .mapLatest { id -> id?.let { chatService.resolveRootConversationId(it) } }
         .distinctUntilChanged()
-        .flatMapLatest { id -> if (id == null) flowOf(null) else badgeScope(id) }
+        .flatMapLatest { rootId -> if (rootId == null) flowOf(null) else badgeScope(rootId) }
         .stateIn(appScope, SharingStarted.Eagerly, null)
 
     /** 悬浮窗的 Context 不是 Activity，默认的 UriHandler 打开链接时缺少 NEW_TASK 会崩溃 */
@@ -184,24 +186,32 @@ class ChatFloatingWindows(
         }
     }
 
+    /**
+     * 角标只接收服务侧事件快照，不把无 replay 的临时广播当作全部真值。
+     * snapshot 在服务进程生命周期内保留；reducer 按 sequence 消费一次，ticker/jobs 重算
+     * 只更新运行态和时间，不重放旧事件。
+     */
     private fun badgeScope(rootId: Uuid): Flow<SubAgentBadgeState.Snapshot?> {
         val state = SubAgentBadgeState(clock = { SystemClock.elapsedRealtime() })
-        val events: Flow<SubAgentRoundEvent?> = chatService.subAgentRoundEvents
-            .map<SubAgentRoundEvent, SubAgentRoundEvent?> { it }
-            .onStart { emit(null) }
-        return combine(chatService.getConversationJobs(), events, badgeTicker()) { jobs, event, _ ->
-            // 只记本根派发的子会话：其他根的结果不混进来
-            event?.let {
-                val parent = chatService.getConversationFlow(it.childId).value.parentConversationId
-                if (parent == rootId) {
-                    if (it.completed) state.recordSuccess(it.childId) else state.recordFailure(it.childId)
+        val scopedEvents = chatService.subAgentRoundEventsSnapshot.map { events ->
+            events.filter { it.rootId == rootId }
+        }
+        val scopedJobs = chatService.getConversationJobs().mapLatest { jobs ->
+            val running = jobs.filterValues { it != null }.keys
+            val childIds = buildSet {
+                for (child in running) {
+                    if (child != rootId && chatService.resolveRootConversationId(child) == rootId) add(child)
                 }
             }
-            val runningJobs = jobs.filterValues { it != null }.keys
-            val runningChildren = runningJobs.filterTo(HashSet()) { child ->
-                chatService.getConversationFlow(child).value.parentConversationId == rootId
+            (rootId in running) to childIds
+        }
+        return combine(scopedJobs, scopedEvents, badgeTicker()) { (rootRunning, runningChildren), events, _ ->
+            // 事件列表可因 jobs/tick 重算被重新带入；sequence 使每个真实事件只消费一次。
+            for (event in events.sortedBy { it.sequence }) {
+                if (event.completed) state.recordSuccess(event.childId, event.sequence, event.occurredAtMillis)
+                else state.recordFailure(event.childId, event.sequence)
             }
-            state.updateScope(rootRunning = rootId in runningJobs, runningChildren = runningChildren)
+            state.updateScope(rootRunning = rootRunning, runningChildren = runningChildren)
             state.snapshot()
         }
     }
@@ -243,13 +253,16 @@ class ChatFloatingWindows(
     }
 
     private fun installBubble(): FxControl {
+        fun updateEdge(anchor: FxAnchor) {
+            val ltr = context.resources.configuration.layoutDirection == android.view.View.LAYOUT_DIRECTION_LTR
+            bubbleOnLeftEdge = (anchor.gravity.horizontal == FxHorizontal.START) == ltr
+        }
         val edgeListener = object : FxListener {
+            override fun onShow(control: FxControl) { updateEdge(control.anchor) }
             // 拖动/吸附提交锚点后回调（FloatingX 3.0.0 公开 API）：锚在逻辑 START 边
             // 且当前是 LTR 时球贴物理左边，角标要镜像过去；RTL 下 START 是物理右边
             override fun onPositionChanged(control: FxControl, anchor: FxAnchor) {
-                val ltr = context.resources.configuration.layoutDirection ==
-                    android.view.View.LAYOUT_DIRECTION_LTR
-                bubbleOnLeftEdge = (anchor.gravity.horizontal == FxHorizontal.START) == ltr
+                updateEdge(anchor)
             }
         }
         return FloatingX.install(BUBBLE_TAG) {
@@ -282,7 +295,10 @@ class ChatFloatingWindows(
             persist(FxSpStorage(context))
             animation(FxAnimations.scale())
             systemHost(context) { permission(FxPermissionStrategy.skip()) }
-        }.also { it.addListener(edgeListener) }
+        }.also { control ->
+            control.addListener(edgeListener)
+            updateEdge(control.anchor)
+        }
     }
 
     private fun installPanel(): FxControl = FloatingX.install(PANEL_TAG) {
