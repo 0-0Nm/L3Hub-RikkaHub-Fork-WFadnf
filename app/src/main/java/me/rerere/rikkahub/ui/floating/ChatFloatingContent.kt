@@ -31,6 +31,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ContainedLoadingIndicator
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -56,6 +57,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.shadow.Shadow
@@ -72,6 +74,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -102,6 +105,7 @@ import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.hugeicons.stroke.Wrench01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.local.ASK_USER_TOOL_NAME
+import me.rerere.rikkahub.data.datastore.FloatingBubbleAnimation
 import me.rerere.rikkahub.data.model.FloatingBubbleIcon
 import me.rerere.rikkahub.data.ai.tools.local.PHONE_USE_TOOL_NAME
 import me.rerere.rikkahub.data.ai.tools.local.phoneUseActionOf
@@ -241,7 +245,21 @@ internal fun BubbleIconContent(
 
 /** 收起时的小图标：按设置画 logo、内置图标、Emoji 或图片，生成中不停变形，结束后在角上标出结果 */
 @Composable
-fun ChatFloatingBubble(state: FloatingChatUiState, icon: FloatingBubbleIcon, onClick: () -> Unit) {
+fun ChatFloatingBubble(
+    state: FloatingChatUiState,
+    icon: FloatingBubbleIcon,
+    onClick: () -> Unit,
+    /** 整体（球+角标）缩放；只缩视觉，触控区由窗口层保证独立可用 */
+    scale: Float = 1f,
+    /** 外壳动画：花形（旋转+花瓣形变）或圆形呼吸，与图案解耦 */
+    animation: FloatingBubbleAnimation = FloatingBubbleAnimation.FLOWER,
+    /** 贴物理边缘时把角标镜像到贴边一侧；false = 贴边反侧，true = 贴边同侧 */
+    mirrorBadges: Boolean = false,
+    /** 主完成角标（对勾）：null = 本根没有子任务范围，沿用旧角标逻辑 */
+    mainBadgeVisible: Boolean? = null,
+    /** 子任务数字角标：null = 本根没有子任务范围 */
+    childBadge: ChildBadgeUi? = null,
+) {
     val colors = MaterialTheme.colorScheme
     // 收起到面板时窗口隐藏，帧还在跑，停下动画
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
@@ -249,85 +267,155 @@ fun ChatFloatingBubble(state: FloatingChatUiState, icon: FloatingBubbleIcon, onC
     // 不用 Surface：它会吃掉触摸事件，拖动交给 FloatingX 处理
     Box(modifier = Modifier.padding(6.dp)) {
         if (icon is FloatingBubbleIcon.AppLogo) {
-            LogoBubble(animating = animating, onClick = onClick)
+            BubbleShell(
+                animation = animation,
+                animating = animating,
+                scale = scale,
+                onClick = onClick,
+            ) { logoShape ->
+                LogoBubbleContent(logoShape = logoShape)
+            }
         } else {
-            BubbleWithIcon(icon = icon, animating = animating, onClick = onClick)
+            BubbleShell(
+                animation = animation,
+                animating = animating,
+                scale = scale,
+                onClick = onClick,
+            ) { logoShape ->
+                BubbleIconPattern(logoShape = logoShape, icon = icon)
+            }
         }
+        // 角标和球同乘一个 scale：不擅自加视觉最小值破坏 D/4 / D/8 的比例
         when {
+            childBadge != null || mainBadgeVisible != null -> {
+                TaskBadges(
+                    mainVisible = mainBadgeVisible == true,
+                    child = childBadge,
+                    scale = scale,
+                    mirror = mirrorBadges,
+                )
+            }
             state.generating -> {}
-            state.error != null -> StatusBadge(HugeIcons.Alert01, colors.error, colors.onError)
-            state.pendingTools.isNotEmpty() -> StatusBadge(HugeIcons.Wrench01, colors.error, colors.onError)
-            state.hasReply -> StatusBadge(HugeIcons.Tick01, colors.primary, colors.onPrimary)
+            state.error != null -> StatusBadge(HugeIcons.Alert01, colors.error, colors.onError, scale = scale)
+            state.pendingTools.isNotEmpty() -> StatusBadge(HugeIcons.Wrench01, colors.error, colors.onError, scale = scale)
+            state.hasReply -> StatusBadge(HugeIcons.Tick01, colors.primary, colors.onPrimary, scale = scale)
         }
     }
 }
 
-/** 应用 logo：生成中按 LoadingIndicator 的节奏变形，另外整体匀速自转 */
+/** 子任务数字角标的渲染输入；颜色/计数都来自 SubAgentBadgeState.Snapshot 同一份快照 */
+data class ChildBadgeUi(
+    val count: Int,
+    val green: Boolean,
+)
+
+/** 详情文字缩放只乘字号/行高；字重、触控区、图标一律不动 */
+private fun TextStyle.scaledBy(scale: Float): TextStyle =
+    if (scale == 1f) this else copy(fontSize = fontSize * scale, lineHeight = lineHeight * scale)
+
+/**
+ * 悬浮球外壳：图案与外壳解耦（E335）。
+ *
+ * 外壳负责动画与触控：
+ * - [FloatingBubbleAnimation.FLOWER] 复用 LogoBubble 的花形算法：旋转 + 花瓣形变（同一组参数）；
+ * - [FloatingBubbleAnimation.PULSE] 复用 BubbleWithIcon 的呼吸缩放。
+ * 任意图案（logo / 内置 / Emoji / 图片）都可以配任一动画：logo 在花形里按原样画在变形轮廓上，
+ * 在呼吸里画进圆形；其他图案在花形里画进花瓣形容器，在呼吸里画进圆形容器。
+ * 触控区固定 52dp 不随缩放（点击仍由这一层接），视觉整体按 [scale] 缩放。
+ */
 @Composable
-private fun LogoBubble(animating: Boolean, onClick: () -> Unit) {
-    val logoLayers = rememberAppLogoLayers()
-    val shapePosition = remember { Animatable(0f) }
-    val spin = remember { Animatable(0f) }
-    // 固定间隔变一个形状，弹簧和计时同时跑
-    LaunchedEffect(animating) {
-        if (!animating) {
-            // 停在一个完整的形状上
-            shapePosition.animateTo(ceil(shapePosition.value), MorphSpring)
-            return@LaunchedEffect
-        }
-        launch {
-            spin.animateTo(
-                targetValue = spin.value + 360f,
-                animationSpec = infiniteRepeatable(tween(SPIN_DURATION_MILLIS, easing = LinearEasing)),
-            )
-        }
-        while (true) {
-            val morph = launch { shapePosition.animateTo(floor(shapePosition.value) + 1f, MorphSpring) }
-            delay(MORPH_INTERVAL_MILLIS)
-            morph.join()
+private fun BubbleShell(
+    animation: FloatingBubbleAnimation,
+    animating: Boolean,
+    scale: Float,
+    onClick: () -> Unit,
+    content: @Composable (Shape) -> Unit,
+) {
+    val flowerShape = remember { Animatable(0f) }
+    val flowerSpin = remember { Animatable(0f) }
+    val pulse = remember { Animatable(1f) }
+    LaunchedEffect(animating, animation) {
+        if (animation == FloatingBubbleAnimation.FLOWER) {
+            pulse.snapTo(1f)
+            if (!animating) {
+                // 停在一个完整的形状上
+                flowerShape.animateTo(ceil(flowerShape.value), MorphSpring)
+                return@LaunchedEffect
+            }
+            launch {
+                flowerSpin.animateTo(
+                    targetValue = flowerSpin.value + 360f,
+                    animationSpec = infiniteRepeatable(tween(SPIN_DURATION_MILLIS, easing = LinearEasing)),
+                )
+            }
+            while (true) {
+                val morph = launch { flowerShape.animateTo(floor(flowerShape.value) + 1f, MorphSpring) }
+                delay(MORPH_INTERVAL_MILLIS)
+                morph.join()
+            }
+        } else {
+            // 从花形切过来时先停回完整形状，再走圆形呼吸
+            flowerShape.animateTo(ceil(flowerShape.value), MorphSpring)
+            if (!animating) {
+                pulse.animateTo(1f, tween(BUBBLE_SETTLE_MILLIS))
+                return@LaunchedEffect
+            }
+            while (true) {
+                pulse.animateTo(BUBBLE_PULSE_MIN, tween(BUBBLE_PULSE_MILLIS, easing = FastOutSlowInEasing))
+                pulse.animateTo(1f, tween(BUBBLE_PULSE_MILLIS, easing = FastOutSlowInEasing))
+            }
         }
     }
+    val shellShape = if (animation == FloatingBubbleAnimation.FLOWER) {
+        logoMorphShape(flowerShape.value, extraRotation = flowerSpin.value)
+    } else {
+        CircleShape
+    }
+    Box(
+        modifier = Modifier
+            .size(BUBBLE_SIZE)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        // 视觉层单独缩放：触控区保持 52dp，缩到 30% 也按得住
+        Box(
+            modifier = Modifier
+                .size(BUBBLE_SIZE)
+                .graphicsLayer {
+                    val visual = scale * if (animation == FloatingBubbleAnimation.PULSE) pulse.value else 1f
+                    scaleX = visual
+                    scaleY = visual
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            content(shellShape)
+        }
+    }
+}
 
-    val logoShape = logoMorphShape(shapePosition.value, extraRotation = spin.value)
+/** logo 图案：画在传入的外壳形状上（花形=变形轮廓，呼吸=圆形），不加背景、不接手势 */
+@Composable
+private fun LogoBubbleContent(logoShape: Shape) {
+    val logoLayers = rememberAppLogoLayers()
     Box(
         modifier = Modifier
             .size(BUBBLE_SIZE)
             // 不能用 elevation 阴影：轮廓是凹多边形，每帧都要重新三角剖分，变形时会把 RenderThread 卡住几十秒
             .dropShadow(logoShape, Shadow(radius = 6.dp, offset = DpOffset(0.dp, 2.dp), alpha = 0.3f))
             .clip(logoShape)
-            .clickable(onClick = onClick)
             .drawAppLogo(logoLayers)
     )
 }
 
-/**
- * logo 以外的图标：圆形底片，生成中做呼吸缩放。
- * 不做 logo 那套轮廓变形——任意图片都没有那个凹多边形轮廓可以依。
- */
+/** logo 以外的图案：画进传入的外壳形状的容器里，不加手势 */
 @Composable
-private fun BubbleWithIcon(icon: FloatingBubbleIcon, animating: Boolean, onClick: () -> Unit) {
-    val scale = remember { Animatable(1f) }
-    LaunchedEffect(animating) {
-        if (!animating) {
-            scale.animateTo(1f, tween(BUBBLE_SETTLE_MILLIS))
-            return@LaunchedEffect
-        }
-        while (true) {
-            scale.animateTo(BUBBLE_PULSE_MIN, tween(BUBBLE_PULSE_MILLIS, easing = FastOutSlowInEasing))
-            scale.animateTo(1f, tween(BUBBLE_PULSE_MILLIS, easing = FastOutSlowInEasing))
-        }
-    }
+private fun BubbleIconPattern(logoShape: Shape, icon: FloatingBubbleIcon) {
     Box(
         modifier = Modifier
             .size(BUBBLE_SIZE)
-            .graphicsLayer {
-                scaleX = scale.value
-                scaleY = scale.value
-            }
-            .dropShadow(CircleShape, Shadow(radius = 6.dp, offset = DpOffset(0.dp, 2.dp), alpha = 0.3f))
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primaryContainer)
-            .clickable(onClick = onClick),
+            .dropShadow(logoShape, Shadow(radius = 6.dp, offset = DpOffset(0.dp, 2.dp), alpha = 0.3f))
+            .clip(logoShape)
+            .background(MaterialTheme.colorScheme.primaryContainer),
         contentAlignment = Alignment.Center,
     ) {
         BubbleIconContent(
@@ -338,21 +426,102 @@ private fun BubbleWithIcon(icon: FloatingBubbleIcon, animating: Boolean, onClick
     }
 }
 
+
 @Composable
-private fun BoxScope.StatusBadge(icon: ImageVector, containerColor: Color, contentColor: Color) {
+private fun BoxScope.StatusBadge(
+    icon: ImageVector,
+    containerColor: Color,
+    contentColor: Color,
+    scale: Float = 1f,
+) {
     Box(
         modifier = Modifier
             .align(Alignment.TopEnd)
-            .size(20.dp)
+            .size(20.dp * scale)
             .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
             .padding(2.dp)
             .clip(CircleShape)
             .background(containerColor),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = null, tint = contentColor, modifier = Modifier.size(10.dp))
+        Icon(icon, contentDescription = null, tint = contentColor, modifier = Modifier.size(10.dp * scale))
     }
 }
+
+/**
+ * 主/子任务角标（E335 需求 4/5）：主对勾 + 子数字，直径分别为球的 D/4 和 D/8，与球同一比例缩放，
+ * 不设视觉最小值破坏比例。左右贴边时整体镜像到贴边一侧，子标放在主标同侧下方。
+ * 角标只画不接手势：不拦球的点击。
+ */
+@Composable
+private fun BoxScope.TaskBadges(
+    mainVisible: Boolean,
+    child: ChildBadgeUi?,
+    scale: Float,
+    mirror: Boolean,
+) {
+    val align = if (mirror) Alignment.TopStart else Alignment.TopEnd
+    val crossAlign = if (mirror) Alignment.Start else Alignment.End
+    Column(
+        modifier = Modifier.align(align),
+        horizontalAlignment = crossAlign,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        if (mainVisible) MainDoneBadge(scale = scale)
+        if (child != null) ChildCountBadge(count = child.count, green = child.green, scale = scale)
+    }
+}
+
+/** 主完成角标：根主任务及其任务范围全部结束才显示的对勾（D/4） */
+@Composable
+private fun MainDoneBadge(scale: Float) {
+    val size = BUBBLE_SIZE / 4 * scale
+    Box(
+        modifier = Modifier
+            .size(size)
+            .border(size / 8, MaterialTheme.colorScheme.surface, CircleShape)
+            .padding(size / 10)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            HugeIcons.Tick01,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.size(size / 2),
+        )
+    }
+}
+
+/** 子任务数字角标：运行中橙、有成功后绿（D/8），颜色/计数来自同一份状态快照 */
+@Composable
+private fun ChildCountBadge(count: Int, green: Boolean, scale: Float) {
+    val size = BUBBLE_SIZE / 8 * scale
+    val background = if (green) SubAgentBadgeGreen else SubAgentBadgeOrange
+    Box(
+        modifier = Modifier
+            .size(size)
+            .border(size / 8, MaterialTheme.colorScheme.surface, CircleShape)
+            .clip(CircleShape)
+            .background(background),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = count.toString(),
+            color = Color.White,
+            style = MaterialTheme.typography.labelSmall.copy(
+                // 数字按角标自身尺寸缩放，不设视觉最小值：比例统一由 D/8 推出
+                fontSize = with(LocalDensity.current) { (size * 0.75f).toSp() },
+            ),
+            maxLines = 1,
+        )
+    }
+}
+
+// 参考色仅 FF9800 橙 / 43A047 绿
+private val SubAgentBadgeOrange = Color(0xFFFF9800)
+private val SubAgentBadgeGreen = Color(0xFF43A047)
 
 /**
  * 展开后的面板：看进度、审批工具、停止生成和快速回复。
@@ -481,6 +650,7 @@ fun ChatFloatingPanel(
                 ) {
                     PanelHeader(
                         state = state,
+                        detailTextScale = detailTextScale,
                         onOpenConversation = onOpenConversation,
                         onCollapse = onCollapse,
                         onDismiss = onDismiss,
@@ -501,11 +671,13 @@ fun ChatFloatingPanel(
                                     isReasoning = state.previewIsReasoning,
                                     generating = state.generating,
                                     maxHeight = previewHeight.dp,
+                                    detailTextScale = detailTextScale,
                                 )
                             }
                             state.pendingTools.forEach { tool ->
                                 PendingToolCard(
                                     tool = tool,
+                                    detailTextScale = detailTextScale,
                                     onApproval = { approved -> onToolApproval(tool.toolCallId, approved) },
                                     onOpenConversation = onOpenConversation,
                                 )
@@ -514,6 +686,7 @@ fun ChatFloatingPanel(
                                 QueueRow(
                                     count = state.queuedCount,
                                     paused = state.queuePaused,
+                                    detailTextScale = detailTextScale,
                                     onResume = onResumeQueue,
                                 )
                             }
@@ -523,6 +696,7 @@ fun ChatFloatingPanel(
                         conversationId = state.conversationId,
                         generating = state.generating,
                         queueEnabled = queueEnabled,
+                        detailTextScale = detailTextScale,
                         onSend = onSend,
                         onStop = onStop,
                         onReplyFocusChanged = onReplyFocusChanged,
@@ -600,6 +774,7 @@ private fun PanelResizeHandle(modifier: Modifier, geometry: PanelHandleGeometry)
 @Composable
 private fun PanelHeader(
     state: FloatingChatUiState,
+    detailTextScale: Float,
     onOpenConversation: () -> Unit,
     onCollapse: () -> Unit,
     onDismiss: () -> Unit,
@@ -630,13 +805,13 @@ private fun PanelHeader(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = state.title.ifBlank { stringResource(R.string.chat_page_new_chat) },
-                style = MaterialTheme.typography.titleSmallEmphasized,
+                style = MaterialTheme.typography.titleSmallEmphasized.scaledBy(detailTextScale),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = state.statusText(),
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.labelMedium.scaledBy(detailTextScale),
                 color = if (state.failed) colors.error else colors.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -656,7 +831,13 @@ private fun PanelHeader(
 
 // 用不带应用功能的 MaterialMarkdown：应用里的 MarkdownBlock 依赖导航、Activity 等悬浮窗里没有的东西
 @Composable
-private fun MessagePreview(text: String, isReasoning: Boolean, generating: Boolean, maxHeight: Dp) {
+private fun MessagePreview(
+    text: String,
+    isReasoning: Boolean,
+    generating: Boolean,
+    maxHeight: Dp,
+    detailTextScale: Float,
+) {
     val scrollState = rememberScrollState()
     // 生成中跟随最新内容。Markdown 在后台解析，内容变高晚于文本变化，按可滚动距离跟随
     LaunchedEffect(generating) {
@@ -673,7 +854,8 @@ private fun MessagePreview(text: String, isReasoning: Boolean, generating: Boole
     ) {
         MaterialMarkdown(
             content = text,
-            style = MaterialTheme.typography.bodyMedium,
+            // 显式字号随正文一起缩；Markdown 主题里的 em 相对字号按合并后的 style 推导
+            style = MaterialTheme.typography.bodyMedium.scaledBy(detailTextScale),
             streaming = generating,
             modifier = Modifier
                 .fillMaxWidth()
@@ -687,6 +869,7 @@ private fun MessagePreview(text: String, isReasoning: Boolean, generating: Boole
 @Composable
 private fun PendingToolCard(
     tool: UIMessagePart.Tool,
+    detailTextScale: Float,
     onApproval: (approved: Boolean) -> Unit,
     onOpenConversation: () -> Unit,
 ) {
@@ -705,13 +888,13 @@ private fun PendingToolCard(
                 } else {
                     stringResource(R.string.floating_chat_tool_request, tool.toolName.substringAfterLast("__"))
                 },
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelLarge.scaledBy(detailTextScale),
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
             if (!isAskUser && tool.input.isNotBlank()) {
                 Text(
                     text = tool.input.take(300),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodySmall.scaledBy(detailTextScale),
                     fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
                     maxLines = 3,
@@ -735,14 +918,19 @@ private fun PendingToolCard(
 }
 
 @Composable
-private fun QueueRow(count: Int, paused: Boolean, onResume: () -> Unit) {
+private fun QueueRow(
+    count: Int,
+    paused: Boolean,
+    detailTextScale: Float,
+    onResume: () -> Unit,
+) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = stringResource(
                 if (paused) R.string.chat_page_queue_paused_count else R.string.chat_page_queue_pending_count,
                 count,
             ),
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.labelMedium.scaledBy(detailTextScale),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
         )
@@ -757,6 +945,7 @@ private fun ReplyBar(
     conversationId: Uuid,
     generating: Boolean,
     queueEnabled: Boolean,
+    detailTextScale: Float,
     onSend: (String) -> Boolean,
     onStop: () -> Unit,
     onReplyFocusChanged: (Boolean) -> Unit,
@@ -799,7 +988,9 @@ private fun ReplyBar(
                         } else {
                             R.string.floating_chat_reply_placeholder
                         }
-                    )
+                    ),
+                    // 占位文字跟详情比例缩；输入框本体和发送按钮不动
+                    style = LocalTextStyle.current.scaledBy(detailTextScale),
                 )
             },
             maxLines = 4,
@@ -855,4 +1046,33 @@ private fun FloatingChatUiState.statusText(): String {
 private fun GenerationPhase.RunningTool.displayName(): String {
     if (toolName != PHONE_USE_TOOL_NAME) return toolName
     return phoneUseActionOf(input)?.let { "$toolName · $it" } ?: toolName
+}
+
+/**
+ * 悬浮球预览（设置页用）：同一套外壳/图案组件，无任务副作用。
+ * [animating] = true 时模拟运行中（花形持续形变/呼吸持续脉动），预览里不会出现完成角标；
+ * 左右贴边（[mirrorBadges]）由真实悬浮窗层传入，预览里也可显式传来看看镜像效果。
+ */
+@Composable
+fun FloatingBubblePreview(
+    icon: FloatingBubbleIcon,
+    scale: Float,
+    animation: FloatingBubbleAnimation,
+    animating: Boolean = false,
+    mirrorBadges: Boolean = false,
+) {
+    Box(modifier = Modifier.padding(6.dp)) {
+        BubbleShell(
+            animation = animation,
+            animating = animating,
+            scale = scale,
+            onClick = {},
+        ) { logoShape ->
+            if (icon is FloatingBubbleIcon.AppLogo) {
+                LogoBubbleContent(logoShape = logoShape)
+            } else {
+                BubbleIconPattern(logoShape = logoShape, icon = icon)
+            }
+        }
+    }
 }

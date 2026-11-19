@@ -2212,6 +2212,12 @@
   <string name="floating_panel_height">Max panel height</string>
   <string name="floating_preview_height">Preview height</string>
   <string name="floating_panel_resize">Drag to resize the panel</string>
+  <string name="floating_detail_text_scale">Detail text size</string>
+  <string name="floating_bubble_preview_section">Preview</string>
+  <string name="floating_bubble_size">Bubble size</string>
+  <string name="floating_bubble_animation">Shell animation</string>
+  <string name="floating_bubble_animation_flower">Flower</string>
+  <string name="floating_bubble_animation_pulse">Breathing circle</string>
   <string name="floating_size_dp">%1$d dp</string>
   <string name="setting_model_page_memory_model">Memory Consolidation Model</string>
   <string name="setting_model_page_memory_model_desc">Model used to organize conversations into long-term memory in the background; uses the fast model when not set</string>

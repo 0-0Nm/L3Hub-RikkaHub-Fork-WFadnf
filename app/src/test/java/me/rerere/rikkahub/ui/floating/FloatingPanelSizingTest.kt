@@ -117,4 +117,23 @@ class FloatingPanelSizingTest {
         assertEquals(1080, FloatingPanelSizing.windowWidthPx(1080f, 2f))
         assertEquals(1, FloatingPanelSizing.windowWidthPx(0f, 0f))
     }
+
+    // ---- E335：悬浮球缩放与详情文字缩放 ----
+
+    @Test
+    fun `bubble scale clamps legacy and out-of-range values`() {
+        assertEquals(1f, FloatingPanelSizing.clampBubbleScale(Float.NaN))
+        assertEquals(1f, FloatingPanelSizing.clampBubbleScale(1.7f))
+        assertEquals(0.3f, FloatingPanelSizing.clampBubbleScale(0.1f))
+        assertEquals(1.2f, FloatingPanelSizing.clampBubbleScale(2f))
+        assertEquals(0.8f, FloatingPanelSizing.clampBubbleScale(0.8f))
+    }
+
+    @Test
+    fun `detail text scale clamps to at most 1`() {
+        assertEquals(1f, FloatingPanelSizing.clampDetailTextScale(Float.NaN))
+        assertEquals(1f, FloatingPanelSizing.clampDetailTextScale(1.5f))
+        assertEquals(0.3f, FloatingPanelSizing.clampDetailTextScale(0.1f))
+        assertEquals(0.75f, FloatingPanelSizing.clampDetailTextScale(0.75f))
+    }
 }

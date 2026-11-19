@@ -4,14 +4,17 @@ import android.app.Application
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import android.view.ViewTreeObserver
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -26,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.petterp.floatingx.compose.compose
 import com.petterp.floatingx.core.FloatingX
 import com.petterp.floatingx.core.FxControl
+import com.petterp.floatingx.core.FxListener
 import com.petterp.floatingx.core.animation.FxAnimations
 import com.petterp.floatingx.core.feature.FxFeature
 import com.petterp.floatingx.core.feature.FxFeatureScope
@@ -35,6 +39,7 @@ import com.petterp.floatingx.core.gesture.FxRegion
 import com.petterp.floatingx.core.layout.FxAdsorb
 import com.petterp.floatingx.core.layout.FxAnchor
 import com.petterp.floatingx.core.layout.FxGravity
+import com.petterp.floatingx.core.layout.FxHorizontal
 import com.petterp.floatingx.core.layout.FxLayoutInput
 import com.petterp.floatingx.core.storage.FxSpStorage
 import com.petterp.floatingx.system.container.FxWindowContainer
@@ -42,15 +47,18 @@ import com.petterp.floatingx.system.permission.FxPermission
 import com.petterp.floatingx.system.permission.FxPermissionStrategy
 import com.petterp.floatingx.system.systemHost
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.rerere.ai.ui.UIMessagePart
@@ -63,9 +71,13 @@ import me.rerere.rikkahub.data.model.GenerationPhase
 import me.rerere.rikkahub.data.model.generationPhase
 import me.rerere.rikkahub.data.model.pendingToolCalls
 import me.rerere.rikkahub.phoneuse.PhoneUseManager
+import me.rerere.rikkahub.data.datastore.FloatingBubbleAnimation
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatFloatingTracker
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.service.SubAgentBadgeState
+import me.rerere.rikkahub.service.SubAgentRoundEvent
+import me.rerere.rikkahub.ui.floating.FloatingPanelSizing
 import me.rerere.rikkahub.service.InboxState
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import kotlin.uuid.Uuid
@@ -103,6 +115,9 @@ class ChatFloatingWindows(
     private var panel: FxControl? = null
     private var panelFeature: PanelWindowFeature? = null
 
+    /** 悬浮球贴在哪条物理边：true = 物理左边缘（角标镜像到左上）。Compose 状态，改了会重组 */
+    private var bubbleOnLeftEdge by mutableStateOf(false)
+
     // 悬浮窗显示期间一直汇总，气泡和面板切换时直接拿到当前状态，不会先空一帧
     private val uiState: StateFlow<FloatingChatUiState?> = tracker.window
         .map { it?.conversationId }
@@ -110,7 +125,17 @@ class ChatFloatingWindows(
         .flatMapLatest { id -> if (id == null) flowOf(null) else chatState(id) }
         .stateIn(appScope, SharingStarted.Eagerly, null)
 
-    // 悬浮窗的 Context 不是 Activity，默认的 UriHandler 打开链接时缺少 NEW_TASK 会崩溃
+    /**
+     * 主/子任务角标快照（E335）。范围 = 当前根会话及其派发的子会话；
+     * 根切换（目标变化）时 flatMapLatest 重启、范围重建（已知局限：同根内后续批次累计，不自动清零）。
+     */
+    private val badge: StateFlow<SubAgentBadgeState.Snapshot?> = tracker.window
+        .map { it?.conversationId }
+        .distinctUntilChanged()
+        .flatMapLatest { id -> if (id == null) flowOf(null) else badgeScope(id) }
+        .stateIn(appScope, SharingStarted.Eagerly, null)
+
+    /** 悬浮窗的 Context 不是 Activity，默认的 UriHandler 打开链接时缺少 NEW_TASK 会崩溃
     private val uriHandler = object : UriHandler {
         override fun openUri(uri: String) {
             val intent = Intent(Intent.ACTION_VIEW, uri.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -151,6 +176,36 @@ class ChatFloatingWindows(
         }
     }
 
+    /** 绿暂留到期转色靠时间推进，不靠进出会话；250ms 足够平滑 */
+    private fun badgeTicker(): Flow<Unit> = flow {
+        while (true) {
+            emit(Unit)
+            delay(250)
+        }
+    }
+
+    private fun badgeScope(rootId: Uuid): Flow<SubAgentBadgeState.Snapshot?> {
+        val state = SubAgentBadgeState(clock = { SystemClock.elapsedRealtime() })
+        val events: Flow<SubAgentRoundEvent?> = chatService.subAgentRoundEvents
+            .map<SubAgentRoundEvent, SubAgentRoundEvent?> { it }
+            .onStart { emit(null) }
+        return combine(chatService.getConversationJobs(), events, badgeTicker()) { jobs, event, _ ->
+            // 只记本根派发的子会话：其他根的结果不混进来
+            event?.let {
+                val parent = chatService.getConversationFlow(it.childId).value.parentConversationId
+                if (parent == rootId) {
+                    if (it.completed) state.recordSuccess(it.childId) else state.recordFailure(it.childId)
+                }
+            }
+            val runningJobs = jobs.filterValues { it != null }.keys
+            val runningChildren = runningJobs.filterTo(HashSet()) { child ->
+                chatService.getConversationFlow(child).value.parentConversationId == rootId
+            }
+            state.updateScope(rootRunning = rootId in runningJobs, runningChildren = runningChildren)
+            state.snapshot()
+        }
+    }
+
     private fun chatState(id: Uuid): Flow<FloatingChatUiState> {
         // 只显示这一轮的错误。开始时间要用启动任务时记下的，等这里观察到任务再取会晚于快速失败时报的错
         val error = combine(chatService.errors, chatService.getGenerationStartedAtFlow(id)) { errors, since ->
@@ -187,22 +242,47 @@ class ChatFloatingWindows(
         }
     }
 
-    private fun installBubble(): FxControl = FloatingX.install(BUBBLE_TAG) {
-        compose {
-            WindowContent { state, settings ->
-                ChatFloatingBubble(
-                    state = state,
-                    icon = settings.displaySetting.floatingBubbleIcon,
-                    onClick = tracker::expand,
-                )
+    private fun installBubble(): FxControl {
+        val edgeListener = object : FxListener {
+            // 拖动/吸附提交锚点后回调（FloatingX 3.0.0 公开 API）：锚在逻辑 START 边
+            // 且当前是 LTR 时球贴物理左边，角标要镜像过去；RTL 下 START 是物理右边
+            override fun onPositionChanged(control: FxControl, anchor: FxAnchor) {
+                val ltr = context.resources.configuration.layoutDirection ==
+                    android.view.View.LAYOUT_DIRECTION_LTR
+                bubbleOnLeftEdge = (anchor.gravity.horizontal == FxHorizontal.START) == ltr
             }
         }
-        anchor(FxGravity.CENTER_END, dy = -dp(96f))
-        margin(left = dp(8f), right = dp(8f))
-        adsorb(FxAdsorb.horizontal())
-        persist(FxSpStorage(context))
-        animation(FxAnimations.scale())
-        systemHost(context) { permission(FxPermissionStrategy.skip()) }
+        return FloatingX.install(BUBBLE_TAG) {
+            compose {
+                WindowContent { state, settings ->
+                    val display = settings.displaySetting
+                    val badgeSnapshot by badge.collectAsStateWithLifecycle(
+                        minActiveState = Lifecycle.State.RESUMED,
+                    )
+                    ChatFloatingBubble(
+                        state = state,
+                        icon = display.floatingBubbleIcon,
+                        onClick = tracker::expand,
+                        scale = FloatingPanelSizing.clampBubbleScale(display.floatingBubbleScale),
+                        animation = display.floatingBubbleAnimation,
+                        mirrorBadges = bubbleOnLeftEdge,
+                        mainBadgeVisible = badgeSnapshot?.mainBadgeVisible,
+                        childBadge = badgeSnapshot?.takeIf { it.childBadgeVisible }?.let {
+                            ChildBadgeUi(
+                                count = it.successCount,
+                                green = it.childPhase == SubAgentBadgeState.Phase.GREEN,
+                            )
+                        },
+                    )
+                }
+            }
+            anchor(FxGravity.CENTER_END, dy = -dp(96f))
+            margin(left = dp(8f), right = dp(8f))
+            adsorb(FxAdsorb.horizontal())
+            persist(FxSpStorage(context))
+            animation(FxAnimations.scale())
+            systemHost(context) { permission(FxPermissionStrategy.skip()) }
+        }.also { it.addListener(edgeListener) }
     }
 
     private fun installPanel(): FxControl = FloatingX.install(PANEL_TAG) {
@@ -228,6 +308,7 @@ class ChatFloatingWindows(
                     heightFraction = display.floatingPanelHeightRatio,
                     maxHeight = rememberPanelMaxHeight(),
                     previewMaxHeight = display.floatingPreviewMaxHeight.dp,
+                    detailTextScale = FloatingPanelSizing.clampDetailTextScale(display.floatingDetailTextScale),
                     onWidthChanged = { ratio -> panelFeature?.resizeWindow(panelWidthPx(ratio)) },
                     onReplyFocusChanged = { focused -> panelFeature?.setWindowFocusable(focused) },
                     onResize = { width, height, previewHeight ->
