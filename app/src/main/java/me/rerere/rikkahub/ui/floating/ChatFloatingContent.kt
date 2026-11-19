@@ -536,6 +536,8 @@ fun ChatFloatingPanel(
     heightFraction: Float,
     maxHeight: Dp,
     previewMaxHeight: Dp,
+    /** 详情文字缩放（E335 需求 3）：只作用在标题/状态/预览正文/工具卡/队列文案/输入占位，不碰按钮图标与触控区 */
+    detailTextScale: Float = 1f,
     onResize: (widthFraction: Float, heightFraction: Float, previewHeightDp: Int) -> Unit,
     /** 拖动中实时通知窗口层改宽度；窗口只换宽度、不动位置，所以另一条边钉在原地 */
     onWidthChanged: (Float) -> Unit,

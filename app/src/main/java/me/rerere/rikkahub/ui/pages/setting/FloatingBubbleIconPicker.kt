@@ -8,7 +8,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,12 +17,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -40,14 +37,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.FilesManager
-import me.rerere.rikkahub.data.datastore.FloatingBubbleAnimation
 import me.rerere.rikkahub.data.model.FloatingBubbleIcon
 import me.rerere.rikkahub.ui.components.ui.EmojiPicker
-import me.rerere.rikkahub.ui.components.ui.PercentNumberSlider
 import me.rerere.rikkahub.ui.floating.BubbleIconContent
 import me.rerere.rikkahub.ui.floating.BubblePresets
-import me.rerere.rikkahub.ui.floating.FloatingBubblePreview
-import me.rerere.rikkahub.ui.floating.FloatingPanelSizing
 import me.rerere.rikkahub.ui.floating.bubblePresetIcon
 import me.rerere.rikkahub.ui.terminal.OutlinedButton
 import org.koin.compose.koinInject
@@ -61,10 +54,6 @@ import org.koin.compose.koinInject
 @Composable
 internal fun FloatingBubbleIconPicker(
     current: FloatingBubbleIcon,
-    /** 拖动预览草稿：大小滑块/动画选择改的是这份本地草稿，松手才通过 [onDraftCommitted] 保存 */
-    initialScale: Float = 1f,
-    initialAnimation: FloatingBubbleAnimation = FloatingBubbleAnimation.FLOWER,
-    onDraftChanged: (scale: Float, animation: FloatingBubbleAnimation) -> Unit = { _, _ -> },
     onSelect: (FloatingBubbleIcon) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -73,9 +62,6 @@ internal fun FloatingBubbleIconPicker(
     var showEmojiPicker by remember { mutableStateOf(false) }
     var pickingImage by remember { mutableStateOf(false) }
     var pickFailed by remember { mutableStateOf(false) }
-    // 预览草稿：拖滑块实时变，松手/选中动画时提交
-    var draftScale by remember { mutableFloatStateOf(FloatingPanelSizing.clampBubbleScale(initialScale)) }
-    var draftAnimation by remember { mutableStateOf(initialAnimation) }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
@@ -179,74 +165,6 @@ internal fun FloatingBubbleIconPicker(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
-                }
-                // ---- 实时预览 + 大小 + 动画（E335 需求 1/2）----
-                // 只在自定义图案（Emoji / 图片）后展示：预设网格与上级缩略图不跟缩放
-                if (current is FloatingBubbleIcon.Emoji || current is FloatingBubbleIcon.Image) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(
-                            text = stringResource(R.string.floating_bubble_preview_section),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(72.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            // 与悬浮球同一套外壳/图案组件渲染；无任务副作用（不模拟运行状态以外的完成角标）
-                            FloatingBubblePreview(
-                                icon = current,
-                                scale = draftScale,
-                                animation = draftAnimation,
-                                animating = false,
-                            )
-                        }
-                        Text(
-                            text = stringResource(R.string.floating_bubble_size),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        PercentNumberSlider(
-                            value = draftScale,
-                            // 拖动实时更新预览草稿
-                            onValueChange = { scale ->
-                                draftScale = FloatingPanelSizing.clampBubbleScale(scale)
-                                onDraftChanged(draftScale, draftAnimation)
-                            },
-                            // 松手（或输入框提交）再保存
-                            onValueChangeFinished = { onDraftChanged(draftScale, draftAnimation) },
-                            valueRange = FloatingPanelSizing.MIN_BUBBLE_SCALE..FloatingPanelSizing.MAX_BUBBLE_SCALE,
-                        )
-                        Text(
-                            text = stringResource(R.string.floating_bubble_animation),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            listOf(FloatingBubbleAnimation.FLOWER, FloatingBubbleAnimation.PULSE).forEach { animation ->
-                                FilterChip(
-                                    selected = draftAnimation == animation,
-                                    onClick = {
-                                        draftAnimation = animation
-                                        onDraftChanged(draftScale, draftAnimation)
-                                    },
-                                    label = {
-                                        Text(
-                                            text = stringResource(
-                                                if (animation == FloatingBubbleAnimation.FLOWER) {
-                                                    R.string.floating_bubble_animation_flower
-                                                } else {
-                                                    R.string.floating_bubble_animation_pulse
-                                                },
-                                            )
-                                        )
-                                    },
-                                )
-                            }
-                        }
-                    }
                 }
             }
         }

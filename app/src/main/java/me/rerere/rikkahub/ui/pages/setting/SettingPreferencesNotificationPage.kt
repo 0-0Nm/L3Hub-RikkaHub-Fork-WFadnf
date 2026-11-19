@@ -88,10 +88,6 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
             FloatingPanelSizing.clampPreviewHeight(displaySetting.floatingPreviewMaxHeight).toFloat()
         )
     }
-    // 详情文字比例草稿：拖动只改草稿，松手落盘；只缩详情文字，不碰按钮图标与触控区
-    var draftDetailTextScale by remember(displaySetting.floatingDetailTextScale) {
-        mutableFloatStateOf(FloatingPanelSizing.clampDetailTextScale(displaySetting.floatingDetailTextScale))
-    }
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val updateChecksEnabled =
@@ -289,24 +285,6 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
                         steps = 0,
                     )
                 }
-                formItem(
-                    visible = displaySetting.enableFloatingChatWindow,
-                    headlineContent = { Text(stringResource(R.string.floating_detail_text_scale)) },
-                    trailingContent = {
-                        CardGroupValue(FloatingPanelSizing.percentLabel(draftDetailTextScale))
-                    },
-                ) {
-                    PercentNumberSlider(
-                        value = draftDetailTextScale,
-                        onValueChange = { draftDetailTextScale = FloatingPanelSizing.clampDetailTextScale(it) },
-                        onValueChangeFinished = {
-                            updateDisplaySetting(
-                                displaySetting.copy(floatingDetailTextScale = draftDetailTextScale)
-                            )
-                        },
-                        valueRange = FloatingPanelSizing.MIN_DETAIL_TEXT_SCALE..FloatingPanelSizing.MAX_DETAIL_TEXT_SCALE,
-                    )
-                }
                 item(
                     visible = displaySetting.enableFloatingChatWindow && !canDrawOverlays,
                     onClick = ::requestOverlayPermission,
@@ -345,17 +323,6 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
     if (showFloatingIconPicker) {
         FloatingBubbleIconPicker(
             current = displaySetting.floatingBubbleIcon,
-            initialScale = displaySetting.floatingBubbleScale,
-            initialAnimation = displaySetting.floatingBubbleAnimation,
-            // 拖滑块 / 点动画即保存自己的字段，不覆盖面板拖动在写的其他设置
-            onDraftChanged = { scale, animation ->
-                updateDisplaySetting(
-                    displaySetting.copy(
-                        floatingBubbleScale = FloatingPanelSizing.clampBubbleScale(scale),
-                        floatingBubbleAnimation = animation,
-                    )
-                )
-            },
             onSelect = { icon ->
                 // 旧图片由 FilesManager.saveBubbleIcon 自己在写入成功之后清掉，这里只管存设置
                 updateDisplaySetting(displaySetting.copy(floatingBubbleIcon = icon))

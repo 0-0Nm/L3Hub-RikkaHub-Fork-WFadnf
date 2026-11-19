@@ -135,7 +135,7 @@ class ChatFloatingWindows(
         .flatMapLatest { id -> if (id == null) flowOf(null) else badgeScope(id) }
         .stateIn(appScope, SharingStarted.Eagerly, null)
 
-    /** 悬浮窗的 Context 不是 Activity，默认的 UriHandler 打开链接时缺少 NEW_TASK 会崩溃
+    /** 悬浮窗的 Context 不是 Activity，默认的 UriHandler 打开链接时缺少 NEW_TASK 会崩溃 */
     private val uriHandler = object : UriHandler {
         override fun openUri(uri: String) {
             val intent = Intent(Intent.ACTION_VIEW, uri.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
