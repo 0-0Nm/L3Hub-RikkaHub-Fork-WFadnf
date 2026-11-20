@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ModalBottomSheet
@@ -67,10 +69,16 @@ internal fun FloatingBubbleIconPicker(
     onDraftChanged: (scale: Float, animation: FloatingBubbleAnimation) -> Unit = { _, _ -> },
     onSelect: (FloatingBubbleIcon) -> Unit,
     onDismiss: () -> Unit,
+    counterFontPath: String = "",
+    importedFontPaths: List<String> = emptyList(),
+    importedFontNames: List<String> = emptyList(),
+    onCounterFontSelected: (String) -> Unit = {},
 ) {
     val filesManager = koinInject<FilesManager>()
     val scope = rememberCoroutineScope()
     var showEmojiPicker by remember { mutableStateOf(false) }
+    var fontMenuExpanded by remember { mutableStateOf(false) }
+    var previewCount by remember { mutableStateOf(12) }
     var pickingImage by remember { mutableStateOf(false) }
     var pickFailed by remember { mutableStateOf(false) }
     // 预览草稿：拖滑块实时变，松手/选中动画时提交
@@ -197,7 +205,55 @@ internal fun FloatingBubbleIconPicker(
                                 scale = draftScale,
                                 animation = draftAnimation,
                                 animating = true,
+                                counterFontPath = counterFontPath.takeIf { it in importedFontPaths }.orEmpty(),
+                                previewCount = previewCount,
                             )
+                        }
+                        Text(
+                            text = stringResource(R.string.floating_counter_font),
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Box {
+                            val fontIndex = importedFontPaths.indexOf(counterFontPath)
+                            val selectedFontName = if (fontIndex >= 0) {
+                                importedFontNames.getOrNull(fontIndex)?.takeIf { it.isNotBlank() }
+                                    ?: stringResource(R.string.floating_counter_imported_font, fontIndex + 1)
+                            } else stringResource(R.string.floating_counter_serif)
+                            OutlinedButton(onClick = { fontMenuExpanded = true }) { Text(selectedFontName) }
+                            DropdownMenu(
+                                expanded = fontMenuExpanded,
+                                onDismissRequest = { fontMenuExpanded = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.floating_counter_serif)) },
+                                    onClick = { onCounterFontSelected(""); fontMenuExpanded = false },
+                                )
+                                importedFontPaths.forEachIndexed { index, path ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(importedFontNames.getOrNull(index)?.takeIf { it.isNotBlank() }
+                                                ?: stringResource(R.string.floating_counter_imported_font, index + 1))
+                                        },
+                                        onClick = { onCounterFontSelected(path); fontMenuExpanded = false },
+                                    )
+                                }
+                            }
+                        }
+                        if (importedFontPaths.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.floating_counter_import_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        Text(stringResource(R.string.floating_counter_sample), style = MaterialTheme.typography.labelSmall)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf(0, 12, 25, 50, 75, 100, 101).forEach { sample ->
+                                FilterChip(
+                                    selected = previewCount == sample,
+                                    onClick = { previewCount = sample },
+                                    label = { Text(sample.toString()) },
+                                )
+                            }
                         }
                         Text(
                             text = stringResource(R.string.floating_bubble_size),

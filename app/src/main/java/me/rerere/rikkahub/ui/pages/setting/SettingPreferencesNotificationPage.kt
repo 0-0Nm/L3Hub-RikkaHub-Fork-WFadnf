@@ -347,6 +347,16 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
             current = displaySetting.floatingBubbleIcon,
             initialScale = displaySetting.floatingBubbleScale,
             initialAnimation = displaySetting.floatingBubbleAnimation,
+            counterFontPath = displaySetting.floatingCounterFontPath,
+            importedFontPaths = displaySetting.chatCustomFontPaths.ifEmpty {
+                listOf(displaySetting.chatCustomFontPath).filter { it.isNotBlank() }
+            },
+            importedFontNames = if (displaySetting.chatCustomFontPaths.isNotEmpty()) {
+                displaySetting.chatCustomFontNames
+            } else listOf(displaySetting.chatCustomFontName),
+            onCounterFontSelected = { path ->
+                updateDisplaySetting(displaySetting.copy(floatingCounterFontPath = path))
+            },
             // 拖滑块 / 点动画即保存自己的字段，不覆盖面板拖动在写的其他设置
             onDraftChanged = { scale, animation ->
                 updateDisplaySetting(

@@ -338,6 +338,8 @@ data class DisplaySetting(
     val floatingBubbleIcon: FloatingBubbleIcon = FloatingBubbleIcon.AppLogo,
     // 悬浮球整体（球+角标）缩放比例；100% 是现有 52dp 的样子，触控区不跟着缩
     val floatingBubbleScale: Float = 1.0f,
+    // Imported font relative path for the counter only; blank uses built-in serif.
+    val floatingCounterFontPath: String = "",
     // 悬浮面板内详情文字（标题/状态/预览正文等）的缩放比例；100% 是现有效果
     val floatingDetailTextScale: Float = 1.0f,
     // 悬浮球外壳动画：花形（旋转+花瓣形变）或圆形呼吸，与图案解耦

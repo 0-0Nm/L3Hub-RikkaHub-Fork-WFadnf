@@ -13,6 +13,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.layout.absolutePadding
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -69,6 +71,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -262,13 +265,19 @@ fun ChatFloatingBubble(
     mainBadgeVisible: Boolean? = null,
     /** 子任务数字角标：null = 本根没有子任务范围 */
     childBadge: ChildBadgeUi? = null,
+    counterFontPath: String = "",
 ) {
     val colors = MaterialTheme.colorScheme
     // 收起到面板时窗口隐藏，帧还在跑，停下动画
     val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val animating = state.generating && lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
     // All three visual elements live in one scaled layer. Touch target stays usable.
-    Box(modifier = Modifier.padding(10.dp)) {
+    Box(modifier = Modifier.absolutePadding(
+        left = if (mirrorBadges) 10.dp else 25.dp,
+        right = if (mirrorBadges) 25.dp else 10.dp,
+        top = 10.dp,
+        bottom = 10.dp,
+    )) {
         BubbleShell(
             animation = animation,
             animating = animating,
@@ -286,6 +295,7 @@ fun ChatFloatingBubble(
                         child = childBadge,
                         scale = 1f,
                         mirror = mirrorBadges,
+                        counterFontPath = counterFontPath,
                     )
                 }
             },
@@ -455,6 +465,7 @@ private fun BoxScope.TaskBadges(
     child: ChildBadgeUi?,
     scale: Float,
     mirror: Boolean,
+    counterFontPath: String = "",
 ) {
     val align = if (mirror) AbsoluteAlignment.TopLeft else AbsoluteAlignment.TopRight
     val crossAlign = if (mirror) AbsoluteAlignment.Left else AbsoluteAlignment.Right
@@ -465,7 +476,17 @@ private fun BoxScope.TaskBadges(
     ) {
         if (mainVisible) MainDoneBadge(scale = scale)
         else if (child != null) Box(Modifier.size(BUBBLE_SIZE / 4 * scale))
-        if (child != null) ChildCountBadge(count = child.count, green = child.green, scale = scale)
+        if (child != null) ChildStatusBadge(green = child.green, scale = scale)
+    }
+    if (child != null) {
+        ArcTaskCount(
+            count = child.count,
+            fontPath = counterFontPath,
+            modifier = Modifier
+                .align(if (mirror) AbsoluteAlignment.CenterRight else AbsoluteAlignment.CenterLeft)
+                .absoluteOffset(x = if (mirror) BUBBLE_SIZE / 4 * scale else -BUBBLE_SIZE / 4 * scale)
+                .size(width = BUBBLE_SIZE / 2 * scale, height = BUBBLE_SIZE / 4 * scale),
+        )
     }
 }
 
@@ -491,44 +512,59 @@ private fun MainDoneBadge(scale: Float) {
     }
 }
 
-/** 子任务数字角标：运行中橙、有成功后绿（D/8），颜色/计数来自同一份状态快照 */
+/** Small child status circle; only the opposite-side number carries the count. */
 @Composable
-private fun ChildCountBadge(count: Int, green: Boolean, scale: Float) {
+private fun ChildStatusBadge(green: Boolean, scale: Float) {
     val diameter = BUBBLE_SIZE / 8 * scale
-    val background = if (green) SubAgentBadgeGreen else SubAgentBadgeOrange
-    val label = count.coerceAtLeast(0).toString()
-    val digitPaint = remember {
-        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.WHITE
-            typeface = android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.BOLD)
-            isSubpixelText = true
-        }
-    }
-    val glyphBounds = remember { android.graphics.Rect() }
     Box(
-        modifier = Modifier
-            .size(diameter)
+        Modifier.size(diameter)
             .border(diameter / 8, MaterialTheme.colorScheme.surface, CircleShape)
             .clip(CircleShape)
-            .background(background),
-        contentAlignment = Alignment.Center,
-    ) {
-        // Measure actual glyph ink, not a Material label line box. The inherited line
-        // height/font padding could exceed this tiny badge and clip the whole digit.
-        Canvas(Modifier.fillMaxSize().semantics { contentDescription = label }) {
-            digitPaint.textSize = size.minDimension
-            digitPaint.getTextBounds(label, 0, label.length, glyphBounds)
-            if (glyphBounds.width() > 0 && glyphBounds.height() > 0) {
-                // Fit the ink inside a square inscribed within the circular border.
-                val fit = minOf(
-                    size.width * 0.62f / glyphBounds.width(),
-                    size.height * 0.62f / glyphBounds.height(),
-                )
-                digitPaint.textSize *= fit
-                digitPaint.getTextBounds(label, 0, label.length, glyphBounds)
-                val x = size.width / 2f - (glyphBounds.left + glyphBounds.right) / 2f
-                val baseline = size.height / 2f - (glyphBounds.top + glyphBounds.bottom) / 2f
-                drawIntoCanvas { canvas -> canvas.nativeCanvas.drawText(label, x, baseline, digitPaint) }
+            .background(if (green) SubAgentBadgeGreen else SubAgentBadgeOrange)
+    )
+}
+
+/** Counter font affects only this number; malformed or removed fonts fall back to serif. */
+@Composable
+private fun ArcTaskCount(count: Int, fontPath: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val typeface = remember(fontPath, context.filesDir) {
+        runCatching {
+            val root = context.filesDir.canonicalFile
+            val font = java.io.File(root, fontPath).canonicalFile
+            if (fontPath.isNotBlank() && font.path.startsWith(root.path + java.io.File.separator) && font.isFile) {
+                android.graphics.Typeface.createFromFile(font)
+            } else android.graphics.Typeface.SERIF
+        }.getOrDefault(android.graphics.Typeface.SERIF)
+    }
+    val label = count.coerceAtLeast(0).toString()
+    val argb = FloatingCounterVisuals.colorArgb(count)
+    val paint = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { isSubpixelText = true } }
+    val glyphBounds = remember { android.graphics.Rect() }
+    Canvas(modifier.semantics { contentDescription = label }) {
+        paint.typeface = typeface
+        if (!label.all { paint.hasGlyph(it.toString()) }) paint.typeface = android.graphics.Typeface.SERIF
+        paint.textSize = size.height * 2f
+        paint.getTextBounds(label, 0, label.length, glyphBounds)
+        if (glyphBounds.width() > 0 && glyphBounds.height() > 0) {
+            val stroke = size.height * 0.075f
+            val fit = minOf(
+                (size.width - 2f * stroke) / glyphBounds.width(),
+                (size.height - 2f * stroke) / glyphBounds.height(),
+            ).coerceAtLeast(0f)
+            paint.textSize *= fit
+            paint.getTextBounds(label, 0, label.length, glyphBounds)
+            val x = size.width / 2f - (glyphBounds.left + glyphBounds.right) / 2f
+            val baseline = size.height / 2f - (glyphBounds.top + glyphBounds.bottom) / 2f
+            drawIntoCanvas { canvas ->
+                paint.style = android.graphics.Paint.Style.STROKE
+                paint.strokeWidth = stroke
+                paint.strokeJoin = android.graphics.Paint.Join.ROUND
+                paint.color = android.graphics.Color.argb(230, 15, 15, 20)
+                canvas.nativeCanvas.drawText(label, x, baseline, paint)
+                paint.style = android.graphics.Paint.Style.FILL
+                paint.color = argb
+                canvas.nativeCanvas.drawText(label, x, baseline, paint)
             }
         }
     }
@@ -1079,8 +1115,15 @@ fun FloatingBubblePreview(
     animation: FloatingBubbleAnimation,
     animating: Boolean = false,
     mirrorBadges: Boolean = false,
+    counterFontPath: String = "",
+    previewCount: Int = 12,
 ) {
-    Box(modifier = Modifier.padding(10.dp)) {
+    Box(modifier = Modifier.absolutePadding(
+        left = if (mirrorBadges) 10.dp else 25.dp,
+        right = if (mirrorBadges) 25.dp else 10.dp,
+        top = 10.dp,
+        bottom = 10.dp,
+    )) {
         BubbleShell(
             animation = animation,
             animating = animating,
@@ -1089,9 +1132,10 @@ fun FloatingBubblePreview(
             overlays = {
                 TaskBadges(
                     mainVisible = true,
-                    child = ChildBadgeUi(count = 3, green = true),
+                    child = ChildBadgeUi(count = previewCount, green = true),
                     scale = 1f,
                     mirror = mirrorBadges,
+                    counterFontPath = counterFontPath,
                 )
             },
         ) { logoShape ->

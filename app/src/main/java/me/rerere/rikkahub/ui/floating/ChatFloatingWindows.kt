@@ -279,6 +279,9 @@ class ChatFloatingWindows(
                         scale = FloatingPanelSizing.clampBubbleScale(display.floatingBubbleScale),
                         animation = display.floatingBubbleAnimation,
                         mirrorBadges = bubbleOnLeftEdge,
+                        counterFontPath = display.floatingCounterFontPath.takeIf { path ->
+                            path in display.chatCustomFontPaths || path == display.chatCustomFontPath
+                        }.orEmpty(),
                         mainBadgeVisible = badgeSnapshot?.mainBadgeVisible,
                         childBadge = badgeSnapshot?.takeIf { it.childBadgeVisible }?.let {
                             ChildBadgeUi(
