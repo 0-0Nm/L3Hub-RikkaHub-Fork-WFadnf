@@ -60,6 +60,8 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -492,25 +494,43 @@ private fun MainDoneBadge(scale: Float) {
 /** 子任务数字角标：运行中橙、有成功后绿（D/8），颜色/计数来自同一份状态快照 */
 @Composable
 private fun ChildCountBadge(count: Int, green: Boolean, scale: Float) {
-    val size = BUBBLE_SIZE / 8 * scale
+    val diameter = BUBBLE_SIZE / 8 * scale
     val background = if (green) SubAgentBadgeGreen else SubAgentBadgeOrange
+    val label = count.coerceAtLeast(0).toString()
+    val digitPaint = remember {
+        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            typeface = android.graphics.Typeface.create(android.graphics.Typeface.SANS_SERIF, android.graphics.Typeface.BOLD)
+            isSubpixelText = true
+        }
+    }
+    val glyphBounds = remember { android.graphics.Rect() }
     Box(
         modifier = Modifier
-            .size(size)
-            .border(size / 8, MaterialTheme.colorScheme.surface, CircleShape)
+            .size(diameter)
+            .border(diameter / 8, MaterialTheme.colorScheme.surface, CircleShape)
             .clip(CircleShape)
             .background(background),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = count.toString(),
-            color = Color.White,
-            style = MaterialTheme.typography.labelSmall.copy(
-                // 数字按角标自身尺寸缩放，不设视觉最小值：比例统一由 D/8 推出
-                fontSize = with(LocalDensity.current) { (size * 0.75f).toSp() },
-            ),
-            maxLines = 1,
-        )
+        // Measure actual glyph ink, not a Material label line box. The inherited line
+        // height/font padding could exceed this tiny badge and clip the whole digit.
+        Canvas(Modifier.fillMaxSize().semantics { contentDescription = label }) {
+            digitPaint.textSize = size.minDimension
+            digitPaint.getTextBounds(label, 0, label.length, glyphBounds)
+            if (glyphBounds.width() > 0 && glyphBounds.height() > 0) {
+                // Fit the ink inside a square inscribed within the circular border.
+                val fit = minOf(
+                    size.width * 0.62f / glyphBounds.width(),
+                    size.height * 0.62f / glyphBounds.height(),
+                )
+                digitPaint.textSize *= fit
+                digitPaint.getTextBounds(label, 0, label.length, glyphBounds)
+                val x = size.width / 2f - (glyphBounds.left + glyphBounds.right) / 2f
+                val baseline = size.height / 2f - (glyphBounds.top + glyphBounds.bottom) / 2f
+                drawIntoCanvas { canvas -> canvas.nativeCanvas.drawText(label, x, baseline, digitPaint) }
+            }
+        }
     }
 }
 
