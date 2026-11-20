@@ -547,7 +547,7 @@ private fun ArcTaskCount(count: Int, fontPath: String, modifier: Modifier = Modi
         paint.textSize = size.height * 2f
         paint.getTextBounds(label, 0, label.length, glyphBounds)
         if (glyphBounds.width() > 0 && glyphBounds.height() > 0) {
-            val stroke = size.height * 0.075f
+            val stroke = size.height * 0.055f
             val fit = minOf(
                 (size.width - 2f * stroke) / glyphBounds.width(),
                 (size.height - 2f * stroke) / glyphBounds.height(),
@@ -560,7 +560,7 @@ private fun ArcTaskCount(count: Int, fontPath: String, modifier: Modifier = Modi
                 paint.style = android.graphics.Paint.Style.STROKE
                 paint.strokeWidth = stroke
                 paint.strokeJoin = android.graphics.Paint.Join.ROUND
-                paint.color = android.graphics.Color.argb(230, 15, 15, 20)
+                paint.color = android.graphics.Color.argb(150, 24, 22, 25)
                 canvas.nativeCanvas.drawText(label, x, baseline, paint)
                 paint.style = android.graphics.Paint.Style.FILL
                 paint.color = argb

@@ -2,11 +2,11 @@ package me.rerere.rikkahub.ui.floating
 
 import kotlin.math.roundToInt
 
-/** Equal 25-count intervals; independent of orange/green task-state signaling. */
+/** Muted ivory / aged gold / sage / smoky purple / brick red. Equal 25-count intervals; independent of task-state colors. */
 internal object FloatingCounterVisuals {
     private val anchors = intArrayOf(
-        0xFFFFFFFF.toInt(), 0xFFFFEB3B.toInt(), 0xFF43A047.toInt(),
-        0xFF9C27B0.toInt(), 0xFFE53935.toInt(),
+        0xFFD0C7B5.toInt(), 0xFFAD9566.toInt(), 0xFF75846C.toInt(),
+        0xFF88758A.toInt(), 0xFFA4655D.toInt(),
     )
     fun colorArgb(count: Int): Int {
         val value = count.coerceIn(0, 100)
