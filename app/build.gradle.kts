@@ -21,11 +21,11 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.grd.l3hub"
+        applicationId = "com.gread.l3hub"
         minSdk = 26
         targetSdk = 37
         versionCode = 337
-        versionName = "L.3.2.14.153-e.337"
+        versionName = "L.3.2.14.153-b.337"
         buildConfigField("boolean", "UPDATE_CHECK_ENABLED", "false")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
