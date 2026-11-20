@@ -55,7 +55,7 @@
     android:enableOnBackInvokedCallback="true"
     android:fullBackupContent="@xml/backup_rules"
     android:icon="@mipmap/ic_launcher"
-    android:label="GRDLB"
+    android:label="GREED L3B"
     android:networkSecurityConfig="@xml/network_security_config"
     android:supportsRtl="true"
     android:theme="@style/Theme.Rikkahub"
