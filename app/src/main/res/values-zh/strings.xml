@@ -2704,4 +2704,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
     <string name="floating_counter_imported_font">已导入字体 %1$d</string>
     <string name="floating_counter_import_hint">在字体设置中导入字体后，即可在此选择。</string>
     <string name="floating_counter_sample">预览数量（仅示例）</string>
+    <string name="mcp_diagnostics_tab">MCP 诊断</string>
+    <string name="mcp_diagnostics_copy">复制脱敏诊断</string>
+    <string name="mcp_diagnostics_empty">暂无诊断。请在 MCP 设置中刷新连接。记录仅保留到应用进程结束。</string>
 </resources>

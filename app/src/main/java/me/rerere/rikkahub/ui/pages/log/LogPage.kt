@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -42,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -52,6 +55,7 @@ import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Download04
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.ai.mcp.McpDiagnostics
 import me.rerere.rikkahub.data.datastore.LogPreferences
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.JsonTree
@@ -70,6 +74,10 @@ import kotlin.math.roundToInt
 @Composable
 fun LogPage() {
     var logs by remember { mutableStateOf(Logging.getRecentLogs()) }
+    var showMcp by remember { mutableStateOf(false) }
+    val diagnostics by McpDiagnostics.entries.collectAsStateWithLifecycle()
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
     var requestLoggingEnabled by remember { mutableStateOf(Logging.isRequestLoggingEnabled()) }
     var maxLogBytes by remember { mutableStateOf(Logging.getMaxLogBytes()) }
     val context = LocalContext.current
@@ -85,7 +93,7 @@ fun LogPage() {
                 title = { Text("Logs") },
                 navigationIcon = { BackButton() },
                 actions = {
-                    IconButton(
+                    if (!showMcp) IconButton(
                         onClick = { exporter.export(sortedLogs) },
                         enabled = sortedLogs.isNotEmpty(),
                     ) {
@@ -93,8 +101,10 @@ fun LogPage() {
                     }
                     IconButton(
                         onClick = {
-                            Logging.clear()
-                            logs = Logging.getRecentLogs()
+                            if (showMcp) McpDiagnostics.clear() else {
+                                Logging.clear()
+                                logs = Logging.getRecentLogs()
+                            }
                         }
                     ) {
                         Icon(HugeIcons.Delete01, null)
@@ -107,7 +117,30 @@ fun LogPage() {
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
     ) { contentPadding ->
-        UnifiedLogList(
+        Column(Modifier.fillMaxSize().padding(contentPadding)) {
+            Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = !showMcp, onClick = { showMcp = false; logs = Logging.getRecentLogs() },
+                    label = { Text(stringResource(R.string.setting_page_request_logs)) })
+                FilterChip(selected = showMcp, onClick = { showMcp = true },
+                    label = { Text(stringResource(R.string.mcp_diagnostics_tab)) })
+            }
+            if (showMcp) {
+                TextButton(
+                    onClick = {
+                        val summary = diagnostics.asReversed().joinToString("\n") { it.summary() }
+                        scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("MCP diagnostics", summary))) }
+                    },
+                    enabled = diagnostics.isNotEmpty(),
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                ) { Text(stringResource(R.string.mcp_diagnostics_copy)) }
+                LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (diagnostics.isEmpty()) item { Text(stringResource(R.string.mcp_diagnostics_empty)) }
+                    items(diagnostics) { entry ->
+                        Text(entry.summary(), style = MaterialTheme.typography.bodySmall, fontFamily = JetbrainsMono)
+                    }
+                }
+            } else UnifiedLogList(
             logs = sortedLogs,
             requestLoggingEnabled = requestLoggingEnabled,
             onRequestLoggingChange = {
@@ -124,10 +157,9 @@ fun LogPage() {
                 logs = Logging.getRecentLogs()
             },
             onExport = { exporter.export(it) },
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(contentPadding)
-        )
+            modifier = Modifier.weight(1f)
+            )
+        }
     }
 }
 

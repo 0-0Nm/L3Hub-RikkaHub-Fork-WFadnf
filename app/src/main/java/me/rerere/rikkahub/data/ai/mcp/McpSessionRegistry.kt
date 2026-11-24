@@ -258,8 +258,11 @@ internal class McpSessionRegistry(
             installTransportCallbacks(config, sdkClient, transport)
 
             try {
-                sdkClient.connect(transport)
-                val syncedConfig = syncTools(session, sdkClient, config)
+                val diagnostic = McpDiagnostics.begin(config)
+                McpDiagnostics.measure(diagnostic, McpDiagnostics.Stage.CONNECT_INITIALIZE) {
+                    sdkClient.connect(transport)
+                }
+                val syncedConfig = syncTools(session, sdkClient, config, diagnostic)
                 if (sessions[config.id] !== session ||
                     !hasSameConnectionParameters(config, syncedConfig)
                 ) {
@@ -334,8 +337,11 @@ internal class McpSessionRegistry(
         session: McpSession,
         sdkClient: Client,
         connectionConfig: McpServerConfig,
+        diagnostic: McpDiagnostics.Attempt = McpDiagnostics.begin(connectionConfig),
     ): McpServerConfig {
-        val serverTools = sdkClient.listTools().tools
+        val serverTools = McpDiagnostics.measure(
+            diagnostic, McpDiagnostics.Stage.TOOLS_LIST, toolCount = { tools: List<Tool> -> tools.size },
+        ) { sdkClient.listTools().tools }
         Log.i(TAG, "Synced ${serverTools.size} tools from ${connectionConfig.id}")
         var updatedConfig = connectionConfig
         settingsStore.update { old ->

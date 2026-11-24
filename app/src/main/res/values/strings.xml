@@ -2702,4 +2702,7 @@
     <string name="floating_counter_imported_font">Imported font %1$d</string>
     <string name="floating_counter_import_hint">Import fonts in Appearance / Fonts to add them to this list.</string>
     <string name="floating_counter_sample">Preview count (sample only)</string>
+    <string name="mcp_diagnostics_tab">MCP diagnostics</string>
+    <string name="mcp_diagnostics_copy">Copy redacted diagnostics</string>
+    <string name="mcp_diagnostics_empty">No diagnostics yet. Refresh connections on the MCP settings page. Logs are kept until the app process closes.</string>
 </resources>
