@@ -459,16 +459,19 @@ internal class McpSessionRegistry(
         clientInfo = Implementation(name = config.commonOptions.name, version = "1.0")
     )
 
-    private fun createTransport(config: McpServerConfig): AbstractTransport = when (config) {
+    internal fun createDiagnosticTransport(config: McpServerConfig, probeClient: HttpClient): AbstractTransport =
+        createTransport(config, probeClient)
+
+    private fun createTransport(config: McpServerConfig, transportClient: HttpClient = httpClient): AbstractTransport = when (config) {
         is McpServerConfig.SseTransportServer -> SseClientTransport(
             urlString = config.url,
-            client = httpClient,
+            client = transportClient,
             requestBuilder = { appendResolvedHeaders(config) },
         )
 
         is McpServerConfig.StreamableHTTPServer -> StreamableHttpClientTransport(
             url = config.url,
-            client = httpClient,
+            client = transportClient,
             requestBuilder = { appendResolvedHeaders(config) },
         )
     }

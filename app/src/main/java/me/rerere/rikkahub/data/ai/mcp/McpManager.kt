@@ -105,6 +105,14 @@ class McpManager(
     val syncingStatus: StateFlow<Map<Uuid, McpStatus>>
         get() = statusStore.status
 
+    internal val diagnosticServers: Flow<List<McpServerConfig>> = settingsStore.settingsFlow
+        .map { it.mcpServers }.distinctUntilChanged()
+
+    internal suspend fun diagnose(configId: Uuid): McpProbe.Report? {
+        val config = settingsStore.settingsFlow.value.mcpServers.firstOrNull { it.id == configId } ?: return null
+        return McpProbe.run(config, okHttpClient, sessionRegistry::createDiagnosticTransport)
+    }
+
     fun getClient(config: McpServerConfig): Client? = sessionRegistry.getClient(config.id)
 
     fun getStatus(config: McpServerConfig): Flow<McpStatus> = sessionRegistry.getStatus(config.id)

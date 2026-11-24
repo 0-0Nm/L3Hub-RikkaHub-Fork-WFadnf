@@ -2705,4 +2705,27 @@
     <string name="mcp_diagnostics_tab">MCP diagnostics</string>
     <string name="mcp_diagnostics_copy">Copy redacted diagnostics</string>
     <string name="mcp_diagnostics_empty">No diagnostics yet. Refresh connections on the MCP settings page. Logs are kept until the app process closes.</string>
+    <string name="mcp_probe_title">Run MCP diagnostic</string>
+    <string name="mcp_probe_scope">Choose one configured Streamable HTTP entry. Tests initialization and tool listing only. No tool calls, OAuth refresh, redirects or settings changes. Reports omit hosts, paths and credentials.</string>
+    <string name="mcp_probe_pick">Choose a server</string>
+    <string name="mcp_probe_run">Run diagnostic</string>
+    <string name="mcp_probe_cancel">Cancel diagnostic</string>
+    <string name="mcp_probe_unavailable">The entry is unavailable or the diagnostic could not start.</string>
+    <string name="mcp_probe_ok">Initialization and tool listing succeeded in this test. No tool was executed.</string>
+    <string name="mcp_probe_config">Check that the entry uses a valid HTTP or HTTPS URL without embedded credentials or a fragment.</string>
+    <string name="mcp_probe_sse">This probe does not follow the alternate POST endpoint advertised by legacy SSE. Use normal refresh and the passive log for this entry.</string>
+    <string name="mcp_probe_cleartext">Android security policy denies cleartext for this host. Use the approved HTTPS address or check the application policy.</string>
+    <string name="mcp_probe_auth">The server replied 401 or 403. Check authorization, token expiry and permissions. This test did not refresh credentials.</string>
+    <string name="mcp_probe_path">The server replied 404 or 405. Compare the MCP URL path and transport with the working instance.</string>
+    <string name="mcp_probe_redirect">The server requested a redirect. Verify the intended final address and configure it explicitly if trusted.</string>
+    <string name="mcp_probe_http">The server returned an HTTP error. Check its status and server-side logs.</string>
+    <string name="mcp_probe_dns">Host resolution failed. Check the configured hostname, DNS and network.</string>
+    <string name="mcp_probe_tls">Secure connection failed. Check server certificates, hostname and device clock; do not bypass verification.</string>
+    <string name="mcp_probe_refused">TCP was refused. Confirm the service is listening on the configured port.</string>
+    <string name="mcp_probe_timeout">TCP connection timed out. Compare this exact entry on the main app and the clone; check their network or proxy routing.</string>
+    <string name="mcp_probe_connect">The connection failed. Check the service, port and the route from this app instance.</string>
+    <string name="mcp_probe_deadline">The diagnostic timed out. Check the last completed stage; this result alone does not identify a TCP failure.</string>
+    <string name="mcp_probe_initialize">SDK initialization did not finish. Check transport, protocol response and server logs. HTTP 200 alone is not an MCP success.</string>
+    <string name="mcp_probe_tools">Initialization succeeded but tool listing failed. Check server capabilities and account permissions.</string>
+    <string name="mcp_probe_no_tools_capability">Initialization succeeded. The server did not advertise tools, so listing was skipped.</string>
 </resources>

@@ -24,8 +24,8 @@ android {
         applicationId = "com.grd.l3hub"
         minSdk = 26
         targetSdk = 37
-        versionCode = 338
-        versionName = "L.3.2.14.153-e.338"
+        versionCode = 339
+        versionName = "L.3.2.14.153-e.339"
         buildConfigField("boolean", "UPDATE_CHECK_ENABLED", "false")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

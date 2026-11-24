@@ -135,6 +135,7 @@ fun LogPage() {
                 ) { Text(stringResource(R.string.mcp_diagnostics_copy)) }
                 LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item { McpProbeCard() }
                     if (diagnostics.isEmpty()) item { Text(stringResource(R.string.mcp_diagnostics_empty)) }
                     items(diagnostics) { entry ->
                         Text(entry.summary(), style = MaterialTheme.typography.bodySmall, fontFamily = JetbrainsMono)

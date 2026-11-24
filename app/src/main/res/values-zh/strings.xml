@@ -2707,4 +2707,27 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
     <string name="mcp_diagnostics_tab">MCP 诊断</string>
     <string name="mcp_diagnostics_copy">复制脱敏诊断</string>
     <string name="mcp_diagnostics_empty">暂无诊断。请在 MCP 设置中刷新连接。记录仅保留到应用进程结束。</string>
+    <string name="mcp_probe_title">运行 MCP 分层诊断</string>
+    <string name="mcp_probe_scope">选一条已配置的 Streamable HTTP 服务。只测初始化和工具列表，不执行工具、不刷新授权、不跟随跳转、不修改配置。报告不记录主机名、路径或凭据。</string>
+    <string name="mcp_probe_pick">选择 MCP 条目</string>
+    <string name="mcp_probe_run">开始诊断</string>
+    <string name="mcp_probe_cancel">取消诊断</string>
+    <string name="mcp_probe_unavailable">条目不可用，或诊断未能启动。</string>
+    <string name="mcp_probe_ok">本次初始化和工具列表均通过，未执行任何工具。</string>
+    <string name="mcp_probe_config">检查配置是否为合法 HTTP／HTTPS 地址，且不包含内嵌凭据或片段。</string>
+    <string name="mcp_probe_sse">本测试不追踪传统 SSE 返回的独立 POST 地址。该条目请用正常刷新及被动日志检查。</string>
+    <string name="mcp_probe_cleartext">Android 不允许对此端点使用明文。核对服务的 HTTPS 地址和应用网络策略。</string>
+    <string name="mcp_probe_auth">服务返回 401 或 403。检查授权、令牌有效期和权限；诊断没有刷新凭据。</string>
+    <string name="mcp_probe_path">服务返回 404 或 405。对照正常实例的 MCP 路径和传输类型。</string>
+    <string name="mcp_probe_redirect">服务要求跳转。先核实最终地址可信，再决定是否明确配置它。</string>
+    <string name="mcp_probe_http">服务返回 HTTP 错误。核对状态码和服务端日志。</string>
+    <string name="mcp_probe_dns">主机解析失败。检查地址、DNS 和网络。</string>
+    <string name="mcp_probe_tls">安全连接失败。检查证书、主机名和设备时间，不跳过校验。</string>
+    <string name="mcp_probe_refused">TCP 连接被拒绝。确认服务已经启动并监听配置的端口。</string>
+    <string name="mcp_probe_timeout">TCP 连接超时。用原包和分身测试同一条目，并对照网络、代理及访问策略。</string>
+    <string name="mcp_probe_connect">连接失败。检查服务、端口和该实例到端点的网络路径。</string>
+    <string name="mcp_probe_deadline">诊断超时。查看最后完成的阶段；本结果本身不能证明是 TCP 故障。</string>
+    <string name="mcp_probe_initialize">SDK 初始化未完成。检查传输类型、协议响应和服务日志；HTTP 200 本身不代表 MCP 成功。</string>
+    <string name="mcp_probe_tools">初始化成功，但获取工具列表失败。检查服务能力、账号权限和服务端日志。</string>
+    <string name="mcp_probe_no_tools_capability">初始化成功。服务未声明工具能力，未发送工具列表请求。</string>
 </resources>
