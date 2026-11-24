@@ -1,0 +1,106 @@
+name: B339 APK
+
+# B339 专用：只在本分支 push 时构建 unsigned release APK（artifact）。
+# 不发 release / tag，不读取任何 secrets；签名由本地 GREED 流程负责。
+
+on:
+  push:
+    branches:
+      - 'b-release-v3.2.14-339'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: b339-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Unsigned githubRelease APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # :terminal / :workspace 带 CMake，AGP 配置阶段需要 NDK 28.2.13676358
+      - name: Cache NDK
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/android/sdk/ndk/28.2.13676358
+          key: ndk-28.2.13676358-ubuntu
+
+      - name: Validate NDK
+        run: |
+          ndk=/usr/local/lib/android/sdk/ndk/28.2.13676358
+          if [ -e "$ndk" ] && { [ ! -f "$ndk/source.properties" ] || \
+             [ ! -x "$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" ]; }; then
+            echo "缓存里的 NDK 不完整，删掉重新下载"
+            rm -rf "$ndk"
+          fi
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-ui/pnpm-lock.yaml
+
+      - name: Install web-ui deps
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Build unsigned release APK
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+          WITH_WEB_UI: '1'
+        run: |
+          set -euo pipefail
+          chmod +x gradlew tools/build-apk.sh
+          mkdir -p dist
+          VARIANT=release WITH_WEB_UI=1 ./tools/build-apk.sh
+          dir="app/build/outputs/apk/github/release"
+          mapfile -t apks < <(ls "$dir"/*.apk)
+          if [ "${#apks[@]}" -ne 1 ]; then
+            echo "期望恰好 1 个 APK，实际 ${#apks[@]} 个：${apks[*]:-无}" >&2
+            exit 1
+          fi
+          cp "${apks[0]}" "dist/b339-arm64-v8a-unsigned.apk"
+          ( cd dist && sha256sum b339-arm64-v8a-unsigned.apk > b339-arm64-v8a-unsigned.apk.sha256 )
+          ls -l dist
+
+      # unsigned 包不走 apksigner verify --print-certs；只核对包名/label/版本，身份留待本地签名后核对
+      - name: Verify APK identity
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+        run: |
+          set -euo pipefail
+          build_tools=$(ls -d "$ANDROID_HOME/build-tools/"*/ | sort -V | tail -1)
+          apk=dist/b339-arm64-v8a-unsigned.apk
+          pkg=$("$build_tools/aapt2" dump packagename "$apk" | tail -1)
+          if [ "$pkg" != "com.gread.l3hub" ]; then
+            echo "包名对不上：${pkg} ≠ com.gread.l3hub" >&2
+            exit 1
+          fi
+          "$build_tools/aapt2" dump badging "$apk" 2>/dev/null \
+            | grep -E '^(package|application-label|sdkVersion|targetSdkVersion)' || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: B339-unsigned-apk
+          path: dist/*
+          if-no-files-found: error
