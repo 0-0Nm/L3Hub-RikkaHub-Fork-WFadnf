@@ -49,6 +49,7 @@ class McpManager(
     private val settingsStore: SettingsStore,
     private val appScope: AppScope,
     private val filesManager: FilesManager,
+    private val diagnosticContext: Context,
 ) {
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
@@ -110,7 +111,9 @@ class McpManager(
 
     internal suspend fun diagnose(configId: Uuid): McpProbe.Report? {
         val config = settingsStore.settingsFlow.value.mcpServers.firstOrNull { it.id == configId } ?: return null
-        return McpProbe.run(config, okHttpClient, sessionRegistry::createDiagnosticTransport)
+        val report = McpProbe.run(config, okHttpClient, sessionRegistry::createDiagnosticTransport, diagnosticContext)
+        McpProbeEvidence.publish(report)
+        return report
     }
 
     fun getClient(config: McpServerConfig): Client? = sessionRegistry.getClient(config.id)

@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.mcp
 
+import android.content.Context
 import android.os.Process
 import android.os.SystemClock
 import android.security.NetworkSecurityPolicy
@@ -78,7 +79,7 @@ internal object McpProbe {
         override fun dnsEnd(call: Call, domainName: String, inetAddressList: List<InetAddress>) =
             add("DNS OK addresses=${inetAddressList.size}")
         override fun connectStart(call: Call, inetSocketAddress: InetSocketAddress, proxy: Proxy) =
-            add("TCP START route=${proxy.type().name}")
+            add("TCP START route=${proxy.type().name} family=${McpProbeEvidence.addressFamily(inetSocketAddress.address)}")
         override fun secureConnectStart(call: Call) = add("TLS START")
         override fun secureConnectEnd(call: Call, handshake: okhttp3.Handshake?) = add("TLS OK")
         override fun connectEnd(call: Call, inetSocketAddress: InetSocketAddress, proxy: Proxy, protocol: Protocol?) {
@@ -113,12 +114,13 @@ internal object McpProbe {
     }
 
     suspend fun run(config: McpServerConfig, base: OkHttpClient,
-        transport: (McpServerConfig, HttpClient) -> AbstractTransport): Report = withContext(Dispatchers.IO) {
+        transport: (McpServerConfig, HttpClient) -> AbstractTransport, context: Context): Report = withContext(Dispatchers.IO) {
         val start = SystemClock.elapsedRealtime()
         val now = System.currentTimeMillis()
         val target = config.serverUrl.toHttpUrlOrNull()
         val endpoint = McpDiagnostics.safeEndpoint(config.serverUrl)
         val trace = Trace()
+        McpProbeEvidence.environment(context).forEach { trace.add(it) }
         var phase = McpProbeRules.Phase.PREFLIGHT
         var initialized = false
         var tools: Int? = null

@@ -2708,7 +2708,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
     <string name="mcp_diagnostics_copy">复制脱敏诊断</string>
     <string name="mcp_diagnostics_empty">暂无诊断。请在 MCP 设置中刷新连接。记录仅保留到应用进程结束。</string>
     <string name="mcp_probe_title">运行 MCP 分层诊断</string>
-    <string name="mcp_probe_scope">选一条已配置的 Streamable HTTP 服务。只测初始化和工具列表，不执行工具、不刷新授权、不跟随跳转、不修改配置。报告不记录主机名、路径或凭据。</string>
+    <string name="mcp_probe_scope">选一条已配置的 Streamable HTTP 服务。只测初始化和工具列表，不执行工具、不刷新授权、不跟随跳转、不修改配置。报告不记录主机名、路径或凭据。脱敏结果也会写入本实例的 Android 系统日志。</string>
     <string name="mcp_probe_pick">选择 MCP 条目</string>
     <string name="mcp_probe_run">开始诊断</string>
     <string name="mcp_probe_cancel">取消诊断</string>
