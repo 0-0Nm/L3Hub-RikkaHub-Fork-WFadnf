@@ -44,18 +44,19 @@ internal object FloatingCounterGeometry {
         val size = if (bubbleSize.isFinite()) bubbleSize.coerceAtLeast(0f) else 0f
         val x = clampOffset(horizontal)
         val y = clampOffset(vertical)
-        // The number is opposite the status dots: false = left midpoint, true = right midpoint.
-        val existingX = if (mirror) size / 2f else -size / 2f
+        // The physical right dock is canonical: its badge starts at the left midpoint.
+        // The physical left dock reflects X, preserving the stored offset's dock-relative meaning.
+        val existingX = -size / 2f
         val left = -REFERENCE_WIDTH_BUBBLES * size / 2f
         val right = REFERENCE_WIDTH_BUBBLES * size / 2f
         val verticalEdge = REFERENCE_HEIGHT_BUBBLES * size / 2f
 
-        val movedX = if (x < 0f) {
+        val canonicalX = if (x < 0f) {
             existingX + x * (existingX - left)
         } else {
             existingX + x * (right - existingX)
         }
-        return Center(x = movedX, y = y * verticalEdge)
+        return Center(x = if (mirror) -canonicalX else canonicalX, y = y * verticalEdge)
     }
 
     /**

@@ -25,11 +25,11 @@ class FloatingCounterGeometryTest {
     }
 
     @Test
-    fun `horizontal endpoints reach the centred three-diameter guide edges`() {
-        for (mirror in listOf(false, true)) {
-            assertCenter(-78f, 0f, horizontal = -1f, vertical = 0f, mirror = mirror)
-            assertCenter(78f, 0f, horizontal = 1f, vertical = 0f, mirror = mirror)
-        }
+    fun `horizontal endpoints reach opposite physical edges when mirrored`() {
+        assertCenter(-78f, 0f, horizontal = -1f, vertical = 0f, mirror = false)
+        assertCenter(78f, 0f, horizontal = 1f, vertical = 0f, mirror = false)
+        assertCenter(78f, 0f, horizontal = -1f, vertical = 0f, mirror = true)
+        assertCenter(-78f, 0f, horizontal = 1f, vertical = 0f, mirror = true)
     }
 
     @Test
@@ -37,9 +37,37 @@ class FloatingCounterGeometryTest {
         // Left-side centre -26: left is 52 away, right is 104 away.
         assertCenter(-52f, 0f, horizontal = -0.5f, vertical = 0f, mirror = false)
         assertCenter(26f, 0f, horizontal = 0.5f, vertical = 0f, mirror = false)
-        // Mirroring swaps those distances rather than moving the zero point.
-        assertCenter(-26f, 0f, horizontal = -0.5f, vertical = 0f, mirror = true)
-        assertCenter(52f, 0f, horizontal = 0.5f, vertical = 0f, mirror = true)
+        // The physical left dock reflects both the distances and the travel direction.
+        assertCenter(52f, 0f, horizontal = -0.5f, vertical = 0f, mirror = true)
+        assertCenter(-26f, 0f, horizontal = 0.5f, vertical = 0f, mirror = true)
+    }
+
+    @Test
+    fun `signed offsets reflect centres and inline displacement on the left dock`() {
+        val offsets = listOf(-1f, -.75f, -.5f, -.25f, 0f, .25f, .5f, .75f, 1f)
+        for (horizontal in offsets) {
+            for (vertical in listOf(-1f, -.35f, 0f, .6f, 1f)) {
+                val canonical = FloatingCounterGeometry.center(horizontal, vertical, false, size)
+                val mirrored = FloatingCounterGeometry.center(horizontal, vertical, true, size)
+                assertEquals("centre x at $horizontal/$vertical", -canonical.x, mirrored.x, epsilon)
+                assertEquals("centre y at $horizontal/$vertical", canonical.y, mirrored.y, epsilon)
+
+                val canonicalDisplacement = FloatingCounterGeometry.displacement(horizontal, vertical, false, size)
+                val mirroredDisplacement = FloatingCounterGeometry.displacement(horizontal, vertical, true, size)
+                assertEquals(
+                    "displacement x at $horizontal/$vertical",
+                    -canonicalDisplacement.x,
+                    mirroredDisplacement.x,
+                    epsilon,
+                )
+                assertEquals(
+                    "displacement y at $horizontal/$vertical",
+                    canonicalDisplacement.y,
+                    mirroredDisplacement.y,
+                    epsilon,
+                )
+            }
+        }
     }
 
     @Test
@@ -104,6 +132,49 @@ class FloatingCounterGeometryTest {
         assertEquals(FloatingCounterGeometry.Bounds(6.5f, -3.25f, 19.5f, 3.25f), mirrored)
         val endpoint = FloatingCounterGeometry.badgeBounds(1f, 0f, mirror = false, bubbleSize = size, visualScale = 1f)
         assertEquals(FloatingCounterGeometry.Bounds(65f, -6.5f, 91f, 6.5f), endpoint)
+    }
+
+    @Test
+    fun `detached bounds and clip decisions mirror from 50 through 200 percent`() {
+        val canonicalHost = FloatingCounterGeometry.hostBounds(mirror = false, bubbleSize = size)
+        assertEquals(
+            FloatingCounterGeometry.Bounds(
+                -canonicalHost.right,
+                canonicalHost.top,
+                -canonicalHost.left,
+                canonicalHost.bottom,
+            ),
+            FloatingCounterGeometry.hostBounds(mirror = true, bubbleSize = size),
+        )
+        for (counterScale in listOf(.5f, .75f, 1f, 1.25f, 1.5f, 2f)) {
+            for (horizontal in listOf(-1f, -.5f, 0f, .5f, 1f)) {
+                val canonical = FloatingCounterGeometry.badgeBounds(
+                    horizontal = horizontal,
+                    vertical = .3f,
+                    mirror = false,
+                    bubbleSize = size,
+                    visualScale = .8f,
+                    counterScale = counterScale,
+                )
+                val mirrored = FloatingCounterGeometry.badgeBounds(
+                    horizontal = horizontal,
+                    vertical = .3f,
+                    mirror = true,
+                    bubbleSize = size,
+                    visualScale = .8f,
+                    counterScale = counterScale,
+                )
+                assertEquals("left at $horizontal/$counterScale", -canonical.right, mirrored.left, epsilon)
+                assertEquals("top at $horizontal/$counterScale", canonical.top, mirrored.top, epsilon)
+                assertEquals("right at $horizontal/$counterScale", -canonical.left, mirrored.right, epsilon)
+                assertEquals("bottom at $horizontal/$counterScale", canonical.bottom, mirrored.bottom, epsilon)
+                assertEquals(
+                    "clip at $horizontal/$counterScale",
+                    FloatingCounterGeometry.needsDetachedWindow(horizontal, .3f, false, size, .8f, counterScale),
+                    FloatingCounterGeometry.needsDetachedWindow(horizontal, .3f, true, size, .8f, counterScale),
+                )
+            }
+        }
     }
 
     @Test
