@@ -151,22 +151,19 @@ internal class FloatingCounterOverlay(
         val ballCenterX = location[0] + (leading + FloatingCounterGeometry.BUBBLE_SIZE_DP / 2f) * density
         val ballCenterY = location[1] +
             (FloatingCounterGeometry.HOST_VERTICAL_PADDING_DP + FloatingCounterGeometry.BUBBLE_SIZE_DP / 2f) * density
-        val displacement = FloatingCounterGeometry.displacement(
+        val bounds = FloatingCounterGeometry.badgeBounds(
             horizontal = m.offsetX,
             vertical = m.offsetY,
             mirror = m.mirror,
             bubbleSize = FloatingCounterGeometry.BUBBLE_SIZE_DP,
+            visualScale = m.scale,
         )
-        val centerX = ballCenterX + displacement.x * m.scale * density
-        val centerY = ballCenterY + displacement.y * m.scale * density
-        val width = (FloatingCounterGeometry.BUBBLE_SIZE_DP / 2f * m.scale * density)
-            .roundToInt().coerceAtLeast(1)
-        val height = (FloatingCounterGeometry.BUBBLE_SIZE_DP / 4f * m.scale * density)
-            .roundToInt().coerceAtLeast(1)
+        val width = ((bounds.right - bounds.left) * density).roundToInt().coerceAtLeast(1)
+        val height = ((bounds.bottom - bounds.top) * density).roundToInt().coerceAtLeast(1)
 
         if (!window.place(
-                x = (centerX - width / 2f).roundToInt(),
-                y = (centerY - height / 2f).roundToInt(),
+                x = (ballCenterX + bounds.left * density).roundToInt(),
+                y = (ballCenterY + bounds.top * density).roundToInt(),
                 width = width,
                 height = height,
             ) || !window.show()

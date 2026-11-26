@@ -65,11 +65,12 @@ internal object FloatingCounterGeometry {
         visualScale: Float,
     ): Bounds {
         val scale = if (visualScale.isFinite()) visualScale.coerceAtLeast(0f) else 0f
-        val displacement = displacement(horizontal, vertical, mirror, bubbleSize)
+        // Compose scales the entire layer about the ball centre, including the legacy side offset.
+        val target = center(horizontal, vertical, mirror, bubbleSize)
         val halfWidth = bubbleSize * scale / 4f
         val halfHeight = bubbleSize * scale / 8f
-        val centerX = displacement.x * scale
-        val centerY = displacement.y * scale
+        val centerX = target.x * scale
+        val centerY = target.y * scale
         return Bounds(centerX - halfWidth, centerY - halfHeight, centerX + halfWidth, centerY + halfHeight)
     }
 

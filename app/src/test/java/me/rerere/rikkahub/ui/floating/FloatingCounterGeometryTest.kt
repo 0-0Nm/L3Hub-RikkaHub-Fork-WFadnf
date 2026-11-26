@@ -94,11 +94,16 @@ class FloatingCounterGeometryTest {
     }
 
     @Test
-    fun `badge bounds scale around the ball centre without moving the legacy centre`() {
+    fun `badge bounds use the same ball-centred transform as the inline layer`() {
         val normal = FloatingCounterGeometry.badgeBounds(0f, 0f, mirror = false, bubbleSize = size, visualScale = 1f)
         assertEquals(FloatingCounterGeometry.Bounds(-39f, -6.5f, -13f, 6.5f), normal)
         val scaled = FloatingCounterGeometry.badgeBounds(0f, 0f, mirror = false, bubbleSize = size, visualScale = 0.5f)
-        assertEquals(FloatingCounterGeometry.Bounds(-32.5f, -3.25f, -19.5f, 3.25f), scaled)
+        // At 50%, the legacy left midpoint is -13dp and the badge half-width is 6.5dp.
+        assertEquals(FloatingCounterGeometry.Bounds(-19.5f, -3.25f, -6.5f, 3.25f), scaled)
+        val mirrored = FloatingCounterGeometry.badgeBounds(0f, 0f, mirror = true, bubbleSize = size, visualScale = 0.5f)
+        assertEquals(FloatingCounterGeometry.Bounds(6.5f, -3.25f, 19.5f, 3.25f), mirrored)
+        val endpoint = FloatingCounterGeometry.badgeBounds(1f, 0f, mirror = false, bubbleSize = size, visualScale = 1f)
+        assertEquals(FloatingCounterGeometry.Bounds(65f, -6.5f, 91f, 6.5f), endpoint)
     }
 
     @Test
