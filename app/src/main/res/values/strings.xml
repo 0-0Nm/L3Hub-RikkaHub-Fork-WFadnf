@@ -2703,6 +2703,11 @@
     <string name="floating_counter_serif">Default serif</string>
     <string name="floating_counter_imported_font">Imported font %1$d</string>
     <string name="floating_counter_import_hint">Import fonts in Appearance / Fonts to add them to this list.</string>
+    <string name="floating_counter_palette_title">Counter colors (HEX)</string>
+    <string name="floating_counter_palette_format">Enter 6 hexadecimal digits (0–9, A–F), optionally prefixed with #. Valid colors apply immediately; invalid drafts keep the last valid color.</string>
+    <string name="floating_counter_palette_stop">Count %1$d · HEX</string>
+    <string name="floating_counter_palette_invalid">Invalid HEX. Use exactly 6 digits (0–9, A–F), with an optional #.</string>
+    <string name="floating_counter_palette_reset">Reset all five colors</string>
     <string name="floating_counter_sample">Preview count (sample only)</string>
     <string name="mcp_diagnostics_tab">MCP diagnostics</string>
     <string name="mcp_diagnostics_copy">Copy redacted diagnostics</string>

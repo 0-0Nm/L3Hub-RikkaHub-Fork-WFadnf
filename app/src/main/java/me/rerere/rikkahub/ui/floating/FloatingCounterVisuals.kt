@@ -1,20 +1,18 @@
 package me.rerere.rikkahub.ui.floating
 
+import me.rerere.rikkahub.data.model.FloatingCounterPalette
 import kotlin.math.roundToInt
 
-/** Muted ivory / aged gold / sage / smoky purple / brick red. Equal 25-count intervals; independent of task-state colors. */
+/** Interpolate opaque RGB in equal 25-count intervals, independently of task-state colors. */
 internal object FloatingCounterVisuals {
-    private val anchors = intArrayOf(
-        0xFFD0C7B5.toInt(), 0xFFAD9566.toInt(), 0xFF75846C.toInt(),
-        0xFF88758A.toInt(), 0xFFA4655D.toInt(),
-    )
-    fun colorArgb(count: Int): Int {
+    fun colorArgb(count: Int, palette: FloatingCounterPalette = FloatingCounterPalette.Default): Int {
+        fun anchor(stop: Int) = (255 shl 24) or palette.hexAt(stop).substring(1).toInt(16)
         val value = count.coerceIn(0, 100)
-        if (value == 100) return anchors.last()
-        val index = value / 25
+        val lower = value / 25 * 25
+        val a = anchor(lower)
+        if (value == lower) return a
         val fraction = (value % 25) / 25f
-        val a = anchors[index]
-        val b = anchors[index + 1]
+        val b = anchor(lower + 25)
         fun channel(shift: Int): Int {
             val start = (a ushr shift) and 255
             val end = (b ushr shift) and 255

@@ -16,16 +16,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -33,7 +36,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -44,12 +51,14 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.datastore.FloatingBubbleAnimation
 import me.rerere.rikkahub.data.model.FloatingBubbleIcon
+import me.rerere.rikkahub.data.model.FloatingCounterPalette
 import me.rerere.rikkahub.ui.components.ui.EmojiPicker
 import me.rerere.rikkahub.ui.components.ui.PercentNumberSlider
 import me.rerere.rikkahub.ui.floating.BubbleIconContent
 import me.rerere.rikkahub.ui.floating.BubblePresets
 import me.rerere.rikkahub.ui.floating.FloatingBubblePreview
 import me.rerere.rikkahub.ui.floating.FloatingCounterGeometry
+import me.rerere.rikkahub.ui.floating.FloatingCounterVisuals
 import me.rerere.rikkahub.ui.floating.FloatingPanelSizing
 import me.rerere.rikkahub.ui.floating.bubblePresetIcon
 import me.rerere.rikkahub.ui.terminal.OutlinedButton
@@ -77,12 +86,17 @@ internal fun FloatingBubbleIconPicker(
     importedFontPaths: List<String> = emptyList(),
     importedFontNames: List<String> = emptyList(),
     onCounterFontSelected: (String) -> Unit = {},
+    counterPalette: FloatingCounterPalette = FloatingCounterPalette.Default,
+    onCounterPaletteChanged: ((FloatingCounterPalette) -> FloatingCounterPalette) -> Unit,
 ) {
     val filesManager = koinInject<FilesManager>()
     val scope = rememberCoroutineScope()
     var showEmojiPicker by remember { mutableStateOf(false) }
     var fontMenuExpanded by remember { mutableStateOf(false) }
     var previewCount by remember { mutableStateOf(12) }
+    // Keep raw text (including partial input) only for the lifetime of this sheet.
+    // Swatches and preview always follow the same last valid setting.
+    val counterHexDrafts = remember { mutableStateMapOf<Int, String>() }
     var pickingImage by remember { mutableStateOf(false) }
     var pickFailed by remember { mutableStateOf(false) }
     // 预览草稿：拖滑块实时变，松手/选中动画时提交
@@ -220,6 +234,7 @@ internal fun FloatingBubbleIconPicker(
                                 counterOffsetX = draftCounterOffsetX,
                                 counterOffsetY = draftCounterOffsetY,
                                 previewCount = previewCount,
+                                counterPalette = counterPalette,
                             )
                         }
                         Text(
@@ -268,6 +283,21 @@ internal fun FloatingBubbleIconPicker(
                                 )
                             }
                         }
+                        FloatingCounterPaletteEditor(
+                            palette = counterPalette,
+                            drafts = counterHexDrafts,
+                            onHexChanged = { stop, input ->
+                                counterHexDrafts[stop] = input
+                                FloatingCounterPalette.normalizeHex(input)?.let { hex ->
+                                    onCounterPaletteChanged { it.withHex(stop, hex) }
+                                }
+                            },
+                            onReset = {
+                                // This also clears invalid drafts when the colors already equal Default.
+                                counterHexDrafts.clear()
+                                onCounterPaletteChanged { FloatingCounterPalette.Default }
+                            },
+                        )
                         Text(
                             text = stringResource(R.string.floating_bubble_size),
                             style = MaterialTheme.typography.labelLarge,
@@ -338,6 +368,62 @@ internal fun FloatingBubbleIconPicker(
                         }
                     }
             }
+        }
+    }
+}
+
+/** Raw text stays local; invalid/intermediate HEX never reaches palette persistence. */
+@Composable
+private fun FloatingCounterPaletteEditor(
+    palette: FloatingCounterPalette,
+    drafts: Map<Int, String>,
+    onHexChanged: (stop: Int, input: String) -> Unit,
+    onReset: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.floating_counter_palette_title),
+            style = MaterialTheme.typography.labelLarge,
+        )
+        Text(
+            text = stringResource(R.string.floating_counter_palette_format),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FloatingCounterPalette.stops.forEach { stop ->
+            val input = drafts[stop] ?: palette.hexAt(stop)
+            val invalid = FloatingCounterPalette.normalizeHex(input) == null
+            OutlinedTextField(
+                value = input,
+                onValueChange = { onHexChanged(stop, it) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.floating_counter_palette_stop, stop)) },
+                singleLine = true,
+                isError = invalid,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Characters,
+                    autoCorrectEnabled = false,
+                    keyboardType = KeyboardType.Ascii,
+                ),
+                supportingText = if (invalid) {
+                    { Text(stringResource(R.string.floating_counter_palette_invalid)) }
+                } else null,
+                // Decorative: the labeled text field already exposes the editable color.
+                // On invalid input this intentionally shows the last valid effective color.
+                trailingIcon = {
+                    Box(
+                        Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(Color(FloatingCounterVisuals.colorArgb(stop, palette)))
+                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
+                    )
+                },
+            )
+        }
+        OutlinedButton(onClick = onReset) {
+            Text(stringResource(R.string.floating_counter_palette_reset))
         }
     }
 }

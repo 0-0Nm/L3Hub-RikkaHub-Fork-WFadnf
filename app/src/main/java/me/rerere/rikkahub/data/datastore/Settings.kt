@@ -15,6 +15,7 @@ import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TRANSLATION_PROMPT
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.FloatingBubbleIcon
+import me.rerere.rikkahub.data.model.FloatingCounterPalette
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
@@ -340,6 +341,7 @@ data class DisplaySetting(
     val floatingBubbleScale: Float = 1.0f,
     // Imported font relative path for the counter only; blank uses built-in serif.
     val floatingCounterFontPath: String = "",
+    val floatingCounterPalette: FloatingCounterPalette = FloatingCounterPalette.Default,
     // Signed numeric-badge position in the centred 3.0D x 2.4D guide; zero keeps the old centre.
     val floatingCounterOffsetX: Float = 0f,
     val floatingCounterOffsetY: Float = 0f,

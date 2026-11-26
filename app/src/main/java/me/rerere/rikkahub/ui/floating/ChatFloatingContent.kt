@@ -113,6 +113,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.local.ASK_USER_TOOL_NAME
 import me.rerere.rikkahub.data.datastore.FloatingBubbleAnimation
 import me.rerere.rikkahub.data.model.FloatingBubbleIcon
+import me.rerere.rikkahub.data.model.FloatingCounterPalette
 import me.rerere.rikkahub.data.ai.tools.local.PHONE_USE_TOOL_NAME
 import me.rerere.rikkahub.data.ai.tools.local.phoneUseActionOf
 import me.rerere.rikkahub.data.model.GenerationPhase
@@ -270,6 +271,7 @@ fun ChatFloatingBubble(
     counterOffsetY: Float = 0f,
     /** The live-bubble window is clipping the number, so a non-touchable companion draws it. */
     counterInOverlay: Boolean = false,
+    counterPalette: FloatingCounterPalette = FloatingCounterPalette.Default,
 ) {
     val colors = MaterialTheme.colorScheme
     // 收起到面板时窗口隐藏，帧还在跑，停下动画
@@ -310,6 +312,7 @@ fun ChatFloatingBubble(
                         counterFontPath = counterFontPath,
                         counterOffsetX = counterOffsetX,
                         counterOffsetY = counterOffsetY,
+                        counterPalette = counterPalette,
                         drawCounter = !counterInOverlay,
                     )
                 }
@@ -486,6 +489,7 @@ private fun BoxScope.TaskBadges(
     counterFontPath: String = "",
     counterOffsetX: Float = 0f,
     counterOffsetY: Float = 0f,
+    counterPalette: FloatingCounterPalette,
     drawCounter: Boolean = true,
 ) {
     val align = if (mirror) AbsoluteAlignment.TopLeft else AbsoluteAlignment.TopRight
@@ -508,6 +512,7 @@ private fun BoxScope.TaskBadges(
         )
         ArcTaskCount(
             count = child.count,
+            palette = counterPalette,
             fontPath = counterFontPath,
             modifier = Modifier
                 // Keep the legacy alignment/base offset so 0/0 is pixel-identical at every density.
@@ -562,7 +567,13 @@ private fun ChildStatusBadge(green: Boolean, scale: Float) {
 
 /** Counter font affects only this number; malformed or removed fonts fall back to serif. */
 @Composable
-private fun ArcTaskCount(count: Int, fontPath: String, modifier: Modifier = Modifier) {
+private fun ArcTaskCount(
+    count: Int,
+    fontPath: String,
+    palette: FloatingCounterPalette,
+    modifier: Modifier = Modifier,
+) {
+    val fillArgb = remember(count, palette) { FloatingCounterVisuals.colorArgb(count, palette) }
     val context = LocalContext.current
     val typeface = remember(fontPath, context.filesDir) {
         loadFloatingCounterTypeface(context, fontPath)
@@ -577,6 +588,7 @@ private fun ArcTaskCount(count: Int, fontPath: String, modifier: Modifier = Modi
                 width = size.width,
                 height = size.height,
                 count = count,
+                fillArgb = fillArgb,
                 typeface = typeface,
                 paint = paint,
                 bounds = glyphBounds,
@@ -1134,6 +1146,7 @@ fun FloatingBubblePreview(
     counterOffsetX: Float = 0f,
     counterOffsetY: Float = 0f,
     previewCount: Int = 12,
+    counterPalette: FloatingCounterPalette = FloatingCounterPalette.Default,
 ) {
     Box(modifier = Modifier.absolutePadding(
         left = if (mirrorBadges) 10.dp else 25.dp,
@@ -1155,6 +1168,7 @@ fun FloatingBubblePreview(
                     counterFontPath = counterFontPath,
                     counterOffsetX = counterOffsetX,
                     counterOffsetY = counterOffsetY,
+                    counterPalette = counterPalette,
                 )
             },
         ) { logoShape ->

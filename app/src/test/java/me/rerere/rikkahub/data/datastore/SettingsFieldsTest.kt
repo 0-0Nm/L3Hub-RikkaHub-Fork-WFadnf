@@ -10,6 +10,7 @@ import me.rerere.asr.ASRProviderSetting
 import me.rerere.mediagen.provider.MediaGenerationProviderSetting
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.FloatingCounterPalette
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
@@ -86,6 +87,27 @@ class SettingsFieldsTest {
     }
 
     @Test
+    fun `E341 display settings retain offsets when editing and resetting the numeral palette`() {
+        val preferences = mutablePreferencesOf(
+            SettingsStore.DISPLAY_SETTING to """{"floatingCounterOffsetX":-0.75,"floatingCounterOffsetY":1.0}""",
+        )
+        val legacy = preferences.toSettings()
+        val original = legacy.displaySetting
+        assertEquals(-0.75f, original.floatingCounterOffsetX, 0f)
+        assertEquals(1f, original.floatingCounterOffsetY, 0f)
+        assertEquals(FloatingCounterPalette.Default, original.floatingCounterPalette)
+
+        val palette = original.floatingCounterPalette.withHex(50, "a0B1c2").withHex(50, "#12")
+        val edited = legacy.copy(displaySetting = original.copy(floatingCounterPalette = palette))
+        preferences.putSettings(edited, persisted = legacy)
+        val reloaded = preferences.toSettings()
+        assertEquals(original.copy(floatingCounterPalette = FloatingCounterPalette(at50 = "#A0B1C2")), reloaded.displaySetting)
+
+        preferences.putSettings(legacy, persisted = reloaded)
+        assertEquals(original, preferences.toSettings().displaySetting)
+    }
+
+    @Test
     fun `unknown reasoning level reads as auto`() {
         val preferences = mutablePreferencesOf(SettingsStore.FAST_MODEL_REASONING_LEVEL to "REMOVED_LEVEL")
 
@@ -133,6 +155,7 @@ private val SAMPLE = Settings(
     displaySetting = DisplaySetting(
         userNickname = "me",
         displayMode = DisplayMode.LANDSCAPE,
+        floatingCounterPalette = FloatingCounterPalette("#010203", "#112233", "#445566", "#778899", "#AABBCC"),
         floatingCounterOffsetX = -0.75f,
         floatingCounterOffsetY = 1f,
     ),

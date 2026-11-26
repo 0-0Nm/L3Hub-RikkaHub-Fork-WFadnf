@@ -42,6 +42,7 @@ import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DisplaySetting
+import me.rerere.rikkahub.data.model.FloatingCounterPalette
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.CardGroupValue
@@ -72,9 +73,22 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
     var showFloatingIconPicker by remember { mutableStateOf(false) }
     var selectedUpdatePauseDays by remember { mutableStateOf(UPDATE_PAUSE_DAY_OPTIONS.first()) }
 
+    fun updateCounterPalette(change: (FloatingCounterPalette) -> FloatingCounterPalette) {
+        displaySetting = displaySetting.copy(floatingCounterPalette = change(displaySetting.floatingCounterPalette))
+        vm.updateSettings { latest ->
+            val display = latest.displaySetting
+            latest.copy(displaySetting = display.copy(floatingCounterPalette = change(display.floatingCounterPalette)))
+        }
+    }
+
     fun updateDisplaySetting(setting: DisplaySetting) {
         displaySetting = setting
-        vm.updateSettings { it.copy(displaySetting = setting) }
+        vm.updateSettings { latest ->
+            // These controls don't edit colors. Preserve newer color edits in the store.
+            latest.copy(
+                displaySetting = setting.copy(floatingCounterPalette = latest.displaySetting.floatingCounterPalette),
+            )
+        }
     }
 
     // 滑块拖动时只改这三份草稿，松手才写设置：每帧落盘要把整份 DisplaySetting 重新编码一遍
@@ -351,6 +365,8 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
             initialCounterOffsetX = displaySetting.floatingCounterOffsetX,
             initialCounterOffsetY = displaySetting.floatingCounterOffsetY,
             counterFontPath = displaySetting.floatingCounterFontPath,
+            counterPalette = displaySetting.floatingCounterPalette,
+            onCounterPaletteChanged = { updateCounterPalette(it) },
             importedFontPaths = displaySetting.chatCustomFontPaths.ifEmpty {
                 listOf(displaySetting.chatCustomFontPath).filter { it.isNotBlank() }
             },

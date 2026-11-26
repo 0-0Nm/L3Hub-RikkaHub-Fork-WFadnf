@@ -14,6 +14,7 @@ import android.view.View
 import android.view.ViewTreeObserver
 import android.view.WindowManager
 import com.petterp.floatingx.core.FxControl
+import me.rerere.rikkahub.data.model.FloatingCounterPalette
 import kotlin.math.roundToInt
 
 private const val TAG = "FloatingCounterOverlay"
@@ -34,6 +35,7 @@ internal class FloatingCounterOverlay(
         val offsetY: Float = 0f,
         val mirror: Boolean = false,
         val fontPath: String = "",
+        val palette: FloatingCounterPalette = FloatingCounterPalette.Default,
     )
 
     private val view = CounterOverlayView(context)
@@ -56,7 +58,7 @@ internal class FloatingCounterOverlay(
         if (host === content) return
         unbindHost()
         host = content
-        view.setCounter(model.count, model.fontPath)
+        view.setCounter(model.count, model.fontPath, model.palette)
         val listener = object : ViewTreeObserver.OnPreDrawListener {
             override fun onPreDraw(): Boolean {
                 refreshFromHost()
@@ -87,17 +89,25 @@ internal class FloatingCounterOverlay(
         sync()
     }
 
-    fun update(count: Int?, scale: Float, offsetX: Float, offsetY: Float, fontPath: String) {
+    fun update(
+        count: Int?,
+        scale: Float,
+        offsetX: Float,
+        offsetY: Float,
+        fontPath: String,
+        palette: FloatingCounterPalette,
+    ) {
         val next = model.copy(
             count = count,
             scale = FloatingPanelSizing.clampBubbleScale(scale),
             offsetX = FloatingCounterGeometry.clampOffset(offsetX),
             offsetY = FloatingCounterGeometry.clampOffset(offsetY),
             fontPath = fontPath,
+            palette = palette,
         )
         if (next != model) {
             model = next
-            view.setCounter(next.count, next.fontPath)
+            view.setCounter(next.count, next.fontPath, next.palette)
             sync()
         }
     }
@@ -212,6 +222,7 @@ private class CounterOverlayView(context: Context) : View(context) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { isSubpixelText = true }
     private val bounds = Rect()
     private var count = 0
+    private var fillArgb = FloatingCounterVisuals.colorArgb(0)
     private var fontPath = ""
     private var typeface: Typeface = Typeface.SERIF
 
@@ -221,9 +232,11 @@ private class CounterOverlayView(context: Context) : View(context) {
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
     }
 
-    fun setCounter(count: Int?, path: String) {
+    fun setCounter(count: Int?, path: String, palette: FloatingCounterPalette) {
         val safeCount = (count ?: 0).coerceAtLeast(0)
-        if (safeCount == this.count && path == fontPath) return
+        val argb = FloatingCounterVisuals.colorArgb(safeCount, palette)
+        if (safeCount == this.count && path == fontPath && argb == fillArgb) return
+        fillArgb = argb
         this.count = safeCount
         if (path != fontPath) {
             fontPath = path
@@ -240,6 +253,7 @@ private class CounterOverlayView(context: Context) : View(context) {
             width = width.toFloat(),
             height = height.toFloat(),
             count = count,
+            fillArgb = fillArgb,
             typeface = typeface,
             paint = paint,
             bounds = bounds,
@@ -338,6 +352,7 @@ internal fun drawFloatingCounter(
     width: Float,
     height: Float,
     count: Int,
+    fillArgb: Int,
     typeface: Typeface,
     paint: Paint,
     bounds: Rect,
@@ -364,6 +379,6 @@ internal fun drawFloatingCounter(
     paint.color = android.graphics.Color.argb(150, 24, 22, 25)
     canvas.drawText(label, x, baseline, paint)
     paint.style = Paint.Style.FILL
-    paint.color = FloatingCounterVisuals.colorArgb(count)
+    paint.color = fillArgb
     canvas.drawText(label, x, baseline, paint)
 }
