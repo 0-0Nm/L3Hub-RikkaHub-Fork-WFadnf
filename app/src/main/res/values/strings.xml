@@ -2216,6 +2216,7 @@
   <string name="floating_bubble_preview_section">Preview</string>
   <string name="floating_counter_offset_x">Number horizontal offset</string>
   <string name="floating_counter_offset_y">Number vertical offset</string>
+  <string name="floating_counter_size">Number size</string>
   <string name="floating_bubble_size">Bubble size</string>
   <string name="floating_bubble_animation">Shell animation</string>
   <string name="floating_bubble_animation_flower">Flower</string>

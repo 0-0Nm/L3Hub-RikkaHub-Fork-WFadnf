@@ -116,6 +116,32 @@ class FloatingCounterGeometryTest {
         assertEquals(0f, FloatingCounterGeometry.clampOffset(Float.NEGATIVE_INFINITY), epsilon)
     }
 
+    @Test
+    fun `glyph scaling preserves centre and scales both dimensions`() {
+        for (mirror in listOf(false, true)) {
+            val old = FloatingCounterGeometry.badgeBounds(.24f, -.34f, mirror, size, .64f)
+            assertEquals(old, FloatingCounterGeometry.badgeBounds(.24f, -.34f, mirror, size, .64f, 1f))
+            for (factor in listOf(.5f, 2f)) {
+                val scaled = FloatingCounterGeometry.badgeBounds(.24f, -.34f, mirror, size, .64f, factor)
+                assertEquals(old.left + old.right, scaled.left + scaled.right, epsilon)
+                assertEquals(old.top + old.bottom, scaled.top + scaled.bottom, epsilon)
+                assertEquals((old.right - old.left) * factor, scaled.right - scaled.left, epsilon)
+                assertEquals((old.bottom - old.top) * factor, scaled.bottom - scaled.top, epsilon)
+            }
+        }
+    }
+
+    @Test
+    fun `larger glyph hands off when it no longer fits the original host`() {
+        for (mirror in listOf(false, true)) {
+            assertFalse(FloatingCounterGeometry.needsDetachedWindow(0f, 0f, mirror, size, 1f, 1f))
+            assertTrue(FloatingCounterGeometry.needsDetachedWindow(0f, 0f, mirror, size, 1f, 2f))
+        }
+        assertEquals(.5f, FloatingCounterGeometry.clampCounterScale(-1f), epsilon)
+        assertEquals(2f, FloatingCounterGeometry.clampCounterScale(3f), epsilon)
+        assertEquals(1f, FloatingCounterGeometry.clampCounterScale(Float.NaN), epsilon)
+    }
+
     private fun assertCenter(
         expectedX: Float,
         expectedY: Float,

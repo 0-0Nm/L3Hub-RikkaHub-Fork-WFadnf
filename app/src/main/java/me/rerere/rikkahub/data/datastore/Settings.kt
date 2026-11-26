@@ -342,6 +342,8 @@ data class DisplaySetting(
     // Imported font relative path for the counter only; blank uses built-in serif.
     val floatingCounterFontPath: String = "",
     val floatingCounterPalette: FloatingCounterPalette = FloatingCounterPalette.Default,
+    // Numeric counter only (0.5–2.0); 1.0 preserves the existing size independently of the bubble.
+    val floatingCounterScale: Float = 1f,
     // Signed numeric-badge position in the centred 3.0D x 2.4D guide; zero keeps the old centre.
     val floatingCounterOffsetX: Float = 0f,
     val floatingCounterOffsetY: Float = 0f,

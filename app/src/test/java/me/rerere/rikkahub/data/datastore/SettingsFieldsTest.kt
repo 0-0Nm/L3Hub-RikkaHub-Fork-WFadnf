@@ -84,6 +84,7 @@ class SettingsFieldsTest {
         assertEquals(false, settings.sshServerAllowLan)
         assertEquals(0f, settings.displaySetting.floatingCounterOffsetX, 0f)
         assertEquals(0f, settings.displaySetting.floatingCounterOffsetY, 0f)
+        assertEquals(1f, settings.displaySetting.floatingCounterScale, 0f)
     }
 
     @Test
@@ -96,6 +97,7 @@ class SettingsFieldsTest {
         assertEquals(-0.75f, original.floatingCounterOffsetX, 0f)
         assertEquals(1f, original.floatingCounterOffsetY, 0f)
         assertEquals(FloatingCounterPalette.Default, original.floatingCounterPalette)
+        assertEquals(1f, original.floatingCounterScale, 0f)
 
         val palette = original.floatingCounterPalette.withHex(50, "a0B1c2").withHex(50, "#12")
         val edited = legacy.copy(displaySetting = original.copy(floatingCounterPalette = palette))
@@ -105,6 +107,65 @@ class SettingsFieldsTest {
 
         preferences.putSettings(legacy, persisted = reloaded)
         assertEquals(original, preferences.toSettings().displaySetting)
+    }
+
+    @Test
+    fun `E342 display settings default counter scale without losing palette or offsets`() {
+        val preferences = mutablePreferencesOf(
+            SettingsStore.DISPLAY_SETTING to """{"floatingCounterPalette":{"at0":"#010203","at25":"#112233","at50":"#445566","at75":"#778899","at100":"#AABBCC"},"floatingCounterOffsetX":-0.75,"floatingCounterOffsetY":1.0,"floatingCounterFontPath":"fonts/counter.ttf","floatingBubbleScale":1.5,"floatingDetailTextScale":0.75}""",
+        )
+        val legacy = preferences.toSettings()
+        val original = legacy.displaySetting
+        assertEquals(1f, original.floatingCounterScale, 0f)
+        assertEquals(FloatingCounterPalette("#010203", "#112233", "#445566", "#778899", "#AABBCC"), original.floatingCounterPalette)
+        assertEquals(-0.75f, original.floatingCounterOffsetX, 0f)
+        assertEquals(1f, original.floatingCounterOffsetY, 0f)
+        assertEquals("fonts/counter.ttf", original.floatingCounterFontPath)
+        assertEquals(1.5f, original.floatingBubbleScale, 0f)
+        assertEquals(0.75f, original.floatingDetailTextScale, 0f)
+
+        val resized = legacy.copy(displaySetting = original.copy(floatingCounterScale = 2f))
+        preferences.putSettings(resized, persisted = legacy)
+        val reloaded = preferences.toSettings()
+        assertEquals(original.copy(floatingCounterScale = 2f), reloaded.displaySetting)
+
+        preferences.putSettings(legacy, persisted = reloaded)
+        assertEquals(original, preferences.toSettings().displaySetting)
+    }
+
+    @Test
+    fun `counter scale round trips from 50 through 200 percent independently of bubble size`() {
+        val preferences = mutablePreferencesOf().apply { putSettings(SAMPLE) }
+        var persisted = preferences.toSettings()
+        // Includes 50%, 100%, 200%, every integer percentage, and a fractional slider value.
+        val scales = (50..200).map { it / 100f } + 0.73125f
+        for (scale in scales) {
+            val updated = persisted.copy(
+                displaySetting = persisted.displaySetting.copy(floatingCounterScale = scale),
+            )
+            preferences.putSettings(updated, persisted = persisted)
+            val reloaded = preferences.toSettings()
+            assertEquals("counter scale $scale", scale, reloaded.displaySetting.floatingCounterScale, 0f)
+            assertEquals(SAMPLE.displaySetting.copy(floatingCounterScale = scale), reloaded.displaySetting)
+            persisted = reloaded
+        }
+    }
+
+    @Test
+    fun `palette and position changes preserve a resized counter`() {
+        val preferences = mutablePreferencesOf().apply { putSettings(SAMPLE) }
+        val persisted = preferences.toSettings()
+        val updated = persisted.copy(
+            displaySetting = persisted.displaySetting.copy(
+                floatingCounterPalette = FloatingCounterPalette.Default,
+                floatingCounterOffsetX = 1f,
+                floatingCounterOffsetY = -1f,
+            ),
+        )
+        preferences.putSettings(updated, persisted = persisted)
+
+        assertEquals(updated.displaySetting, preferences.toSettings().displaySetting)
+        assertEquals(1.75f, preferences.toSettings().displaySetting.floatingCounterScale, 0f)
     }
 
     @Test
@@ -156,6 +217,7 @@ private val SAMPLE = Settings(
         userNickname = "me",
         displayMode = DisplayMode.LANDSCAPE,
         floatingCounterPalette = FloatingCounterPalette("#010203", "#112233", "#445566", "#778899", "#AABBCC"),
+        floatingCounterScale = 1.75f,
         floatingCounterOffsetX = -0.75f,
         floatingCounterOffsetY = 1f,
     ),

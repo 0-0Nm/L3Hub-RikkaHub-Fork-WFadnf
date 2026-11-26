@@ -269,6 +269,7 @@ fun ChatFloatingBubble(
     counterFontPath: String = "",
     counterOffsetX: Float = 0f,
     counterOffsetY: Float = 0f,
+    counterScale: Float = 1f,
     /** The live-bubble window is clipping the number, so a non-touchable companion draws it. */
     counterInOverlay: Boolean = false,
     counterPalette: FloatingCounterPalette = FloatingCounterPalette.Default,
@@ -312,6 +313,7 @@ fun ChatFloatingBubble(
                         counterFontPath = counterFontPath,
                         counterOffsetX = counterOffsetX,
                         counterOffsetY = counterOffsetY,
+                        counterScale = counterScale,
                         counterPalette = counterPalette,
                         drawCounter = !counterInOverlay,
                     )
@@ -489,6 +491,7 @@ private fun BoxScope.TaskBadges(
     counterFontPath: String = "",
     counterOffsetX: Float = 0f,
     counterOffsetY: Float = 0f,
+    counterScale: Float = 1f,
     counterPalette: FloatingCounterPalette,
     drawCounter: Boolean = true,
 ) {
@@ -510,6 +513,7 @@ private fun BoxScope.TaskBadges(
             mirror = mirror,
             bubbleSize = BUBBLE_SIZE.value,
         )
+        val glyphScale = FloatingCounterGeometry.clampCounterScale(counterScale)
         ArcTaskCount(
             count = child.count,
             palette = counterPalette,
@@ -526,7 +530,12 @@ private fun BoxScope.TaskBadges(
                     },
                     y = displacement.y.dp,
                 )
-                .size(width = BUBBLE_SIZE / 2 * scale, height = BUBBLE_SIZE / 4 * scale),
+                .size(width = BUBBLE_SIZE / 2 * scale, height = BUBBLE_SIZE / 4 * scale)
+                // Scale around the existing Canvas centre without changing its layout anchor.
+                .then(if (glyphScale == 1f) Modifier else Modifier.graphicsLayer {
+                    scaleX = glyphScale
+                    scaleY = glyphScale
+                }),
         )
     }
 }
@@ -1145,6 +1154,7 @@ fun FloatingBubblePreview(
     counterFontPath: String = "",
     counterOffsetX: Float = 0f,
     counterOffsetY: Float = 0f,
+    counterScale: Float = 1f,
     previewCount: Int = 12,
     counterPalette: FloatingCounterPalette = FloatingCounterPalette.Default,
 ) {
@@ -1168,6 +1178,7 @@ fun FloatingBubblePreview(
                     counterFontPath = counterFontPath,
                     counterOffsetX = counterOffsetX,
                     counterOffsetY = counterOffsetY,
+                    counterScale = counterScale,
                     counterPalette = counterPalette,
                 )
             },

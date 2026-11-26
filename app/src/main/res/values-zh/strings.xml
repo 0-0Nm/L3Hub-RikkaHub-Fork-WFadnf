@@ -2218,6 +2218,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="floating_bubble_preview_section">预览</string>
   <string name="floating_counter_offset_x">数字水平偏移</string>
   <string name="floating_counter_offset_y">数字垂直偏移</string>
+  <string name="floating_counter_size">数字大小</string>
   <string name="floating_bubble_size">悬浮球大小</string>
   <string name="floating_bubble_animation">外壳动画</string>
   <string name="floating_bubble_animation_flower">花形</string>

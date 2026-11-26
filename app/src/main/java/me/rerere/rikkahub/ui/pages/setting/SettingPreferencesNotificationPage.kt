@@ -73,21 +73,17 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
     var showFloatingIconPicker by remember { mutableStateOf(false) }
     var selectedUpdatePauseDays by remember { mutableStateOf(UPDATE_PAUSE_DAY_OPTIONS.first()) }
 
-    fun updateCounterPalette(change: (FloatingCounterPalette) -> FloatingCounterPalette) {
-        displaySetting = displaySetting.copy(floatingCounterPalette = change(displaySetting.floatingCounterPalette))
+    fun updateDisplaySetting(change: (DisplaySetting) -> DisplaySetting) {
+        displaySetting = change(displaySetting)
         vm.updateSettings { latest ->
-            val display = latest.displaySetting
-            latest.copy(displaySetting = display.copy(floatingCounterPalette = change(display.floatingCounterPalette)))
+            // Patch only this control's fields on the latest settings, never a captured snapshot.
+            latest.copy(displaySetting = change(latest.displaySetting))
         }
     }
 
-    fun updateDisplaySetting(setting: DisplaySetting) {
-        displaySetting = setting
-        vm.updateSettings { latest ->
-            // These controls don't edit colors. Preserve newer color edits in the store.
-            latest.copy(
-                displaySetting = setting.copy(floatingCounterPalette = latest.displaySetting.floatingCounterPalette),
-            )
+    fun updateCounterPalette(change: (FloatingCounterPalette) -> FloatingCounterPalette) {
+        updateDisplaySetting { display ->
+            display.copy(floatingCounterPalette = change(display.floatingCounterPalette))
         }
     }
 
@@ -196,11 +192,11 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
             CardGroup(title = { Text(stringResource(R.string.setting_page_preferences_notification_background_generation)) }) {
                 switchItem(
                     checked = displaySetting.enableNotificationOnMessageGeneration,
-                    onCheckedChange = {
-                        if (it && !permissionState.allPermissionsGranted) {
+                    onCheckedChange = { enabled ->
+                        if (enabled && !permissionState.allPermissionsGranted) {
                             permissionState.requestPermissions()
                         }
-                        updateDisplaySetting(displaySetting.copy(enableNotificationOnMessageGeneration = it))
+                        updateDisplaySetting { it.copy(enableNotificationOnMessageGeneration = enabled) }
                     },
                     supportingContent = { Text(stringResource(R.string.setting_display_page_notification_message_generated_desc)) },
                     headlineContent = { Text(stringResource(R.string.setting_display_page_notification_message_generated)) },
@@ -208,17 +204,17 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
                 switchItem(
                     visible = displaySetting.enableNotificationOnMessageGeneration,
                     checked = displaySetting.enableLiveUpdateNotification,
-                    onCheckedChange = {
-                        updateDisplaySetting(displaySetting.copy(enableLiveUpdateNotification = it))
+                    onCheckedChange = { enabled ->
+                        updateDisplaySetting { it.copy(enableLiveUpdateNotification = enabled) }
                     },
                     supportingContent = { Text(stringResource(R.string.setting_display_page_live_update_notification_desc)) },
                     headlineContent = { Text(stringResource(R.string.setting_display_page_live_update_notification)) },
                 )
                 switchItem(
                     checked = displaySetting.enableFloatingChatWindow,
-                    onCheckedChange = {
-                        if (it && !canDrawOverlays) requestOverlayPermission()
-                        updateDisplaySetting(displaySetting.copy(enableFloatingChatWindow = it))
+                    onCheckedChange = { enabled ->
+                        if (enabled && !canDrawOverlays) requestOverlayPermission()
+                        updateDisplaySetting { it.copy(enableFloatingChatWindow = enabled) }
                     },
                     supportingContent = {
                         Text(stringResource(R.string.setting_page_preferences_notification_floating_window_desc))
@@ -257,7 +253,8 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
                         value = draftPanelWidth,
                         onValueChange = { draftPanelWidth = FloatingPanelSizing.clampWidthRatio(it) },
                         onValueChangeFinished = {
-                            updateDisplaySetting(displaySetting.copy(floatingPanelWidthRatio = draftPanelWidth))
+                            val value = draftPanelWidth
+                            updateDisplaySetting { it.copy(floatingPanelWidthRatio = value) }
                         },
                         valueRange = FloatingPanelSizing.MIN_WIDTH_RATIO..FloatingPanelSizing.MAX_WIDTH_RATIO,
                     )
@@ -273,7 +270,8 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
                         value = draftPanelHeight,
                         onValueChange = { draftPanelHeight = FloatingPanelSizing.clampHeightRatio(it) },
                         onValueChangeFinished = {
-                            updateDisplaySetting(displaySetting.copy(floatingPanelHeightRatio = draftPanelHeight))
+                            val value = draftPanelHeight
+                            updateDisplaySetting { it.copy(floatingPanelHeightRatio = value) }
                         },
                         valueRange = FloatingPanelSizing.MIN_HEIGHT_RATIO..FloatingPanelSizing.MAX_HEIGHT_RATIO,
                     )
@@ -291,12 +289,8 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
                         value = draftPreviewHeight.roundToInt(),
                         onValueChange = { draftPreviewHeight = it.toFloat() },
                         onValueChangeFinished = {
-                            updateDisplaySetting(
-                                displaySetting.copy(
-                                    floatingPreviewMaxHeight =
-                                        FloatingPanelSizing.clampPreviewHeight(draftPreviewHeight.roundToInt()),
-                                )
-                            )
+                            val value = FloatingPanelSizing.clampPreviewHeight(draftPreviewHeight.roundToInt())
+                            updateDisplaySetting { it.copy(floatingPreviewMaxHeight = value) }
                         },
                         valueRange = FloatingPanelSizing.MIN_PREVIEW_HEIGHT_DP..
                             FloatingPanelSizing.MAX_PREVIEW_HEIGHT_DP,
@@ -315,9 +309,8 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
                         value = draftDetailTextScale,
                         onValueChange = { draftDetailTextScale = FloatingPanelSizing.clampDetailTextScale(it) },
                         onValueChangeFinished = {
-                            updateDisplaySetting(
-                                displaySetting.copy(floatingDetailTextScale = draftDetailTextScale)
-                            )
+                            val value = draftDetailTextScale
+                            updateDisplaySetting { it.copy(floatingDetailTextScale = value) }
                         },
                         valueRange = FloatingPanelSizing.MIN_DETAIL_TEXT_SCALE..FloatingPanelSizing.MAX_DETAIL_TEXT_SCALE,
                     )
@@ -364,6 +357,7 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
             initialAnimation = displaySetting.floatingBubbleAnimation,
             initialCounterOffsetX = displaySetting.floatingCounterOffsetX,
             initialCounterOffsetY = displaySetting.floatingCounterOffsetY,
+            initialCounterScale = displaySetting.floatingCounterScale,
             counterFontPath = displaySetting.floatingCounterFontPath,
             counterPalette = displaySetting.floatingCounterPalette,
             onCounterPaletteChanged = { updateCounterPalette(it) },
@@ -374,28 +368,33 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
                 displaySetting.chatCustomFontNames
             } else listOf(displaySetting.chatCustomFontName),
             onCounterFontSelected = { path ->
-                updateDisplaySetting(displaySetting.copy(floatingCounterFontPath = path))
+                updateDisplaySetting { it.copy(floatingCounterFontPath = path) }
             },
             onCounterOffsetChanged = { x, y ->
-                updateDisplaySetting(
-                    displaySetting.copy(
+                updateDisplaySetting {
+                    it.copy(
                         floatingCounterOffsetX = FloatingCounterGeometry.clampOffset(x),
                         floatingCounterOffsetY = FloatingCounterGeometry.clampOffset(y),
                     )
-                )
+                }
+            },
+            onCounterScaleChanged = { scale ->
+                updateDisplaySetting {
+                    it.copy(floatingCounterScale = FloatingCounterGeometry.clampCounterScale(scale))
+                }
             },
             // 拖滑块 / 点动画即保存自己的字段，不覆盖面板拖动在写的其他设置
             onDraftChanged = { scale, animation ->
-                updateDisplaySetting(
-                    displaySetting.copy(
+                updateDisplaySetting {
+                    it.copy(
                         floatingBubbleScale = FloatingPanelSizing.clampBubbleScale(scale),
                         floatingBubbleAnimation = animation,
                     )
-                )
+                }
             },
             onSelect = { icon ->
                 // 旧图片由 FilesManager.saveBubbleIcon 自己在写入成功之后清掉，这里只管存设置
-                updateDisplaySetting(displaySetting.copy(floatingBubbleIcon = icon))
+                updateDisplaySetting { it.copy(floatingBubbleIcon = icon) }
             },
             onDismiss = { showFloatingIconPicker = false },
         )

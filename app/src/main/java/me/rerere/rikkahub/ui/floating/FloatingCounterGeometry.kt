@@ -11,6 +11,8 @@ package me.rerere.rikkahub.ui.floating
 internal object FloatingCounterGeometry {
     const val MIN_OFFSET = -1f
     const val MAX_OFFSET = 1f
+    const val MIN_COUNTER_SCALE = 0.5f
+    const val MAX_COUNTER_SCALE = 2f
     const val REFERENCE_WIDTH_BUBBLES = 3f
     const val REFERENCE_HEIGHT_BUBBLES = 2.4f
 
@@ -29,6 +31,9 @@ internal object FloatingCounterGeometry {
     /** Invalid legacy values return to the existing position; valid values remain signed. */
     fun clampOffset(value: Float): Float =
         if (!value.isFinite()) 0f else value.coerceIn(MIN_OFFSET, MAX_OFFSET)
+
+    fun clampCounterScale(value: Float): Float =
+        if (!value.isFinite()) 1f else value.coerceIn(MIN_COUNTER_SCALE, MAX_COUNTER_SCALE)
 
     fun center(
         horizontal: Float,
@@ -55,7 +60,7 @@ internal object FloatingCounterGeometry {
 
     /**
      * Actual numeric-badge bounds relative to the ball centre after the bubble's visual scale.
-     * Width is D/2 and height D/4; the Canvas itself clips to this box.
+     * Base width is D/2 and height D/4; glyph scaling expands this box about its centre.
      */
     fun badgeBounds(
         horizontal: Float,
@@ -63,12 +68,14 @@ internal object FloatingCounterGeometry {
         mirror: Boolean,
         bubbleSize: Float,
         visualScale: Float,
+        counterScale: Float = 1f,
     ): Bounds {
         val scale = if (visualScale.isFinite()) visualScale.coerceAtLeast(0f) else 0f
         // Compose scales the entire layer about the ball centre, including the legacy side offset.
         val target = center(horizontal, vertical, mirror, bubbleSize)
-        val halfWidth = bubbleSize * scale / 4f
-        val halfHeight = bubbleSize * scale / 8f
+        val glyphScale = clampCounterScale(counterScale)
+        val halfWidth = bubbleSize * scale / 4f * glyphScale
+        val halfHeight = bubbleSize * scale / 8f * glyphScale
         val centerX = target.x * scale
         val centerY = target.y * scale
         return Bounds(centerX - halfWidth, centerY - halfHeight, centerX + halfWidth, centerY + halfHeight)
@@ -100,10 +107,11 @@ internal object FloatingCounterGeometry {
         mirror: Boolean,
         bubbleSize: Float,
         visualScale: Float,
+        counterScale: Float = 1f,
     ): Boolean {
         if (visualScale <= 0f || !visualScale.isFinite()) return false
         return !hostBounds(mirror, bubbleSize).contains(
-            badgeBounds(horizontal, vertical, mirror, bubbleSize, visualScale)
+            badgeBounds(horizontal, vertical, mirror, bubbleSize, visualScale, counterScale)
         )
     }
 

@@ -196,6 +196,7 @@ class ChatFloatingWindows(
                     scale = input.display.floatingBubbleScale,
                     offsetX = input.display.floatingCounterOffsetX,
                     offsetY = input.display.floatingCounterOffsetY,
+                    counterScale = input.display.floatingCounterScale,
                     palette = input.display.floatingCounterPalette,
                     fontPath = input.display.floatingCounterFontPath.takeIf { path ->
                         path in input.display.chatCustomFontPaths || path == input.display.chatCustomFontPath
@@ -341,6 +342,7 @@ class ChatFloatingWindows(
                         }.orEmpty(),
                         counterOffsetX = display.floatingCounterOffsetX,
                         counterOffsetY = display.floatingCounterOffsetY,
+                        counterScale = display.floatingCounterScale,
                         counterInOverlay = counterInOverlay,
                         counterPalette = display.floatingCounterPalette,
                         mainBadgeVisible = badgeSnapshot?.mainBadgeVisible,

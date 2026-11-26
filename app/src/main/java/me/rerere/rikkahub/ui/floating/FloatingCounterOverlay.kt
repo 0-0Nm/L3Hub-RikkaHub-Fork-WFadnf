@@ -33,6 +33,7 @@ internal class FloatingCounterOverlay(
         val scale: Float = 1f,
         val offsetX: Float = 0f,
         val offsetY: Float = 0f,
+        val counterScale: Float = 1f,
         val mirror: Boolean = false,
         val fontPath: String = "",
         val palette: FloatingCounterPalette = FloatingCounterPalette.Default,
@@ -94,6 +95,7 @@ internal class FloatingCounterOverlay(
         scale: Float,
         offsetX: Float,
         offsetY: Float,
+        counterScale: Float,
         fontPath: String,
         palette: FloatingCounterPalette,
     ) {
@@ -102,6 +104,7 @@ internal class FloatingCounterOverlay(
             scale = FloatingPanelSizing.clampBubbleScale(scale),
             offsetX = FloatingCounterGeometry.clampOffset(offsetX),
             offsetY = FloatingCounterGeometry.clampOffset(offsetY),
+            counterScale = FloatingCounterGeometry.clampCounterScale(counterScale),
             fontPath = fontPath,
             palette = palette,
         )
@@ -146,6 +149,7 @@ internal class FloatingCounterOverlay(
             mirror = m.mirror,
             bubbleSize = FloatingCounterGeometry.BUBBLE_SIZE_DP,
             visualScale = m.scale,
+            counterScale = m.counterScale,
         )
         if (!needsDetached) {
             hide()
@@ -167,6 +171,7 @@ internal class FloatingCounterOverlay(
             mirror = m.mirror,
             bubbleSize = FloatingCounterGeometry.BUBBLE_SIZE_DP,
             visualScale = m.scale,
+            counterScale = m.counterScale,
         )
         val width = ((bounds.right - bounds.left) * density).roundToInt().coerceAtLeast(1)
         val height = ((bounds.bottom - bounds.top) * density).roundToInt().coerceAtLeast(1)

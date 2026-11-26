@@ -78,8 +78,10 @@ internal fun FloatingBubbleIconPicker(
     initialAnimation: FloatingBubbleAnimation = FloatingBubbleAnimation.FLOWER,
     initialCounterOffsetX: Float = 0f,
     initialCounterOffsetY: Float = 0f,
+    initialCounterScale: Float = 1f,
     onDraftChanged: (scale: Float, animation: FloatingBubbleAnimation) -> Unit = { _, _ -> },
     onCounterOffsetChanged: (x: Float, y: Float) -> Unit = { _, _ -> },
+    onCounterScaleChanged: (Float) -> Unit = {},
     onSelect: (FloatingBubbleIcon) -> Unit,
     onDismiss: () -> Unit,
     counterFontPath: String = "",
@@ -107,6 +109,9 @@ internal fun FloatingBubbleIconPicker(
     }
     var draftCounterOffsetY by remember(initialCounterOffsetY) {
         mutableFloatStateOf(FloatingCounterGeometry.clampOffset(initialCounterOffsetY))
+    }
+    var draftCounterScale by remember(initialCounterScale) {
+        mutableFloatStateOf(FloatingCounterGeometry.clampCounterScale(initialCounterScale))
     }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -233,6 +238,7 @@ internal fun FloatingBubbleIconPicker(
                                 counterFontPath = counterFontPath.takeIf { it in importedFontPaths }.orEmpty(),
                                 counterOffsetX = draftCounterOffsetX,
                                 counterOffsetY = draftCounterOffsetY,
+                                counterScale = draftCounterScale,
                                 previewCount = previewCount,
                                 counterPalette = counterPalette,
                             )
@@ -338,6 +344,17 @@ internal fun FloatingBubbleIconPicker(
                                 onCounterOffsetChanged(draftCounterOffsetX, draftCounterOffsetY)
                             },
                             valueRange = FloatingCounterGeometry.MIN_OFFSET..FloatingCounterGeometry.MAX_OFFSET,
+                        )
+                        Text(
+                            text = stringResource(R.string.floating_counter_size),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        PercentNumberSlider(
+                            value = draftCounterScale,
+                            onValueChange = { draftCounterScale = FloatingCounterGeometry.clampCounterScale(it) },
+                            onValueChangeFinished = { onCounterScaleChanged(draftCounterScale) },
+                            valueRange = FloatingCounterGeometry.MIN_COUNTER_SCALE..FloatingCounterGeometry.MAX_COUNTER_SCALE,
                         )
                         Text(
                             text = stringResource(R.string.floating_bubble_animation),
