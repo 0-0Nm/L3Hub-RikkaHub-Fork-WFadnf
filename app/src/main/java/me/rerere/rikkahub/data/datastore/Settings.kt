@@ -340,6 +340,9 @@ data class DisplaySetting(
     val floatingBubbleScale: Float = 1.0f,
     // Imported font relative path for the counter only; blank uses built-in serif.
     val floatingCounterFontPath: String = "",
+    // Signed numeric-badge position in the centred 3.0D x 2.4D guide; zero keeps the old centre.
+    val floatingCounterOffsetX: Float = 0f,
+    val floatingCounterOffsetY: Float = 0f,
     // 悬浮面板内详情文字（标题/状态/预览正文等）的缩放比例；100% 是现有效果
     val floatingDetailTextScale: Float = 1.0f,
     // 悬浮球外壳动画：花形（旋转+花瓣形变）或圆形呼吸，与图案解耦

@@ -91,6 +91,7 @@ fun PercentNumberSlider(
     val percent = (value * 100).roundToInt()
     val minPercent = (valueRange.start * 100).roundToInt()
     val maxPercent = (valueRange.endInclusive * 100).roundToInt()
+    val acceptsSign = minPercent < 0
     var text by remember(percent) { mutableStateOf(percent.toString()) }
     SliderWithNumberField(
         modifier = modifier,
@@ -98,7 +99,9 @@ fun PercentNumberSlider(
         suffix = "%",
         text = text,
         onTextChange = { input ->
-            val digits = input.filter { it.isDigit() }.take(3)
+            val digits = input.filterIndexed { index, char ->
+                char.isDigit() || (acceptsSign && index == 0 && (char == '-' || char == '+'))
+            }.take(if (acceptsSign) 4 else 3)
             text = digits
             digits.toIntOrNull()?.let { parsed ->
                 if (parsed in minPercent..maxPercent) {

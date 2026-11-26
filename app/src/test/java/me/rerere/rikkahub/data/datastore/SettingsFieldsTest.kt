@@ -81,6 +81,8 @@ class SettingsFieldsTest {
         assertEquals(false, settings.sshServerEnabled)
         assertEquals(2222, settings.sshServerPort)
         assertEquals(false, settings.sshServerAllowLan)
+        assertEquals(0f, settings.displaySetting.floatingCounterOffsetX, 0f)
+        assertEquals(0f, settings.displaySetting.floatingCounterOffsetY, 0f)
     }
 
     @Test
@@ -128,7 +130,12 @@ private val SAMPLE = Settings(
     developerMode = true,
     appLockEnabled = true,
     appLockTimeoutMinutes = 15,
-    displaySetting = DisplaySetting(userNickname = "me", displayMode = DisplayMode.LANDSCAPE),
+    displaySetting = DisplaySetting(
+        userNickname = "me",
+        displayMode = DisplayMode.LANDSCAPE,
+        floatingCounterOffsetX = -0.75f,
+        floatingCounterOffsetY = 1f,
+    ),
     networkSetting = NetworkSetting(
         userAgent = "agent",
         retryMaxCount = 5,

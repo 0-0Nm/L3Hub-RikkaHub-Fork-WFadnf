@@ -64,6 +64,7 @@ import kotlinx.coroutines.launch
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.conversationIntent
+import me.rerere.rikkahub.data.datastore.DisplaySetting
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.model.Conversation
@@ -96,6 +97,13 @@ private const val PANEL_CHROME_DP = 70f
 // 预览区从 76dp 才开始，往上一两个 dp 也不会抢它的滚动手势
 private const val PANEL_DRAG_REGION_DP = 72f
 
+private data class CounterOverlayInput(
+    val expanded: Boolean?,
+    val snapshot: SubAgentBadgeState.Snapshot?,
+    val display: DisplaySetting,
+    val numberAllowed: Boolean,
+)
+
 /**
  * 把 [ChatFloatingTracker] 的结果显示成系统悬浮窗：收起时是贴边的小图标，展开是固定在顶部的面板。
  * 两个窗口共用这里汇总的一份 [FloatingChatUiState]。FloatingX 只能在主线程操作，协程都跑在 AppScope 上。
@@ -116,6 +124,12 @@ class ChatFloatingWindows(
 
     /** 悬浮球贴在哪条物理边：true = 物理左边缘（角标镜像到左上）。Compose 状态，改了会重组 */
     private var bubbleOnLeftEdge by mutableStateOf(false)
+
+    /** True only while the non-touchable companion window is actually drawing the number. */
+    private var counterInOverlay by mutableStateOf(false)
+    private val counterOverlay = FloatingCounterOverlay(context) { active ->
+        counterInOverlay = active
+    }
 
     // 悬浮窗显示期间一直汇总，气泡和面板切换时直接拿到当前状态，不会先空一帧
     private val uiState: StateFlow<FloatingChatUiState?> = tracker.window
@@ -156,6 +170,38 @@ class ChatFloatingWindows(
         appScope.launch {
             phoneUseManager.acting.collect(::yieldScreen)
         }
+        // The number may sit outside the narrow live-bubble window. Keep the companion in sync
+        // with the real child count, settings and drag mirror without widening the touch window.
+        appScope.launch {
+            combine(
+                tracker.window.map { it?.expanded }.distinctUntilChanged(),
+                badge,
+                settingsStore.settingsFlow,
+                uiState,
+            ) { expanded, snapshot, settings, ui ->
+                CounterOverlayInput(
+                    expanded = expanded,
+                    snapshot = snapshot,
+                    display = settings.displaySetting,
+                    numberAllowed = ui != null &&
+                        !(ui.error != null && !ui.generating) &&
+                        !(ui.pendingTools.isNotEmpty() && !ui.generating),
+                )
+            }.collect { input ->
+                counterOverlay.setHostVisible(input.expanded == false)
+                counterOverlay.setMirror(bubbleOnLeftEdge)
+                counterOverlay.update(
+                    count = input.snapshot?.takeIf { it.childBadgeVisible }?.successCount
+                        ?.takeIf { input.numberAllowed },
+                    scale = input.display.floatingBubbleScale,
+                    offsetX = input.display.floatingCounterOffsetX,
+                    offsetY = input.display.floatingCounterOffsetY,
+                    fontPath = input.display.floatingCounterFontPath.takeIf { path ->
+                        path in input.display.chatCustomFontPaths || path == input.display.chatCustomFontPath
+                    }.orEmpty(),
+                )
+            }
+        }
     }
 
     /**
@@ -167,6 +213,7 @@ class ChatFloatingWindows(
     private fun yieldScreen(yielding: Boolean) {
         // 展开的面板盖住屏幕上半部分还占着输入焦点，模型操作时直接收起
         if (yielding) tracker.collapse()
+        counterOverlay.setYielded(yielding)
         listOfNotNull(bubble, panel).forEach { control ->
             val window = generateSequence(control.contentView?.parent) { it.parent }
                 .filterIsInstance<FxWindowContainer>()
@@ -236,6 +283,7 @@ class ChatFloatingWindows(
     private fun render(expanded: Boolean?) {
         // 后台弹不出权限申请页，没有权限就不显示
         if (expanded == null || !FxPermission.isGranted(context)) {
+            counterOverlay.close()
             bubble?.cancel()
             panel?.cancel()
             bubble = null
@@ -244,11 +292,13 @@ class ChatFloatingWindows(
         }
         val bubble = bubble ?: installBubble().also { bubble = it }
         if (expanded) {
+            counterOverlay.setHostVisible(false)
             bubble.hide()
             (panel ?: installPanel().also { panel = it }).show()
         } else {
             panel?.hide()
             bubble.show()
+            counterOverlay.setHostVisible(true)
         }
     }
 
@@ -256,13 +306,19 @@ class ChatFloatingWindows(
         fun updateEdge(anchor: FxAnchor) {
             val ltr = context.resources.configuration.layoutDirection == android.view.View.LAYOUT_DIRECTION_LTR
             bubbleOnLeftEdge = (anchor.gravity.horizontal == FxHorizontal.START) == ltr
+            counterOverlay.setMirror(bubbleOnLeftEdge)
         }
         val edgeListener = object : FxListener {
-            override fun onShow(control: FxControl) { updateEdge(control.anchor) }
+            override fun onShow(control: FxControl) {
+                updateEdge(control.anchor)
+                counterOverlay.bind(control)
+                control.contentView?.post { counterOverlay.bind(control) }
+            }
             // 拖动/吸附提交锚点后回调（FloatingX 3.0.0 公开 API）：锚在逻辑 START 边
             // 且当前是 LTR 时球贴物理左边，角标要镜像过去；RTL 下 START 是物理右边
             override fun onPositionChanged(control: FxControl, anchor: FxAnchor) {
                 updateEdge(anchor)
+                counterOverlay.bind(control)
             }
         }
         return FloatingX.install(BUBBLE_TAG) {
@@ -282,6 +338,9 @@ class ChatFloatingWindows(
                         counterFontPath = display.floatingCounterFontPath.takeIf { path ->
                             path in display.chatCustomFontPaths || path == display.chatCustomFontPath
                         }.orEmpty(),
+                        counterOffsetX = display.floatingCounterOffsetX,
+                        counterOffsetY = display.floatingCounterOffsetY,
+                        counterInOverlay = counterInOverlay,
                         mainBadgeVisible = badgeSnapshot?.mainBadgeVisible,
                         childBadge = badgeSnapshot?.takeIf { it.childBadgeVisible }?.let {
                             ChildBadgeUi(
@@ -301,6 +360,8 @@ class ChatFloatingWindows(
         }.also { control ->
             control.addListener(edgeListener)
             updateEdge(control.anchor)
+            counterOverlay.bind(control)
+            control.contentView?.post { counterOverlay.bind(control) }
         }
     }
 

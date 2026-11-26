@@ -2214,6 +2214,8 @@
   <string name="floating_panel_resize">Drag to resize the panel</string>
   <string name="floating_detail_text_scale">Detail text size</string>
   <string name="floating_bubble_preview_section">Preview</string>
+  <string name="floating_counter_offset_x">Number horizontal offset</string>
+  <string name="floating_counter_offset_y">Number vertical offset</string>
   <string name="floating_bubble_size">Bubble size</string>
   <string name="floating_bubble_animation">Shell animation</string>
   <string name="floating_bubble_animation_flower">Flower</string>

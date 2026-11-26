@@ -49,6 +49,7 @@ import me.rerere.rikkahub.ui.components.ui.PercentNumberSlider
 import me.rerere.rikkahub.ui.floating.BubbleIconContent
 import me.rerere.rikkahub.ui.floating.BubblePresets
 import me.rerere.rikkahub.ui.floating.FloatingBubblePreview
+import me.rerere.rikkahub.ui.floating.FloatingCounterGeometry
 import me.rerere.rikkahub.ui.floating.FloatingPanelSizing
 import me.rerere.rikkahub.ui.floating.bubblePresetIcon
 import me.rerere.rikkahub.ui.terminal.OutlinedButton
@@ -66,7 +67,10 @@ internal fun FloatingBubbleIconPicker(
     /** 拖动预览草稿：大小滑块/动画选择改的是这份本地草稿，松手才通过 [onDraftChanged] 保存 */
     initialScale: Float = 1f,
     initialAnimation: FloatingBubbleAnimation = FloatingBubbleAnimation.FLOWER,
+    initialCounterOffsetX: Float = 0f,
+    initialCounterOffsetY: Float = 0f,
     onDraftChanged: (scale: Float, animation: FloatingBubbleAnimation) -> Unit = { _, _ -> },
+    onCounterOffsetChanged: (x: Float, y: Float) -> Unit = { _, _ -> },
     onSelect: (FloatingBubbleIcon) -> Unit,
     onDismiss: () -> Unit,
     counterFontPath: String = "",
@@ -84,6 +88,12 @@ internal fun FloatingBubbleIconPicker(
     // 预览草稿：拖滑块实时变，松手/选中动画时提交
     var draftScale by remember { mutableFloatStateOf(FloatingPanelSizing.clampBubbleScale(initialScale)) }
     var draftAnimation by remember { mutableStateOf(initialAnimation) }
+    var draftCounterOffsetX by remember(initialCounterOffsetX) {
+        mutableFloatStateOf(FloatingCounterGeometry.clampOffset(initialCounterOffsetX))
+    }
+    var draftCounterOffsetY by remember(initialCounterOffsetY) {
+        mutableFloatStateOf(FloatingCounterGeometry.clampOffset(initialCounterOffsetY))
+    }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
@@ -196,7 +206,8 @@ internal fun FloatingBubbleIconPicker(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(72.dp),
+                                // Room for the same invisible 3D x 2.4D guide at maximum bubble scale.
+                                .height(180.dp),
                             contentAlignment = Alignment.Center,
                         ) {
                             // 与悬浮球同一套外壳/图案组件渲染；无任务副作用（不模拟运行状态以外的完成角标）
@@ -206,6 +217,8 @@ internal fun FloatingBubbleIconPicker(
                                 animation = draftAnimation,
                                 animating = true,
                                 counterFontPath = counterFontPath.takeIf { it in importedFontPaths }.orEmpty(),
+                                counterOffsetX = draftCounterOffsetX,
+                                counterOffsetY = draftCounterOffsetY,
                                 previewCount = previewCount,
                             )
                         }
@@ -269,6 +282,32 @@ internal fun FloatingBubbleIconPicker(
                             // 松手（或输入框提交）再保存
                             onValueChangeFinished = { onDraftChanged(draftScale, draftAnimation) },
                             valueRange = FloatingPanelSizing.MIN_BUBBLE_SCALE..FloatingPanelSizing.MAX_BUBBLE_SCALE,
+                        )
+                        Text(
+                            text = stringResource(R.string.floating_counter_offset_x),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        PercentNumberSlider(
+                            value = draftCounterOffsetX,
+                            onValueChange = { draftCounterOffsetX = FloatingCounterGeometry.clampOffset(it) },
+                            onValueChangeFinished = {
+                                onCounterOffsetChanged(draftCounterOffsetX, draftCounterOffsetY)
+                            },
+                            valueRange = FloatingCounterGeometry.MIN_OFFSET..FloatingCounterGeometry.MAX_OFFSET,
+                        )
+                        Text(
+                            text = stringResource(R.string.floating_counter_offset_y),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        PercentNumberSlider(
+                            value = draftCounterOffsetY,
+                            onValueChange = { draftCounterOffsetY = FloatingCounterGeometry.clampOffset(it) },
+                            onValueChangeFinished = {
+                                onCounterOffsetChanged(draftCounterOffsetX, draftCounterOffsetY)
+                            },
+                            valueRange = FloatingCounterGeometry.MIN_OFFSET..FloatingCounterGeometry.MAX_OFFSET,
                         )
                         Text(
                             text = stringResource(R.string.floating_bubble_animation),

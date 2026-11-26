@@ -2216,6 +2216,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="floating_panel_resize">拖动调整面板尺寸</string>
   <string name="floating_detail_text_scale">详情文字大小</string>
   <string name="floating_bubble_preview_section">预览</string>
+  <string name="floating_counter_offset_x">数字水平偏移</string>
+  <string name="floating_counter_offset_y">数字垂直偏移</string>
   <string name="floating_bubble_size">悬浮球大小</string>
   <string name="floating_bubble_animation">外壳动画</string>
   <string name="floating_bubble_animation_flower">花形</string>

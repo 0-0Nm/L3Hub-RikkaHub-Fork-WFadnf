@@ -266,6 +266,10 @@ fun ChatFloatingBubble(
     /** 子任务数字角标：null = 本根没有子任务范围 */
     childBadge: ChildBadgeUi? = null,
     counterFontPath: String = "",
+    counterOffsetX: Float = 0f,
+    counterOffsetY: Float = 0f,
+    /** The live-bubble window is clipping the number, so a non-touchable companion draws it. */
+    counterInOverlay: Boolean = false,
 ) {
     val colors = MaterialTheme.colorScheme
     // 收起到面板时窗口隐藏，帧还在跑，停下动画
@@ -273,10 +277,18 @@ fun ChatFloatingBubble(
     val animating = state.generating && lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
     // All three visual elements live in one scaled layer. Touch target stays usable.
     Box(modifier = Modifier.absolutePadding(
-        left = if (mirrorBadges) 10.dp else 25.dp,
-        right = if (mirrorBadges) 25.dp else 10.dp,
-        top = 10.dp,
-        bottom = 10.dp,
+        left = if (mirrorBadges) {
+            FloatingCounterGeometry.HOST_TRAILING_PADDING_DP.dp
+        } else {
+            FloatingCounterGeometry.HOST_LEADING_PADDING_DP.dp
+        },
+        right = if (mirrorBadges) {
+            FloatingCounterGeometry.HOST_LEADING_PADDING_DP.dp
+        } else {
+            FloatingCounterGeometry.HOST_TRAILING_PADDING_DP.dp
+        },
+        top = FloatingCounterGeometry.HOST_VERTICAL_PADDING_DP.dp,
+        bottom = FloatingCounterGeometry.HOST_VERTICAL_PADDING_DP.dp,
     )) {
         BubbleShell(
             animation = animation,
@@ -296,6 +308,9 @@ fun ChatFloatingBubble(
                         scale = 1f,
                         mirror = mirrorBadges,
                         counterFontPath = counterFontPath,
+                        counterOffsetX = counterOffsetX,
+                        counterOffsetY = counterOffsetY,
+                        drawCounter = !counterInOverlay,
                     )
                 }
             },
@@ -389,6 +404,9 @@ private fun BubbleShell(
                     val visual = scale * if (animation == FloatingBubbleAnimation.PULSE) pulse.value else 1f
                     scaleX = visual
                     scaleY = visual
+                    // The counter may intentionally leave the ball; do not add a Compose clip here.
+                    // The system overlay can still clip at its own window/screen bounds.
+                    clip = false
                 },
             contentAlignment = Alignment.Center,
         ) {
@@ -466,6 +484,9 @@ private fun BoxScope.TaskBadges(
     scale: Float,
     mirror: Boolean,
     counterFontPath: String = "",
+    counterOffsetX: Float = 0f,
+    counterOffsetY: Float = 0f,
+    drawCounter: Boolean = true,
 ) {
     val align = if (mirror) AbsoluteAlignment.TopLeft else AbsoluteAlignment.TopRight
     val crossAlign = if (mirror) AbsoluteAlignment.Left else AbsoluteAlignment.Right
@@ -478,13 +499,28 @@ private fun BoxScope.TaskBadges(
         else if (child != null) Box(Modifier.size(BUBBLE_SIZE / 4 * scale))
         if (child != null) ChildStatusBadge(green = child.green, scale = scale)
     }
-    if (child != null) {
+    if (child != null && drawCounter) {
+        val displacement = FloatingCounterGeometry.displacement(
+            horizontal = counterOffsetX,
+            vertical = counterOffsetY,
+            mirror = mirror,
+            bubbleSize = BUBBLE_SIZE.value,
+        )
         ArcTaskCount(
             count = child.count,
             fontPath = counterFontPath,
             modifier = Modifier
+                // Keep the legacy alignment/base offset so 0/0 is pixel-identical at every density.
+                // BubbleShell scales the displacement with the ball; do not apply bubbleScale twice.
                 .align(if (mirror) AbsoluteAlignment.CenterRight else AbsoluteAlignment.CenterLeft)
-                .absoluteOffset(x = if (mirror) BUBBLE_SIZE / 4 * scale else -BUBBLE_SIZE / 4 * scale)
+                .absoluteOffset(
+                    x = if (mirror) {
+                        BUBBLE_SIZE / 4 * scale + displacement.x.dp
+                    } else {
+                        -BUBBLE_SIZE / 4 * scale + displacement.x.dp
+                    },
+                    y = displacement.y.dp,
+                )
                 .size(width = BUBBLE_SIZE / 2 * scale, height = BUBBLE_SIZE / 4 * scale),
         )
     }
@@ -529,43 +565,22 @@ private fun ChildStatusBadge(green: Boolean, scale: Float) {
 private fun ArcTaskCount(count: Int, fontPath: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val typeface = remember(fontPath, context.filesDir) {
-        runCatching {
-            val root = context.filesDir.canonicalFile
-            val font = java.io.File(root, fontPath).canonicalFile
-            if (fontPath.isNotBlank() && font.path.startsWith(root.path + java.io.File.separator) && font.isFile) {
-                android.graphics.Typeface.createFromFile(font)
-            } else android.graphics.Typeface.SERIF
-        }.getOrDefault(android.graphics.Typeface.SERIF)
+        loadFloatingCounterTypeface(context, fontPath)
     }
     val label = count.coerceAtLeast(0).toString()
-    val argb = FloatingCounterVisuals.colorArgb(count)
     val paint = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { isSubpixelText = true } }
     val glyphBounds = remember { android.graphics.Rect() }
     Canvas(modifier.semantics { contentDescription = label }) {
-        paint.typeface = typeface
-        if (!label.all { paint.hasGlyph(it.toString()) }) paint.typeface = android.graphics.Typeface.SERIF
-        paint.textSize = size.height * 2f
-        paint.getTextBounds(label, 0, label.length, glyphBounds)
-        if (glyphBounds.width() > 0 && glyphBounds.height() > 0) {
-            val stroke = size.height * 0.055f
-            val fit = minOf(
-                (size.width - 2f * stroke) / glyphBounds.width(),
-                (size.height - 2f * stroke) / glyphBounds.height(),
-            ).coerceAtLeast(0f)
-            paint.textSize *= fit
-            paint.getTextBounds(label, 0, label.length, glyphBounds)
-            val x = size.width / 2f - (glyphBounds.left + glyphBounds.right) / 2f
-            val baseline = size.height / 2f - (glyphBounds.top + glyphBounds.bottom) / 2f
-            drawIntoCanvas { canvas ->
-                paint.style = android.graphics.Paint.Style.STROKE
-                paint.strokeWidth = stroke
-                paint.strokeJoin = android.graphics.Paint.Join.ROUND
-                paint.color = android.graphics.Color.argb(150, 24, 22, 25)
-                canvas.nativeCanvas.drawText(label, x, baseline, paint)
-                paint.style = android.graphics.Paint.Style.FILL
-                paint.color = argb
-                canvas.nativeCanvas.drawText(label, x, baseline, paint)
-            }
+        drawIntoCanvas { canvas ->
+            drawFloatingCounter(
+                canvas = canvas.nativeCanvas,
+                width = size.width,
+                height = size.height,
+                count = count,
+                typeface = typeface,
+                paint = paint,
+                bounds = glyphBounds,
+            )
         }
     }
 }
@@ -1116,6 +1131,8 @@ fun FloatingBubblePreview(
     animating: Boolean = false,
     mirrorBadges: Boolean = false,
     counterFontPath: String = "",
+    counterOffsetX: Float = 0f,
+    counterOffsetY: Float = 0f,
     previewCount: Int = 12,
 ) {
     Box(modifier = Modifier.absolutePadding(
@@ -1136,6 +1153,8 @@ fun FloatingBubblePreview(
                     scale = 1f,
                     mirror = mirrorBadges,
                     counterFontPath = counterFontPath,
+                    counterOffsetX = counterOffsetX,
+                    counterOffsetY = counterOffsetY,
                 )
             },
         ) { logoShape ->

@@ -51,6 +51,7 @@ import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionNotification
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.components.ui.switchItem
+import me.rerere.rikkahub.ui.floating.FloatingCounterGeometry
 import me.rerere.rikkahub.ui.floating.FloatingPanelSizing
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.adaptiveHorizontalPadding
@@ -347,6 +348,8 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
             current = displaySetting.floatingBubbleIcon,
             initialScale = displaySetting.floatingBubbleScale,
             initialAnimation = displaySetting.floatingBubbleAnimation,
+            initialCounterOffsetX = displaySetting.floatingCounterOffsetX,
+            initialCounterOffsetY = displaySetting.floatingCounterOffsetY,
             counterFontPath = displaySetting.floatingCounterFontPath,
             importedFontPaths = displaySetting.chatCustomFontPaths.ifEmpty {
                 listOf(displaySetting.chatCustomFontPath).filter { it.isNotBlank() }
@@ -356,6 +359,14 @@ fun SettingPreferencesNotificationPage(embedded: Boolean = false, vm: SettingVM 
             } else listOf(displaySetting.chatCustomFontName),
             onCounterFontSelected = { path ->
                 updateDisplaySetting(displaySetting.copy(floatingCounterFontPath = path))
+            },
+            onCounterOffsetChanged = { x, y ->
+                updateDisplaySetting(
+                    displaySetting.copy(
+                        floatingCounterOffsetX = FloatingCounterGeometry.clampOffset(x),
+                        floatingCounterOffsetY = FloatingCounterGeometry.clampOffset(y),
+                    )
+                )
             },
             // 拖滑块 / 点动画即保存自己的字段，不覆盖面板拖动在写的其他设置
             onDraftChanged = { scale, animation ->
