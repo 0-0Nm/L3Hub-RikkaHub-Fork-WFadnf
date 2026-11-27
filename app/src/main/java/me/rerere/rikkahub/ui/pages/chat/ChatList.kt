@@ -119,6 +119,13 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.archivedGuidanceByNode
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.withConversation
+import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.TodoItem
+import me.rerere.rikkahub.data.model.TodoStatus
+import me.rerere.rikkahub.data.model.todoAnchorNode
+import me.rerere.rikkahub.ui.components.message.ConversationTodoCard
+import me.rerere.rikkahub.ui.components.message.LocalConversationStatusInSidePanel
+import me.rerere.rikkahub.ui.components.message.TodoReminderUi
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ArchivedLiveGuidanceCard
 import me.rerere.rikkahub.ui.components.message.ChatMessage
@@ -203,6 +210,9 @@ fun ChatList(
     emptyHero: (@Composable () -> Unit)? = null,
     // 滚到最底部后继续上拉、松手时回调；不传就不启用这个手势
     onCreateNewChat: (() -> Unit)? = null,
+    // 就地内嵌任务清单卡片用：手动编辑写回与提醒设置更新，都复用会话原有的单一入口
+    onTodosChange: ((List<TodoItem>) -> Unit)? = null,
+    onUpdateAssistant: ((Assistant) -> Unit)? = null,
 ) {
     // 概览页按手势进度平移：聊天页向左滑出，概览页从右侧跟进。
     // 顶栏按钮切换时进度动画到目标；手指拖动时由 previewSwipeGesture 直接驱动。
@@ -268,6 +278,8 @@ fun ChatList(
                 onConversationSystemPromptChange = onConversationSystemPromptChange,
                 emptyHero = emptyHero,
                 onCreateNewChat = onCreateNewChat,
+                onTodosChange = onTodosChange,
+                onUpdateAssistant = onUpdateAssistant,
                 selectionState = selectionState,
             )
         }
@@ -345,6 +357,8 @@ private fun ChatListNormal(
     onConversationSystemPromptChange: ((String?) -> Unit)? = null,
     emptyHero: (@Composable () -> Unit)? = null,
     onCreateNewChat: (() -> Unit)? = null,
+    onTodosChange: ((List<TodoItem>) -> Unit)? = null,
+    onUpdateAssistant: ((Assistant) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val loadingState by rememberUpdatedState(loading)
@@ -409,6 +423,13 @@ private fun ChatListNormal(
     val lastMessageIndex = conversation.messageNodes.lastIndex
     // 捕获这个值而不是整份会话，消息条的 lambda 才能跨 chunk 复用
     val conversationId = conversation.id
+    // 内嵌任务清单挂在哪条消息：清单为空时 null；就地卡片只在这一条消息下面出现一次，
+    // 因此「旧清单不当成当前」由 todoAnchorNode 的归属优先保证
+    val todoAnchorNodeId = remember(
+        conversation.messageNodes,
+        conversation.todos,
+        conversation.todosOwnerNodeId,
+    ) { conversation.todoAnchorNode()?.id }
 
     // 新消息入场：只有"尾部刚追加"的那几条会从屏幕下方滑进来，
     // 打开会话、加载历史、切换分支时列表尾部不会多出 id，所以都不会播。
@@ -714,6 +735,35 @@ private fun ChatListNormal(
                                 joinedToPrevious = joinedToPrevious,
                                 joinedToNext = joinedToNext,
                             )
+                        }
+                        if (todoAnchorNodeId == node.id && !LocalConversationStatusInSidePanel.current) {
+                            val hideCompleted = settings.displaySetting.hideCompletedTodoCard &&
+                                conversation.todos.all { it.status == TodoStatus.COMPLETED }
+                            if (conversation.todos.isNotEmpty() && !hideCompleted) {
+                                Spacer(Modifier.height(4.dp))
+                                ConversationTodoCard(
+                                    todos = conversation.todos,
+                                    onTodosChange = onTodosChange,
+                                    reminder = TodoReminderUi(
+                                        enabled = assistant?.todoReminderEnabled ?: true,
+                                        interval = assistant?.todoReminderInterval ?: 1,
+                                    ),
+                                    onReminderChange = { next ->
+                                        val a = assistant
+                                        if (a != null && onUpdateAssistant != null) {
+                                            onUpdateAssistant(
+                                                a.copy(
+                                                    todoReminderEnabled = next.enabled,
+                                                    todoReminderInterval = next.interval,
+                                                )
+                                            )
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 8.dp),
+                                )
+                            }
                         }
                         archivedByNode[node.id]?.forEach { entry ->
                             Spacer(Modifier.height(4.dp))

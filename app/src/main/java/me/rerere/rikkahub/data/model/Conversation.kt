@@ -330,3 +330,20 @@ internal fun UIMessagePart.mapLocalFileUrls(transform: (String) -> String): UIMe
         else -> this
     }
 }
+
+/**
+ * 会话任务清单该内嵌在哪一条消息下面（就地卡片的主机节点）。
+ *
+ * 优先归属节点 [Conversation.todosOwnerNodeId]：写下这份清单的那条 todo_write 消息。
+ * 清单跟着它走，删掉或重新生成那条消息时内嵌卡片一起消失，旧清单不会被当成当前那份。
+ * 归属节点被上下文压缩裁掉、或这份清单是老数据还没记归属时，退回「最后一条助手消息」：
+ * 清单总是某轮助手干活时写下的，挂在最新回复下面最贴近它描述的进行中状态，也不会在
+ * 用户消息下凭空冒出一张不属于任何回复的卡片。没有任何消息可挂（空会话）时返回 null，
+ * 调用方据此不渲染内嵌卡片。
+ */
+fun Conversation.todoAnchorNode(): MessageNode? {
+    if (todos.isEmpty()) return null
+    val owner = todosOwnerNodeId?.let { id -> messageNodes.firstOrNull { it.id == id } }
+    if (owner != null) return owner
+    return messageNodes.lastOrNull { node -> node.role == MessageRole.ASSISTANT }
+}

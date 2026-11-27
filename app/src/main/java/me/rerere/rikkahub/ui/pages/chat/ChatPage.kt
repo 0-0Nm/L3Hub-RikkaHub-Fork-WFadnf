@@ -1026,7 +1026,7 @@ private fun ChatPageContent(
             },
             bottomBar = {
                 if (currentMessages.isNotEmpty()) {
-                    ChatInputContent(todos = conversation.todos)
+                    ChatInputContent(todos = emptyList())
                 }
             },
             containerColor = Color.Transparent,
@@ -1040,7 +1040,7 @@ private fun ChatPageContent(
                         hazeState = backgroundHazeState,
                         input = {
                             ChatInputContent(
-                                todos = conversation.todos,
+                                todos = emptyList(),
                                 modifier = Modifier.fillMaxWidth(),
                                 applyWindowInsets = false,
                             )
@@ -1128,6 +1128,8 @@ private fun ChatPageContent(
                         onConversationSystemPromptChange = { newPrompt ->
                             vm.updateConversationSystemPrompt(newPrompt)
                         },
+                        onTodosChange = vm::updateTodos,
+                        onUpdateAssistant = vm::updateAssistant,
                         emptyHero = null,
                         )
                 }
