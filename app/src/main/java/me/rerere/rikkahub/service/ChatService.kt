@@ -50,7 +50,6 @@ import me.rerere.rikkahub.data.ai.TranslationHandler
 import me.rerere.rikkahub.data.ai.guidanceToolPart
 import me.rerere.rikkahub.data.ai.requestMessage
 import me.rerere.rikkahub.data.ai.isInjectedTool
-import me.rerere.rikkahub.data.ai.liveGuidanceRequestMessages
 import me.rerere.rikkahub.data.ai.stepsSinceLastGuidance
 import me.rerere.rikkahub.data.ai.stepsSinceLastTodoReminder
 import me.rerere.rikkahub.data.ai.todoReminderToolPart
@@ -84,6 +83,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Guidance
 import me.rerere.rikkahub.data.model.GuidanceMode
 import me.rerere.rikkahub.data.model.LiveGuidance
+import me.rerere.rikkahub.data.model.LiveGuidanceActionTarget
 import me.rerere.rikkahub.data.model.LiveGuidanceDelivery
 import me.rerere.rikkahub.data.model.LiveGuidanceMode
 import me.rerere.rikkahub.data.model.TodoItem
@@ -422,6 +422,9 @@ class ChatService(
 
     fun getConversationFlow(conversationId: Uuid): StateFlow<Conversation> =
         sessionManager.getConversationFlow(conversationId)
+
+    internal fun getLiveGuidanceClaims(conversationId: Uuid): StateFlow<LiveGuidanceClaims?> =
+        sessionManager.getOrCreate(conversationId).liveGuidanceClaims
 
     /** 会话的最新内容：已加载的以内存为准，否则读数据库 */
     suspend fun getConversation(conversationId: Uuid): Conversation? =
@@ -1209,27 +1212,25 @@ class ChatService(
         }
     }
 
-    /** Cancel exactly one card; a stale callback cannot remove a newer or different ID. */
-    suspend fun cancelLiveGuidance(conversationId: Uuid, guidanceId: Uuid): Boolean =
+    /** Cancel exactly the displayed card, only if its pending request has not claimed it. */
+    suspend fun cancelLiveGuidance(conversationId: Uuid, target: LiveGuidanceActionTarget): Boolean =
         withLoadedSession(conversationId) { session ->
-            session.mutateLiveGuidance { entries ->
-                entries.filterNot { it.id == guidanceId && it.canSwipe }
-            }
+            session.swipeLiveGuidance(target, defer = false, persist = conversationRepo::updateConversationConfig)
         }
 
-    /** Arm exactly one missed note for the next user turn; never dispatch a run here. */
-    suspend fun armLiveGuidanceForNextMessage(conversationId: Uuid, guidanceId: Uuid): Boolean =
+    /** Defer an unclaimed or missed card for the next true user turn; never dispatch a run here. */
+    suspend fun armLiveGuidanceForNextMessage(conversationId: Uuid, target: LiveGuidanceActionTarget): Boolean =
         withLoadedSession(conversationId) { session ->
-            session.mutateLiveGuidance(guidanceId) { current -> current.armForNextRun() }
+            session.swipeLiveGuidance(target, defer = true, persist = conversationRepo::updateConversationConfig)
         }
 
     /** Compatibility alias: retry now defers the latest missed ID until the next real user turn. */
-    suspend fun retryLiveGuidance(conversationId: Uuid): Boolean {
-        val guidanceId = withLoadedSession(conversationId) { session ->
-            session.state.value.config?.liveGuidanceEntries()
-                ?.lastOrNull { it.delivery == LiveGuidanceDelivery.NOT_USED }?.id
-        }
-        return guidanceId != null && armLiveGuidanceForNextMessage(conversationId, guidanceId)
+    suspend fun retryLiveGuidance(conversationId: Uuid): Boolean = withLoadedSession(conversationId) { session ->
+        val target = session.state.value.config?.liveGuidanceEntries()
+            ?.lastOrNull { it.delivery == LiveGuidanceDelivery.NOT_USED }?.actionTarget
+        target != null && session.swipeLiveGuidance(
+            target, defer = true, persist = conversationRepo::updateConversationConfig,
+        )
     }
 
     /** Atomic config-only mutation; message nodes, approvals and queue state are not rewritten. */
@@ -1339,10 +1340,7 @@ class ChatService(
     private suspend fun ConversationSession.takeInjectionParts(
         current: UIMessage?,
         assistant: Assistant,
-        runId: Uuid,
     ): List<UIMessagePart> {
-        // Capture without acknowledging: this step may fail before producing any provider output.
-        updateLiveGuidanceCheckpoints(runId, state.value.config?.liveGuidanceRequestMessages(runId).orEmpty())
         val parts = mutableListOf<UIMessagePart>()
         parts += inbox.takeNotices()
         // 子代理结果也在这里进来：父会话正在跑的时候，结果不该等到这一轮收尾才被看到
@@ -1707,11 +1705,7 @@ class ChatService(
         // 生成开始前失败时通知只用来取消 Live Update，用不到发送者名称
         var senderName = ""
         try {
-            session.startGenerationRun(runId)
-            // Notice, ordinary regenerate and approval runs never consume a next-user-message note.
-            if (origin.consumesNextMessageGuidance()) {
-                session.mutateLiveGuidance { entries -> entries.map { it.beginRun(runId) } }
-            }
+            session.startGenerationRun(runId, origin, conversationRepo::updateConversationConfig)
             val settings = settingsStore.awaitLoaded()
             // 清掉上一轮的建议；没法继续执行的工具调用发给模型会被拒绝，先去掉。
             // 重新生成时只清理要发给模型的节点，被重新生成的节点保持原样，旧回复留作分支
@@ -1757,7 +1751,7 @@ class ChatService(
                         messages = target.history,
                         processingStatus = session.processingStatus,
                         pendingInjections = {
-                            session.liveGuidanceRequestMessages(runId)
+                            session.claimLiveGuidanceRequest(runId)
                         },
                         acknowledgeInjections = { guidanceIds ->
                             session.acknowledgeLiveGuidance(runId, guidanceIds)
@@ -1781,7 +1775,7 @@ class ChatService(
                             session.state.value.todos.takeIf { it.hasActiveTodo() } ?: emptyList()
                         },
                         takePendingParts = { current ->
-                            session.takeInjectionParts(current, liveAssistant(), runId)
+                            session.takeInjectionParts(current, liveAssistant())
                         },
                     )
                     finishReason = null

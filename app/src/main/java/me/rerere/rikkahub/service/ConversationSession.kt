@@ -15,7 +15,11 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.finishReasoning
+import me.rerere.rikkahub.data.ai.liveGuidanceRequestMessages
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.LiveGuidanceActionTarget
+import me.rerere.rikkahub.data.model.liveGuidanceEntries
+import me.rerere.rikkahub.data.model.withLiveGuidanceEntries
 import me.rerere.rikkahub.data.model.isAwaitingToolApproval
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
@@ -23,6 +27,8 @@ import kotlin.uuid.Uuid
 
 private const val TAG = "ConversationSession"
 private const val IDLE_TIMEOUT_MS = 5_000L
+
+internal data class LiveGuidanceClaims(val runId: Uuid, val ids: Set<Uuid> = emptySet())
 
 /** 会话的持久化，由 ChatService 实现 */
 interface ConversationStore {
@@ -250,46 +256,106 @@ class ConversationSession(
 
     // Stable identity of the current model run, including its mid-turn compression continuations.
     // Live steering uses this instead of Job identity so reopening a request cannot retarget an old note.
-    @Volatile
-    internal var generationRunId: Uuid? = null
-        private set
-
-    @Volatile
-    private var liveGuidanceCheckpoint: Pair<Uuid, List<UIMessage>>? = null
+    private val _liveGuidanceClaims = MutableStateFlow<LiveGuidanceClaims?>(null)
+    internal val liveGuidanceClaims = _liveGuidanceClaims.asStateFlow()
+    internal val generationRunId: Uuid? get() = _liveGuidanceClaims.value?.runId
 
     @Synchronized
     internal fun startGenerationRun(runId: Uuid) {
         check(generationRunId == null || generationRunId == runId) { "A generation run is already active" }
-        liveGuidanceCheckpoint = null
-        generationRunId = runId
+        if (generationRunId == null) _liveGuidanceClaims.value = LiveGuidanceClaims(runId)
+    }
+
+    internal suspend fun startGenerationRun(
+        runId: Uuid,
+        origin: GenerationRunOrigin,
+        persist: suspend (Conversation) -> Boolean,
+    ) {
+        if (!origin.consumesNextMessageGuidance()) {
+            startGenerationRun(runId)
+            return
+        }
+        // Publish the new run and bind already-armed notes under the claim/swipe lock. Otherwise
+        // a swipe in the start/bind gap could defer a new note only to rebind it to this same run.
+        updateMetadataChecked(
+            transform = { latest ->
+                startGenerationRun(runId)
+                val config = latest.config ?: return@updateMetadataChecked latest
+                val entries = config.liveGuidanceEntries()
+                val bound = entries.map { it.beginRun(runId) }
+                if (bound == entries) latest else latest.copy(config = config.withLiveGuidanceEntries(bound))
+            },
+            persist = persist,
+        )
     }
 
     @Synchronized
     internal fun finishGenerationRun(runId: Uuid) {
-        if (generationRunId == runId) {
-            generationRunId = null
-            liveGuidanceCheckpoint = null
+        if (generationRunId == runId) _liveGuidanceClaims.value = null
+    }
+
+    /** Snapshot and claim in one critical section shared with cancel/defer. A claim is NOT delivery. */
+    internal suspend fun claimLiveGuidanceRequest(runId: Uuid): List<UIMessage> = writeMutex.withLock {
+        synchronized(this) {
+            val claims = _liveGuidanceClaims.value
+            if (claims == null || claims.runId != runId) return@synchronized emptyList()
+            val messages = _state.value.config?.liveGuidanceRequestMessages(runId).orEmpty()
+            _liveGuidanceClaims.value = claims.copy(ids = claims.ids + messages.map { it.id })
+            messages
         }
     }
 
-    /** Keep the request snapshot stable even if a newer card arrives before prepareStep. */
-    @Synchronized
-    internal fun updateLiveGuidanceCheckpoint(runId: Uuid, message: UIMessage?) {
-        updateLiveGuidanceCheckpoints(runId, listOfNotNull(message))
-    }
-
-    @Synchronized
-    internal fun updateLiveGuidanceCheckpoints(runId: Uuid, messages: List<UIMessage>) {
-        if (generationRunId == runId) {
-            liveGuidanceCheckpoint = runId to messages.distinctBy { it.id }
+    /**
+     * A swipe applies only to the displayed state in this session. Keep claims until run finish:
+     * even a failed request could have reached the provider. No speculative cancel/defer is published.
+     */
+    internal suspend fun swipeLiveGuidance(
+        target: LiveGuidanceActionTarget,
+        defer: Boolean,
+        persist: suspend (Conversation) -> Boolean,
+    ): Boolean {
+        val expectedIncarnation = incarnation
+        return writeMutex.withLock {
+            if (incarnation != expectedIncarnation) return@withLock false
+            val before = state.value
+            val config = before.config ?: return@withLock false
+            val entries = config.liveGuidanceEntries()
+            val current = entries.firstOrNull { it.actionTarget == target } ?: return@withLock false
+            val claims = _liveGuidanceClaims.value
+            val pending = claims != null && current.isAwaitingOutput(claims.runId)
+            if ((!pending && !current.canSwipe) || claims?.ids?.contains(current.id) == true) {
+                return@withLock false
+            }
+            val missed = if (pending) current.finish(checkNotNull(claims).runId) else current
+            val replacement = if (defer) missed.armForNextRun() else null
+            val updated = config.withLiveGuidanceEntries(entries.mapNotNull {
+                if (it.id == current.id) replacement else it
+            })
+            // Persist before removing/arming text, and complete the in-memory commit even if the
+            // caller is cancelled during this write. On failure retain the full note but make it
+            // NOT_USED, so this (and any unrelated later run) cannot disclose it.
+            withContext(NonCancellable) {
+                var retained = false
+                try {
+                    retained = persist(before.copy(config = updated))
+                    retained
+                } finally {
+                    if (retained || pending) {
+                        val nextConfig = if (retained) updated else config.withLiveGuidanceEntries(
+                            entries.map { if (it.id == current.id) missed else it },
+                        )
+                        val (previous, published) = synchronized(this@ConversationSession) {
+                            val previous = _state.value
+                            previous to update { it.copy(config = nextConfig) }
+                        }
+                        if (retained && existsInDatabase && lastWritten === before && previous === before) {
+                            lastWritten = published
+                        }
+                    }
+                }
+            }
         }
     }
-
-    internal fun liveGuidanceRequestMessage(runId: Uuid): UIMessage? =
-        liveGuidanceRequestMessages(runId).firstOrNull()
-
-    internal fun liveGuidanceRequestMessages(runId: Uuid): List<UIMessage> =
-        liveGuidanceCheckpoint?.takeIf { it.first == runId }?.second.orEmpty()
 
     // 生成任务（内聚在 session 中）
     private val _generationJob = MutableStateFlow<Job?>(null)

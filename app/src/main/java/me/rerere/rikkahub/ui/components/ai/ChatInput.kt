@@ -113,6 +113,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Guidance
 import me.rerere.rikkahub.data.model.LiveGuidance
+import me.rerere.rikkahub.data.model.LiveGuidanceActionTarget
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.TodoItem
 import me.rerere.rikkahub.data.model.TodoStatus
@@ -193,8 +194,9 @@ fun ChatInput(
     conversationId: Uuid? = null,
     liveGuidanceEntries: List<LiveGuidance> = emptyList(),
     onLiveGuidanceModeChange: (Uuid, Boolean) -> Unit = { _, _ -> },
-    onLiveGuidanceNextMessage: (Uuid) -> Unit = {},
-    onLiveGuidanceCancel: (Uuid) -> Unit = {},
+    onLiveGuidanceNextMessage: (LiveGuidanceActionTarget) -> Unit = {},
+    onLiveGuidanceCancel: (LiveGuidanceActionTarget) -> Unit = {},
+    liveGuidanceSwipeIds: Set<Uuid> = emptySet(),
     liveGuidanceActionIds: Set<Uuid> = emptySet(),
     runningBackgroundTasks: Int = 0,
     onShowBackgroundTasks: () -> Unit = {},
@@ -376,6 +378,7 @@ fun ChatInput(
                     onNextMessage = onLiveGuidanceNextMessage,
                     onCancel = onLiveGuidanceCancel,
                     actionIds = liveGuidanceActionIds,
+                    swipeIds = liveGuidanceSwipeIds,
                     modifier = Modifier.adaptiveHorizontalPadding(12.dp),
                 )
             }

@@ -67,11 +67,12 @@ import kotlin.uuid.Uuid
 fun LiveGuidanceRows(
     entries: List<LiveGuidance>,
     onModeChange: (Uuid, Boolean) -> Unit,
-    onNextMessage: (Uuid) -> Unit,
-    onCancel: (Uuid) -> Unit,
+    onNextMessage: (LiveGuidanceActionTarget) -> Unit,
+    onCancel: (LiveGuidanceActionTarget) -> Unit,
     modifier: Modifier = Modifier,
     conversationId: Uuid? = null,
     actionIds: Set<Uuid> = emptySet(),
+    swipeIds: Set<Uuid> = emptySet(),
 ) {
     if (entries.isEmpty()) return
     key(conversationId) {
@@ -89,6 +90,7 @@ fun LiveGuidanceRows(
                             onNextMessage = onNextMessage,
                             onCancel = onCancel,
                             actionPending = item.id in actionIds,
+                            pendingSwipeAllowed = item.id in swipeIds,
                         )
                     }
                 }
@@ -102,17 +104,19 @@ fun LiveGuidanceRows(
 fun LiveGuidancePanel(
     guidance: LiveGuidance?,
     onModeChange: (Uuid, Boolean) -> Unit,
-    onNextMessage: (Uuid) -> Unit,
+    onNextMessage: (LiveGuidanceActionTarget) -> Unit,
     modifier: Modifier = Modifier,
-    onCancel: (Uuid) -> Unit = {},
+    onCancel: (LiveGuidanceActionTarget) -> Unit = {},
     actionPending: Boolean = false,
+    pendingSwipeAllowed: Boolean = false,
 ) {
     val item = guidance ?: return
     var showDetails by remember(item.id) { mutableStateOf(false) }
     val persistent = item.mode == LiveGuidanceMode.PERSISTENT
     val canChangeMode = item.runId != null && !item.finishLocked &&
         item.delivery != LiveGuidanceDelivery.NOT_USED && !actionPending
-    val swipeEligible = item.delivery == LiveGuidanceDelivery.WAITING && item.canSwipe
+    val target = item.actionTarget
+    val swipeEligible = pendingSwipeAllowed && item.delivery == LiveGuidanceDelivery.WAITING
     val canSwipe = swipeEligible && !actionPending
     val modeLabel = stringResource(
         if (persistent) R.string.chat_page_busy_persistent else R.string.chat_page_busy_temporary
@@ -133,16 +137,19 @@ fun LiveGuidancePanel(
     val edgePx = with(density) { 24.dp.toPx() }
     val revealPx = with(density) { 112.dp.toPx() }.coerceAtMost(widthPx * 0.4f).coerceAtLeast(1f)
     val thresholdPx = maxOf(revealPx * 1.6f, widthPx * 0.65f)
-    var swipe by remember(item.id, canSwipe, widthPx) { mutableStateOf(LiveGuidanceSwipeState()) }
+    var swipe by remember(target, canSwipe, widthPx) { mutableStateOf(LiveGuidanceSwipeState()) }
     val currentCancel by rememberUpdatedState(onCancel)
     val currentNext by rememberUpdatedState(onNextMessage)
-    val dispatch: (LiveGuidanceSwipeAction) -> Unit = { action ->
-        swipe = swipe.cancel()
-        if (canSwipe) {
+    val dispatch: (LiveGuidanceActionTarget, LiveGuidanceSwipeAction) -> Boolean = { expected, action ->
+        if (expected != target || !canSwipe) {
+            false
+        } else {
+            swipe = swipe.cancel()
             when (action) {
-                LiveGuidanceSwipeAction.CANCEL -> currentCancel(item.id)
-                LiveGuidanceSwipeAction.NEXT_MESSAGE -> currentNext(item.id)
+                LiveGuidanceSwipeAction.CANCEL -> currentCancel(expected)
+                LiveGuidanceSwipeAction.NEXT_MESSAGE -> currentNext(expected)
             }
+            true // Handled, not a persistence or provider-delivery acknowledgement.
         }
     }
     val currentDispatch by rememberUpdatedState(dispatch)
@@ -156,10 +163,10 @@ fun LiveGuidancePanel(
                     contentDescription = "$modeLabel · $statusLabel: ${item.content}"
                     customActions = listOf(
                         CustomAccessibilityAction(cancelLabel) {
-                            currentDispatch(LiveGuidanceSwipeAction.CANCEL); true
+                            currentDispatch(target, LiveGuidanceSwipeAction.CANCEL)
                         },
                         CustomAccessibilityAction(nextLabel) {
-                            currentDispatch(LiveGuidanceSwipeAction.NEXT_MESSAGE); true
+                            currentDispatch(target, LiveGuidanceSwipeAction.NEXT_MESSAGE)
                         },
                     )
                 }
@@ -167,7 +174,7 @@ fun LiveGuidancePanel(
                     stateDescription = if (swipe.offset > 0) releaseCancelLabel else releaseNextLabel
                 }
             }
-            .pointerInput(item.id, canSwipe, widthPx) {
+            .pointerInput(target, canSwipe, widthPx) {
                 if (!canSwipe) return@pointerInput
                 try {
                     awaitEachGesture {
@@ -193,7 +200,7 @@ fun LiveGuidancePanel(
                                         change.consume()
                                         val release = swipe.release(revealPx, thresholdPx)
                                         swipe = release.state
-                                        release.action?.let { currentDispatch(it) }
+                                        release.action?.let { currentDispatch(target, it) }
                                     }
                                     break
                                 }
@@ -230,7 +237,7 @@ fun LiveGuidancePanel(
                         .fillMaxHeight().clip(MaterialTheme.shapes.medium),
                 ) {
                     TextButton(
-                        onClick = { currentDispatch(if (right) LiveGuidanceSwipeAction.CANCEL else LiveGuidanceSwipeAction.NEXT_MESSAGE) },
+                        onClick = { currentDispatch(target, if (right) LiveGuidanceSwipeAction.CANCEL else LiveGuidanceSwipeAction.NEXT_MESSAGE) },
                         modifier = Modifier.width(with(density) { revealPx.toDp() }).fillMaxHeight()
                             .testTag(if (right) "live_guidance_swipe_cancel" else "live_guidance_swipe_next"),
                     ) {
@@ -304,7 +311,7 @@ fun LiveGuidancePanel(
                     // Ordinary focusable controls are the keyboard/switch-access alternative to swiping.
                     if (swipeEligible) {
                         TextButton(
-                            onClick = { currentDispatch(LiveGuidanceSwipeAction.CANCEL); showDetails = false },
+                            onClick = { currentDispatch(target, LiveGuidanceSwipeAction.CANCEL); showDetails = false },
                             enabled = !actionPending,
                             modifier = Modifier.heightIn(min = 48.dp).testTag("live_guidance_details_cancel"),
                         ) { Text(cancelLabel) }
@@ -315,8 +322,8 @@ fun LiveGuidancePanel(
                 if (item.delivery == LiveGuidanceDelivery.NOT_USED || swipeEligible) {
                     TextButton(
                         onClick = {
-                            if (swipeEligible) currentDispatch(LiveGuidanceSwipeAction.NEXT_MESSAGE)
-                            else onNextMessage(item.id)
+                            if (swipeEligible) currentDispatch(target, LiveGuidanceSwipeAction.NEXT_MESSAGE)
+                            else onNextMessage(target)
                             showDetails = false
                         },
                         enabled = !actionPending,

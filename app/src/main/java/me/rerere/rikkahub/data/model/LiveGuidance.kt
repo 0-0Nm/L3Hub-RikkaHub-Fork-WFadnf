@@ -43,9 +43,12 @@ data class LiveGuidance(
     /** The originating run finished; its last accepted mode choice must remain unchanged. */
     val finishLocked: Boolean = false,
 ) {
-    /** Only a missed/deferred entry offers the next-user-turn swipe action. */
+    /** Missed entries can be recovered without an active run. Pending actions require a session claim check. */
     val canSwipe: Boolean
         get() = delivery == LiveGuidanceDelivery.NOT_USED
+
+    val actionTarget: LiveGuidanceActionTarget
+        get() = LiveGuidanceActionTarget(id, runId, delivery)
 
     /** Bind an explicitly armed next-message item when its real run starts. */
     fun beginRun(runId: Uuid): LiveGuidance =
@@ -116,3 +119,10 @@ data class LiveGuidance(
             LiveGuidanceDelivery.NOT_USED -> false
         }
 }
+
+/** Identity of the state the user acted on, not just the durable ID that survives deferral. */
+data class LiveGuidanceActionTarget(
+    val id: Uuid,
+    val runId: Uuid?,
+    val delivery: LiveGuidanceDelivery,
+)

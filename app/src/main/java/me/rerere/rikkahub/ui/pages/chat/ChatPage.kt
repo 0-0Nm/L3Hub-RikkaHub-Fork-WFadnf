@@ -514,6 +514,12 @@ private fun ChatPageContent(
 ) {
     val scope = rememberCoroutineScope()
     val sessionActivity by vm.sessionActivity.collectAsStateWithLifecycle()
+    val liveGuidanceClaims by vm.liveGuidanceClaims.collectAsStateWithLifecycle()
+    val liveGuidanceEntries = conversation.config?.liveGuidanceEntries().orEmpty()
+    val liveGuidanceSwipeIds = liveGuidanceClaims?.let { claims ->
+        liveGuidanceEntries.filter { it.isAwaitingOutput(claims.runId) && it.id !in claims.ids }
+            .map { it.id }.toSet()
+    }.orEmpty()
     // 顶栏胶囊的文件夹选单：按会话自己的助手取，不看抽屉里当前选中的助手
     val conversationFolders by vm.folders.collectAsStateWithLifecycle()
     val toaster = LocalToaster.current
@@ -742,7 +748,7 @@ private fun ChatPageContent(
 
     // 清单与引导：横屏收进右栏，出现时把标签页开出来，不抢当前看板
     val hasStatusContent = conversation.todos.isNotEmpty() || messageQueue.guidances.isNotEmpty() ||
-        conversation.config?.liveGuidanceEntries().orEmpty().isNotEmpty()
+        liveGuidanceEntries.isNotEmpty()
     LaunchedEffect(threePane, hasStatusContent) {
         if (!threePane || !hasStatusContent) return@LaunchedEffect
         if (openPaneNames.none { it == ChatSidePane.Status.name }) {
@@ -885,10 +891,11 @@ private fun ChatPageContent(
             onGuidanceToggleMode = vm::toggleGuidanceMode,
             onGuidanceRemove = vm::removeGuidance,
             conversationId = conversation.id,
-            liveGuidanceEntries = conversation.config?.liveGuidanceEntries().orEmpty(),
+            liveGuidanceEntries = liveGuidanceEntries,
             onLiveGuidanceModeChange = vm::setLiveGuidancePersistence,
             onLiveGuidanceNextMessage = vm::armLiveGuidanceForNextMessage,
             onLiveGuidanceCancel = vm::cancelLiveGuidance,
+            liveGuidanceSwipeIds = liveGuidanceSwipeIds,
             liveGuidanceActionIds = vm.liveGuidanceActionIds,
             runningBackgroundTasks = backgroundTasks.count { it.status == BackgroundShellStatus.RUNNING },
             onShowBackgroundTasks = { openPane(ChatSidePane.BackgroundTasks) },
@@ -1213,10 +1220,11 @@ private fun ChatPageContent(
                         onGuidanceToggleMode = vm::toggleGuidanceMode,
                         onGuidanceRemove = vm::removeGuidance,
                         conversationId = conversation.id,
-                        liveGuidanceEntries = conversation.config?.liveGuidanceEntries().orEmpty(),
+                        liveGuidanceEntries = liveGuidanceEntries,
                         onLiveGuidanceModeChange = vm::setLiveGuidancePersistence,
                         onLiveGuidanceNextMessage = vm::armLiveGuidanceForNextMessage,
                         onLiveGuidanceCancel = vm::cancelLiveGuidance,
+                        liveGuidanceSwipeIds = liveGuidanceSwipeIds,
                         liveGuidanceActionIds = vm.liveGuidanceActionIds,
                         modifier = Modifier.fillMaxSize(),
                     )

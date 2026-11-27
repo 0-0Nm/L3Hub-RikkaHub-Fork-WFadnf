@@ -269,9 +269,6 @@ class ChatRequestFactory(
         val hooks = object : AgentHooks {
             override suspend fun prepareStep(messages: List<UIMessage>): StepRequest {
                 Log.i(TAG, "prepareStep: ${turn.model.id}")
-                // Request-scoped messages are re-read at every checkpoint. The supplier owns scope;
-                // replacing a live note must also remove its predecessor from subsequent requests.
-                val injectedMessages = pendingInjections()
                 val step = buildStep(
                     turn = turn,
                     messages = messages,
@@ -279,6 +276,8 @@ class ChatRequestFactory(
                     todoRemindersEnabled = liveAssistant().todoReminderEnabled,
                     todos = liveTodos(),
                 )
+                // Claim only as we assemble the request, after the suspending input preparation.
+                val injectedMessages = pendingInjections()
                 return if (injectedMessages.isEmpty()) {
                     step
                 } else {

@@ -41,6 +41,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Folder
 import me.rerere.rikkahub.data.model.Guidance
 import me.rerere.rikkahub.data.model.GuidanceMode
+import me.rerere.rikkahub.data.model.LiveGuidanceActionTarget
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.NodeFavoriteTarget
 import me.rerere.rikkahub.data.model.TodoItem
@@ -385,12 +386,14 @@ class ChatVM(
     var liveGuidanceActionIds by mutableStateOf<Set<Uuid>>(emptySet())
         private set
 
-    fun cancelLiveGuidance(id: Uuid) = performLiveGuidanceAction(id) { conversationId ->
-        chatService.cancelLiveGuidance(conversationId, id)
+    internal val liveGuidanceClaims = chatService.getLiveGuidanceClaims(_conversationId)
+
+    fun cancelLiveGuidance(target: LiveGuidanceActionTarget) = performLiveGuidanceAction(target.id) { conversationId ->
+        chatService.cancelLiveGuidance(conversationId, target)
     }
 
-    fun armLiveGuidanceForNextMessage(id: Uuid) = performLiveGuidanceAction(id) { conversationId ->
-        chatService.armLiveGuidanceForNextMessage(conversationId, id)
+    fun armLiveGuidanceForNextMessage(target: LiveGuidanceActionTarget) = performLiveGuidanceAction(target.id) { conversationId ->
+        chatService.armLiveGuidanceForNextMessage(conversationId, target)
     }
 
     /** ID-scoped, service-owned mutation. Never remove/reorder rows optimistically or touch inbox. */

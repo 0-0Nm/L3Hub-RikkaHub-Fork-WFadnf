@@ -9,6 +9,7 @@ import me.rerere.rikkahub.data.model.ConversationConfig
 import me.rerere.rikkahub.data.model.LiveGuidance
 import me.rerere.rikkahub.data.model.LiveGuidanceDelivery
 import me.rerere.rikkahub.data.model.LiveGuidanceMode
+import me.rerere.rikkahub.data.model.withLiveGuidanceEntries
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -56,40 +57,40 @@ class LiveGuidanceSessionTest {
         val oldRun = Uuid.random()
         val newRun = Uuid.random()
         val session = ConversationSession(id, Conversation.ofId(id), this, FakeConversationStore(), {})
-        session.initialize(load = { null }, create = { Conversation.ofId(id) })
+        val note = LiveGuidance(content = "claimed", runId = oldRun)
+        session.initialize(load = { Conversation.ofId(id).copy(config = ConversationConfig(liveGuidance = note)) })
 
         session.startGenerationRun(oldRun)
-        val checkpoint = UIMessage.user("claimed")
-        session.updateLiveGuidanceCheckpoint(oldRun, checkpoint)
+        assertEquals(listOf(note.id), session.claimLiveGuidanceRequest(oldRun).map { it.id })
         session.finishGenerationRun(newRun)
         assertEquals(oldRun, session.generationRunId)
-        assertEquals(checkpoint, session.liveGuidanceRequestMessage(oldRun))
+        assertEquals(setOf(note.id), session.liveGuidanceClaims.value?.ids)
         session.finishGenerationRun(oldRun)
         assertNull(session.generationRunId)
-        assertNull(session.liveGuidanceRequestMessage(oldRun))
+        assertEquals(emptyList<UIMessage>(), session.claimLiveGuidanceRequest(oldRun))
 
         session.startGenerationRun(newRun)
         assertEquals(newRun, session.generationRunId)
+        assertEquals(emptySet<Uuid>(), session.liveGuidanceClaims.value?.ids)
         session.finishGenerationRun(newRun)
     }
 
     @Test
-    fun `checkpoint keeps ordered ids and never leaks across runs`() = runBlocking {
+    fun `snapshot keeps ordered ids and never leaks across runs`() = runBlocking {
         val id = Uuid.random()
-        val session = ConversationSession(id, Conversation.ofId(id), this, FakeConversationStore(), {})
-        session.initialize(load = { null }, create = { Conversation.ofId(id) })
         val oldRun = Uuid.random()
         val newRun = Uuid.random()
-        val first = UIMessage.user("first").copy(id = Uuid.random())
-        val second = UIMessage.user("second").copy(id = Uuid.random())
+        val first = LiveGuidance(content = "first", runId = oldRun)
+        val second = LiveGuidance(content = "second", runId = oldRun)
+        val initial = Conversation.ofId(id).copy(config = ConversationConfig().withLiveGuidanceEntries(listOf(first, second)))
+        val session = ConversationSession(id, initial, this, FakeConversationStore(), {})
+        session.initialize(load = { initial })
         session.startGenerationRun(oldRun)
 
-        session.updateLiveGuidanceCheckpoints(oldRun, listOf(first, second, first))
-
-        assertEquals(listOf(first, second), session.liveGuidanceRequestMessages(oldRun))
-        assertEquals(emptyList<UIMessage>(), session.liveGuidanceRequestMessages(newRun))
+        assertEquals(listOf(first.id, second.id), session.claimLiveGuidanceRequest(oldRun).map { it.id })
+        assertEquals(emptyList<UIMessage>(), session.claimLiveGuidanceRequest(newRun))
         session.finishGenerationRun(oldRun)
-        assertEquals(emptyList<UIMessage>(), session.liveGuidanceRequestMessages(oldRun))
+        assertEquals(emptyList<UIMessage>(), session.claimLiveGuidanceRequest(oldRun))
     }
 
     @Test

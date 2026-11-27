@@ -47,8 +47,9 @@ class LiveGuidanceRowsTest {
             CompositionLocalProvider(LocalLayoutDirection provides if (rtl) LayoutDirection.Rtl else LayoutDirection.Ltr) {
                 MaterialTheme {
                     Box(Modifier.width(320.dp)) {
-                        LiveGuidancePanel(item, { _, _ -> }, { calls += "next" to it },
-                            onCancel = { calls += "cancel" to it }, actionPending = busy)
+                        LiveGuidancePanel(item, { _, _ -> }, { calls += "next" to it.id },
+                            onCancel = { calls += "cancel" to it.id }, actionPending = busy,
+                            pendingSwipeAllowed = item.delivery == LiveGuidanceDelivery.WAITING)
                     }
                 }
             }
@@ -150,6 +151,36 @@ class LiveGuidanceRowsTest {
         rule.runOnIdle { assertTrue(calls.isEmpty()) }
         rule.onNodeWithTag("live_guidance_swipe_cancel").assertDoesNotExist()
         rule.onNodeWithTag("live_guidance_swipe_next").assertDoesNotExist()
+    }
+
+    @Test fun claimDuringDragDisablesStaleGestureAndAccessibilityAction() {
+        val item = pending()
+        val allowed = mutableStateOf(true)
+        rule.setContent {
+            MaterialTheme {
+                Box(Modifier.width(320.dp)) {
+                    LiveGuidancePanel(
+                        item, { _, _ -> }, { calls += "next" to it.id },
+                        onCancel = { calls += "cancel" to it.id }, pendingSwipeAllowed = allowed.value,
+                    )
+                }
+            }
+        }
+        val card = rule.onNodeWithTag("live_guidance_card")
+        val staleAction = card.fetchSemanticsNode().config[SemanticsActions.CustomActions].first()
+        card.performTouchInput {
+            down(Offset(width * 0.12f, height / 2f))
+            moveTo(Offset(width * 0.94f, height / 2f), 400)
+        }
+        rule.runOnIdle { allowed.value = false }
+        card.performTouchInput { up() }
+        rule.runOnIdle {
+            assertTrue(!staleAction.action())
+            assertTrue(calls.isEmpty())
+        }
+        rule.onNodeWithTag("live_guidance_details").performClick()
+        rule.onNodeWithTag("live_guidance_details_cancel").assertDoesNotExist()
+        rule.onNodeWithTag("live_guidance_next").assertDoesNotExist()
     }
 
     @Test fun deliveredItemHasNoSwipeActionsButStillHasDetails() {

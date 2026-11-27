@@ -16,6 +16,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Guidance
 import me.rerere.rikkahub.data.model.LiveGuidance
+import me.rerere.rikkahub.data.model.LiveGuidanceActionTarget
 import me.rerere.rikkahub.data.model.TodoItem
 import me.rerere.rikkahub.data.model.TodoStatus
 import me.rerere.rikkahub.ui.components.ai.LiveGuidanceRows
@@ -42,8 +43,9 @@ internal fun ConversationStatusPane(
     conversationId: Uuid,
     liveGuidanceEntries: List<LiveGuidance>,
     onLiveGuidanceModeChange: (Uuid, Boolean) -> Unit,
-    onLiveGuidanceNextMessage: (Uuid) -> Unit,
-    onLiveGuidanceCancel: (Uuid) -> Unit,
+    onLiveGuidanceNextMessage: (LiveGuidanceActionTarget) -> Unit,
+    onLiveGuidanceCancel: (LiveGuidanceActionTarget) -> Unit,
+    liveGuidanceSwipeIds: Set<Uuid> = emptySet(),
     liveGuidanceActionIds: Set<Uuid>,
     modifier: Modifier = Modifier,
 ) {
@@ -99,6 +101,7 @@ internal fun ConversationStatusPane(
             onNextMessage = onLiveGuidanceNextMessage,
             onCancel = onLiveGuidanceCancel,
             actionIds = liveGuidanceActionIds,
+            swipeIds = liveGuidanceSwipeIds,
             modifier = Modifier.fillMaxWidth(),
         )
     }
