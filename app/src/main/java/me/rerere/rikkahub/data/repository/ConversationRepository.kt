@@ -522,7 +522,7 @@ class ConversationRepository(
     /**
      * 只更新会话持有的配置（含注入绑定和工作目录），不重写消息节点。
      */
-    suspend fun updateConversationConfig(conversation: Conversation) {
+    suspend fun updateConversationConfig(conversation: Conversation): Boolean =
         conversationDAO.updateConfig(
             id = conversation.id.toString(),
             config = conversation.config?.let { JsonInstant.encodeToString(it) } ?: "",
@@ -530,8 +530,7 @@ class ConversationRepository(
             lorebookIds = JsonInstant.encodeToString(conversation.lorebookIds),
             workspaceCwd = conversation.workspaceCwd ?: "",
             workspaceCwds = JsonInstant.encodeToString(conversation.workspaceCwds),
-        )
-    }
+        ) == 1
 
     suspend fun updateTitle(conversationId: Uuid, title: String) {
         conversationDAO.updateTitle(conversationId.toString(), title)

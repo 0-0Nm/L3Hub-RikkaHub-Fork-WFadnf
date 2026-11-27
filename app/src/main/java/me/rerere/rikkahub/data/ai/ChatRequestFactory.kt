@@ -231,6 +231,7 @@ class ChatRequestFactory(
      * 本轮交给 runAgent 的请求和钩子。[messages] 的最后一条是助手消息时从它继续，否则新建一条助手消息。
      * [processingStatus] 用来显示 OCR 这类输入转换的进度；[takePendingParts] 取出要在请求模型前写进助手消息的
      * 通知和合成工具调用（引导、任务清单），参数是本轮正在写的助手消息，第一步还没有内容时为 null。
+     * [pendingInjections] 每个请求重新读取，只负责请求级纯文本；其作用域由调用方管理，不写入会话历史。
      * [pauseAfterTools] 在一批工具执行完之后调用，返回 true 时这次运行以 Paused 结束。
      */
     fun createAgent(
@@ -238,6 +239,7 @@ class ChatRequestFactory(
         messages: List<UIMessage>,
         processingStatus: MutableStateFlow<String?>,
         pendingInjections: suspend () -> List<UIMessage> = { emptyList() },
+        acknowledgeInjection: suspend (Uuid) -> Unit = {},
         pauseAfterTools: (UIMessage) -> Boolean = { false },
         takePendingParts: suspend (UIMessage?) -> List<UIMessagePart> = { emptyList() },
         // 清单的开关、间隔和内容都按最新状态读：一轮可能跑很久，用户中途关掉插入要当步生效。
@@ -245,7 +247,6 @@ class ChatRequestFactory(
         liveAssistant: suspend () -> Assistant = { turn.assistant },
         liveTodos: suspend () -> List<TodoItem> = { turn.todos },
     ): Pair<AgentRequest, AgentHooks> {
-        val injectedMessages = mutableListOf<UIMessage>()
         val request = AgentRequest(
             provider = usageRecorder.wrap(
                 providerManager.getProviderByType(turn.providerSetting),
@@ -265,10 +266,9 @@ class ChatRequestFactory(
         val hooks = object : AgentHooks {
             override suspend fun prepareStep(messages: List<UIMessage>): StepRequest {
                 Log.i(TAG, "prepareStep: ${turn.model.id}")
-                // 外部注入消息在每一步请求前取一次，取到后这一步之后的步骤也要继续带上。
-                // 按 id 去重，同一条不会进两次
-                injectedMessages += pendingInjections()
-                    .filterNot { message -> injectedMessages.any { it.id == message.id } }
+                // Request-scoped messages are re-read at every checkpoint. The supplier owns scope;
+                // replacing a live note must also remove its predecessor from subsequent requests.
+                val injectedMessages = pendingInjections()
                 val step = buildStep(
                     turn = turn,
                     messages = messages,
@@ -279,7 +279,12 @@ class ChatRequestFactory(
                 return if (injectedMessages.isEmpty()) {
                     step
                 } else {
-                    step.copy(messages = step.messages + injectedMessages)
+                    step.copy(
+                        messages = step.messages.withRequestInjections(injectedMessages),
+                        onProviderOutput = {
+                            injectedMessages.map { it.id }.distinct().forEach { acknowledgeInjection(it) }
+                        },
+                    )
                 }
             }
 

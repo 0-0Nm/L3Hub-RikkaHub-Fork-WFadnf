@@ -276,4 +276,17 @@ class ConversationInboxTest {
         assertTrue(removed is QueuedNotice)
         assertTrue(inbox.takeNotices().isEmpty())
     }
+
+    @Test
+    fun `explicit after-current message keeps complete parts and queue semantics`() {
+        val inbox = ConversationInbox()
+        val parts = listOf(UIMessagePart.Text("next"), UIMessagePart.Image("file:///tmp/attachment.png"))
+
+        inbox.enqueue(parts, afterCurrent = true)
+
+        val queued = inbox.state.value.messages.single()
+        assertTrue(queued.afterCurrent)
+        assertEquals(parts, queued.parts)
+        assertFalse(queued.sentWithoutQueue)
+    }
 }

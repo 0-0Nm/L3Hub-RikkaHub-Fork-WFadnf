@@ -34,6 +34,37 @@ class ChatInputState {
         textContent.setTextAndPlaceCursorAtEnd("")
     }
 
+    /** Capture exactly what the chooser displays, not whatever exists when an async call finishes. */
+    fun captureSendSnapshot(conversationId: Uuid) = ComposerSendSnapshot(
+        conversationId = conversationId,
+        text = textContent.text.toString(),
+        textVersion = textContent.text,
+        parts = getContents().toList(),
+        attachments = messageContent.toList(),
+        attachmentVersion = messageContent,
+        editingMessage = editingMessage,
+        reasoning = editingReasoning?.text?.toString(),
+        reasoningVersion = editingReasoning?.text,
+    )
+
+    /** False/rejected calls, changed conversations, edits and new attachments never clear a draft. */
+    fun clearAcceptedSnapshot(
+        snapshot: ComposerSendSnapshot,
+        currentConversationId: Uuid,
+        accepted: Boolean,
+        textOnly: Boolean = false,
+    ): Boolean {
+        if (!accepted || snapshot.conversationId != currentConversationId ||
+            snapshot.textVersion !== textContent.text || snapshot.text != textContent.text.toString() ||
+            snapshot.attachmentVersion !== messageContent ||
+            snapshot.parts != getContents() || snapshot.attachments != messageContent ||
+            snapshot.editingMessage != editingMessage || snapshot.reasoningVersion !== editingReasoning?.text ||
+            snapshot.reasoning != editingReasoning?.text?.toString()
+        ) return false
+        if (textOnly) clearText() else clearInput()
+        return true
+    }
+
     fun isEditing() = editingMessage != null
 
     fun setMessageText(text: String) {

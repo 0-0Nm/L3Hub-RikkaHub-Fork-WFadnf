@@ -165,7 +165,7 @@ interface ConversationDAO {
         lorebookIds: String,
         workspaceCwd: String,
         workspaceCwds: String,
-    )
+    ): Int
 
     @Query("UPDATE conversationentity SET folder_id = '' WHERE folder_id = :folderId")
     suspend fun clearFolder(folderId: String)

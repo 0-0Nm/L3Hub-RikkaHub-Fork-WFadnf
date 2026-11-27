@@ -48,6 +48,7 @@ import me.rerere.rikkahub.data.ai.ConversationMetaGenerator
 import me.rerere.rikkahub.data.ai.MemoryConsolidationScheduler
 import me.rerere.rikkahub.data.ai.TranslationHandler
 import me.rerere.rikkahub.data.ai.guidanceToolPart
+import me.rerere.rikkahub.data.ai.requestMessage
 import me.rerere.rikkahub.data.ai.isInjectedTool
 import me.rerere.rikkahub.data.ai.stepsSinceLastGuidance
 import me.rerere.rikkahub.data.ai.stepsSinceLastTodoReminder
@@ -81,6 +82,9 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Guidance
 import me.rerere.rikkahub.data.model.GuidanceMode
+import me.rerere.rikkahub.data.model.LiveGuidance
+import me.rerere.rikkahub.data.model.LiveGuidanceDelivery
+import me.rerere.rikkahub.data.model.LiveGuidanceMode
 import me.rerere.rikkahub.data.model.TodoItem
 import me.rerere.rikkahub.data.model.bindConfig
 import me.rerere.rikkahub.data.model.cancelInterruptedTools
@@ -97,6 +101,7 @@ import me.rerere.rikkahub.data.model.insertContextCheckpoint
 import me.rerere.rikkahub.data.model.isAwaitingToolApproval
 import me.rerere.rikkahub.data.model.isContextLimitReached
 import me.rerere.rikkahub.data.model.lastContextTokens
+import me.rerere.rikkahub.data.model.liveGuidanceRetryTarget
 import me.rerere.rikkahub.data.model.localFileUrls
 import me.rerere.rikkahub.data.model.replaceUserRegexes
 import me.rerere.rikkahub.data.model.selectBranch
@@ -560,8 +565,14 @@ class ChatService(
         val conversation = conversationRepo.getConversationById(conversationId) ?: return null
         // settingsFlow 在启动初期还是占位值，固定配置必须基于真实设置
         val bound = conversation.bindConfig(settingsStore.awaitLoaded())
-        if (bound !== conversation) conversationRepo.updateConversationConfig(bound)
-        return bound
+        val recoveredLive = bound.config?.liveGuidance?.recoverAfterReopen()
+        val recovered = if (recoveredLive == bound.config?.liveGuidance) {
+            bound
+        } else {
+            bound.copy(config = bound.config?.copy(liveGuidance = recoveredLive))
+        }
+        if (recovered !== conversation) conversationRepo.updateConversationConfig(recovered)
+        return recovered
     }
 
     /**
@@ -681,6 +692,32 @@ class ChatService(
      * 或者队列暂停又压着旧消息时返回 false；调用方据此决定要不要把内容留着下次再送
      * （子代理结果回投就是这么用的）
      */
+    /**
+     * Queue a real user turn after the current work without interrupting it.
+     * Unlike [sendMessage], this explicit choice remains a queue operation when the ordinary
+     * queue preference is disabled. Existing pause/context admission failures still return false
+     * so the composer can preserve the complete parts, including attachments.
+     */
+    fun sendAfterCurrent(conversationId: Uuid, content: List<UIMessagePart>): Boolean {
+        if (content.isEmptyInputMessage()) return false
+        val session = sessionManager.getOrCreate(conversationId)
+        return synchronized(session) {
+            if (session.maxContextReached() && !autoCompressEnabled(session)) {
+                reportContextLimit(conversationId)
+                return@synchronized false
+            }
+            val inbox = session.inbox.state.value
+            if (inbox.paused && inbox.messages.isNotEmpty()) {
+                reportUnqueueableSend(conversationId, R.string.chat_page_voice_resume_queue)
+                return@synchronized false
+            }
+            if (inbox.messages.isEmpty()) session.inbox.resume()
+            session.inbox.enqueue(content, afterCurrent = true)
+            dispatchInbox(conversationId)
+            true
+        }
+    }
+
     fun sendMessage(
         conversationId: Uuid,
         content: List<UIMessagePart>,
@@ -743,7 +780,7 @@ class ChatService(
         }
         return when (decideUnqueuedSend(
             notice = notice,
-            hasJob = session.getJob() != null,
+            hasJob = session.hasGenerationWork,
             awaitingApproval = session.state.value.isAwaitingToolApproval,
         )) {
             UnqueuedSend.DeferNotice -> false
@@ -1122,6 +1159,119 @@ class ChatService(
     }
 
     /**
+     * Submit pure-text live steering without dispatching, cancelling, or changing the ordinary inbox.
+     * Idle submissions stay NOT_USED until the user explicitly arms next-message delivery or retry.
+     */
+    suspend fun addLiveGuidance(
+        conversationId: Uuid,
+        content: String,
+        persistent: Boolean = false,
+    ): Boolean {
+        val text = content.trim()
+        if (text.isEmpty()) return false
+        return withLoadedSession(conversationId) { session ->
+            val settings = settingsStore.awaitLoaded()
+            session.updateMetadataChecked(
+                transform = { latest ->
+                    val bound = latest.bindConfig(settings)
+                    val config = checkNotNull(bound.config)
+                    val runId = session.generationRunId
+                    bound.copy(
+                        config = config.copy(
+                            liveGuidance = LiveGuidance(
+                                content = text,
+                                mode = if (persistent) LiveGuidanceMode.PERSISTENT else LiveGuidanceMode.TEMPORARY,
+                                delivery = if (runId == null) {
+                                    LiveGuidanceDelivery.NOT_USED
+                                } else {
+                                    LiveGuidanceDelivery.WAITING
+                                },
+                                runId = runId,
+                                finishLocked = runId == null,
+                            )
+                        )
+                    )
+                },
+                persist = conversationRepo::updateConversationConfig,
+            )
+        }
+    }
+
+    /** Explicit target value avoids stale rapid-toggle snapshots; the card keeps the same ID. */
+    suspend fun setLiveGuidancePersistence(
+        conversationId: Uuid,
+        guidanceId: Uuid,
+        persistent: Boolean,
+    ): Boolean = withLoadedSession(conversationId) { session ->
+        session.mutateLiveGuidance { current ->
+            current
+                ?.takeIf { it.id == guidanceId }
+                ?.withPersistence(persistent, session.generationRunId)
+                ?: current
+        }
+    }
+
+    /** Arm a missed note for the next real run. This never opens a model call by itself. */
+    suspend fun armLiveGuidanceForNextMessage(conversationId: Uuid): Boolean =
+        withLoadedSession(conversationId) { session ->
+            session.mutateLiveGuidance { current -> current?.armForNextRun() }
+        }
+
+    /** Explicit retry: re-arm the same note, then use the existing regenerate route. */
+    suspend fun retryLiveGuidance(conversationId: Uuid): Boolean {
+        val reserved = withLoadedSession(conversationId) { session ->
+            if (!session.reserveGenerationSlot()) return@withLoadedSession false
+            val target = session.state.value.liveGuidanceRetryTarget()
+            val armed = target != null && session.mutateLiveGuidance { current -> current?.armForNextRun() }
+            if (target == null || !armed) {
+                session.releaseGenerationSlot()
+                return@withLoadedSession false
+            }
+            // Start through the reserved path; no previous Job is cancelled or replaced.
+            regenerateAtMessage(conversationId, target, reserved = true)
+            true
+        }
+        return reserved
+    }
+
+    /** Atomic config-only mutation; message nodes, approvals and queue state are not rewritten. */
+    private suspend fun ConversationSession.mutateLiveGuidance(
+        transform: (LiveGuidance?) -> LiveGuidance?,
+    ): Boolean {
+        var changed = false
+        val retained = updateMetadataChecked(
+            transform = { latest ->
+                val config = latest.config ?: return@updateMetadataChecked latest
+                val previous = config.liveGuidance
+                val updated = transform(previous)
+                if (updated == previous) {
+                    latest
+                } else {
+                    changed = true
+                    latest.copy(config = config.copy(liveGuidance = updated))
+                }
+            },
+            persist = conversationRepo::updateConversationConfig,
+        )
+        return changed && retained
+    }
+
+    private suspend fun ConversationSession.acknowledgeLiveGuidance(runId: Uuid, guidanceId: Uuid) {
+        val item = state.value.config?.liveGuidance
+        if (generationRunId != runId || item?.id != guidanceId || !item.isAwaitingOutput(runId)) return
+        // The provider has already produced output: a simultaneous stop must not drop the acknowledgement.
+        withContext(NonCancellable) {
+            mutateLiveGuidance { current ->
+                if (generationRunId == runId && current?.id == guidanceId) {
+                    current.acknowledgeDelivery(runId)
+                } else {
+                    current
+                }
+            }
+        }
+    }
+
+    /**
      * 加入一条引导。
      *
      * 单轮的在下一个工具间隙插一次就从收件箱删掉；多轮的每一批工具之后都会再插一次，直到 [removeGuidance]。
@@ -1165,7 +1315,10 @@ class ChatService(
     private suspend fun ConversationSession.takeInjectionParts(
         current: UIMessage?,
         assistant: Assistant,
+        runId: Uuid,
     ): List<UIMessagePart> {
+        // Capture without acknowledging: this step may fail before producing any provider output.
+        updateLiveGuidanceCheckpoint(runId, state.value.config?.liveGuidance?.requestMessage(runId))
         val parts = mutableListOf<UIMessagePart>()
         parts += inbox.takeNotices()
         // 子代理结果也在这里进来：父会话正在跑的时候，结果不该等到这一轮收尾才被看到
@@ -1243,9 +1396,10 @@ class ChatService(
         val session = sessionManager.get(conversationId) ?: return null
         synchronized(session) {
             val canDispatch = canDispatchInbox(
-                hasJob = session.getJob() != null,
+                hasJob = session.hasGenerationWork,
                 awaitingApproval = session.state.value.isAwaitingToolApproval,
-                queueEnabled = settingsStore.settingsFlow.value.enableMessageQueue,
+                queueEnabled = settingsStore.settingsFlow.value.enableMessageQueue ||
+                    session.inbox.state.value.messages.any { it.afterCurrent },
                 hasUserMessage = session.inbox.state.value.messages.isNotEmpty(),
             )
             if (!canDispatch) return null
@@ -1306,7 +1460,14 @@ class ChatService(
                 session.submittingMessage = null
 
                 // 开始补全
-                val result = if (queued.answer) runTurn(session) else null
+                val result = if (queued.answer) {
+                    runTurn(
+                        session,
+                        origin = if (queued.notice) GenerationRunOrigin.NOTICE else GenerationRunOrigin.USER_MESSAGE,
+                    )
+                } else {
+                    null
+                }
 
                 queued.reply?.completeWith(runCatching {
                     check(result != TurnResult.Failed) { context.getString(R.string.chat_page_voice_generation_failed) }
@@ -1354,7 +1515,7 @@ class ChatService(
                 // 存成 user 节点：重新生成和分支都和普通消息一样
                 session.update { it.copy(messageNodes = it.messageNodes + notices.toNoticeNode()) }
                 session.flush()
-                runTurn(session)
+                runTurn(session, origin = GenerationRunOrigin.NOTICE)
                 _generationDoneFlow.emit(conversationId)
             } catch (e: NotFoundException) {
                 Log.w(TAG, "sendQueuedNotices: conversation $conversationId not found, dropping notices")
@@ -1381,8 +1542,14 @@ class ChatService(
 
     /** 重新生成用户消息时去掉它之后的节点再回复；重新生成助手消息时在它的节点上新开一个分支 */
     fun regenerateAtMessage(conversationId: Uuid, messageId: Uuid) {
+        regenerateAtMessage(conversationId, messageId, reserved = false)
+    }
+
+    private fun regenerateAtMessage(conversationId: Uuid, messageId: Uuid, reserved: Boolean) {
         val session = sessionManager.getOrCreate(conversationId)
         synchronized(session) {
+            if (!reserved && session.generationSlotReserved) return
+            if (reserved && !session.generationSlotReserved) return
             val previousJob = session.getJob()
             val job = launchGenerationJob(conversationId = conversationId) {
                 try {
@@ -1413,9 +1580,25 @@ class ChatService(
                         session.flush()
                         // 整条保存会把库里还在的清单当成内存没同步捡回来，清空要单独落库
                         if (todosCleared) conversationRepo.updateTodos(conversationId, emptyList())
-                        runTurn(session)
+                        runTurn(
+                            session,
+                            regenerateNodeId = null,
+                            origin = if (reserved) {
+                                GenerationRunOrigin.LIVE_GUIDANCE_RETRY
+                            } else {
+                                GenerationRunOrigin.REGENERATION
+                            },
+                        )
                     } else {
-                        runTurn(session, regenerateNodeId = node.id)
+                        runTurn(
+                            session,
+                            regenerateNodeId = node.id,
+                            origin = if (reserved) {
+                                GenerationRunOrigin.LIVE_GUIDANCE_RETRY
+                            } else {
+                                GenerationRunOrigin.REGENERATION
+                            },
+                        )
                     }
 
                     _generationDoneFlow.emit(conversationId)
@@ -1464,7 +1647,7 @@ class ChatService(
 
                         // Only continue generation when all pending tools are handled
                         if (!updated.isAwaitingToolApproval) {
-                            runTurn(session)
+                            runTurn(session, origin = GenerationRunOrigin.TOOL_APPROVAL)
                         }
 
                         _generationDoneFlow.emit(conversationId)
@@ -1491,13 +1674,20 @@ class ChatService(
     private suspend fun runTurn(
         session: ConversationSession,
         regenerateNodeId: Uuid? = null,
+        origin: GenerationRunOrigin,
     ): TurnResult {
         val conversationId = session.id
+        val runId = Uuid.random()
         // 先清理上一轮状态；确定历史后，仅为真正的续写恢复消息 ID。
         session.replyMessageId.value = null
         // 生成开始前失败时通知只用来取消 Live Update，用不到发送者名称
         var senderName = ""
         try {
+            session.startGenerationRun(runId)
+            // Notice, ordinary regenerate and approval runs never consume a next-user-message note.
+            if (origin.consumesNextMessageGuidance()) {
+                session.mutateLiveGuidance { current -> current?.beginRun(runId) }
+            }
             val settings = settingsStore.awaitLoaded()
             // 清掉上一轮的建议；没法继续执行的工具调用发给模型会被拒绝，先去掉。
             // 重新生成时只清理要发给模型的节点，被重新生成的节点保持原样，旧回复留作分支
@@ -1542,6 +1732,12 @@ class ChatService(
                         turn = turn,
                         messages = target.history,
                         processingStatus = session.processingStatus,
+                        pendingInjections = {
+                            listOfNotNull(session.liveGuidanceRequestMessage(runId))
+                        },
+                        acknowledgeInjection = { guidanceId ->
+                            session.acknowledgeLiveGuidance(runId, guidanceId)
+                        },
                         pauseAfterTools = pause@{ message ->
                             if (!canCompress || compressionUseless) return@pause false
                             // 同一条回复只试一次，压缩失败后接着它写时不再重试
@@ -1561,7 +1757,7 @@ class ChatService(
                             session.state.value.todos.takeIf { it.hasActiveTodo() } ?: emptyList()
                         },
                         takePendingParts = { current ->
-                            session.takeInjectionParts(current, liveAssistant())
+                            session.takeInjectionParts(current, liveAssistant(), runId)
                         },
                     )
                     finishReason = null
@@ -1647,6 +1843,12 @@ class ChatService(
             Logging.log(TAG, "runTurn: $e")
             Logging.log(TAG, e.stackTraceToString())
             return TurnResult.Failed
+        } finally {
+            withContext(NonCancellable) {
+                // Clear first: a submission after this point belongs to no active run.
+                session.finishGenerationRun(runId)
+                session.mutateLiveGuidance { current -> current?.finish(runId) }
+            }
         }
     }
 

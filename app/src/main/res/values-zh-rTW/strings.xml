@@ -2581,4 +2581,20 @@
   <string name="chat_message_tool_phone_use_open_app_name">開啟應用程式：%1$s</string>
   <string name="chat_message_tool_phone_use_list_apps">列出應用程式</string>
   <string name="chat_message_tool_phone_use_wait">等待 %1$s 秒</string>
+
+  <!-- Explicit composer busy-send choices; legacy guidance resources are unchanged. -->
+  <string name="chat_page_busy_title">目前回覆進行中</string>
+  <string name="chat_page_busy_description">請選擇傳送方式。臨時與長期引導都不打斷目前回覆。</string>
+  <string name="chat_page_busy_attachments">引導只傳送文字，附件保留在輸入框；下一則再傳和打斷傳送會傳送完整快照。</string>
+  <string name="chat_page_busy_queue">下一則再傳</string>
+  <string name="chat_page_busy_queue_description">明確排到目前回覆之後；一般訊息佇列關閉時也可請求，無法受理時安全拒絕。</string>
+  <string name="chat_page_busy_temporary">臨時引導</string>
+  <string name="chat_page_busy_temporary_description">預設：在安全請求點引導本輪，不打斷目前回覆。</string>
+  <string name="chat_page_busy_persistent">長期引導</string>
+  <string name="chat_page_busy_persistent_description">同樣不打斷；也用於本對話的後續回覆，不影響其他對話。</string>
+  <string name="chat_page_busy_text_required">引導需要文字，不能把純附件作為引導傳送。</string>
+  <string name="chat_page_busy_submitting">正在等待受理…</string>
+  <string name="chat_page_busy_legacy_interrupt">打斷並立即傳送（舊行為）</string>
+  <string name="chat_page_busy_cancel">取消，保留草稿</string>
+  <string name="chat_page_busy_rejected">未受理，文字和附件仍保留在輸入框。</string>
 </resources>

@@ -7,6 +7,7 @@ import me.rerere.ai.ui.UIMessagePart
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 import kotlin.uuid.Uuid
@@ -34,6 +35,30 @@ class ConversationForkTest {
         assertEquals(source.folderId, fork.folderId)
         assertEquals("Source conversation(1)", fork.title)
         assertFalse(fork.isPinned)
+    }
+
+
+    @Test
+    fun `fork never carries live steering into another conversation`() {
+        val run = Uuid.random()
+        val message = UIMessage.user("hello")
+        val source = Conversation(
+            assistantId = Uuid.random(),
+            messageNodes = listOf(message.toMessageNode()),
+            config = ConversationConfig(
+                liveGuidance = LiveGuidance(
+                    content = "source only",
+                    mode = LiveGuidanceMode.PERSISTENT,
+                    runId = run,
+                ).acknowledgeDelivery(run),
+            ),
+        )
+
+        val fork = source.fork(message.id, emptySet()) { it }!!
+
+        assertNotEquals(source.id, fork.id)
+        assertNull(fork.config?.liveGuidance)
+        assertNotNull(source.config?.liveGuidance)
     }
 
     @Test

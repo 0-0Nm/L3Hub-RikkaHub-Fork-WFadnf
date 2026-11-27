@@ -658,6 +658,172 @@ class AgentLoopTest {
         assertNull(currents[0])
         assertEquals(listOf("search"), currents[1]?.getTools()?.map { it.toolName })
     }
+
+    @Test
+    fun `synthetic pending parts and empty stream chunks do not acknowledge a failed request`() = runTest {
+        var acknowledgements = 0
+        val synthetic = UIMessagePart.Tool("synthetic", "reminder", "{}", output = ok())
+        val outputHooks = object : AgentHooks by PendingHooks(hooks, listOf(synthetic)) {
+            override suspend fun prepareStep(messages: List<UIMessage>) =
+                hooks.prepareStep(messages).copy(onProviderOutput = { acknowledgements++ })
+        }
+        val failure = IOException("lost connection before output")
+        provider.stream {
+            emit(StreamChunk.TextStart("empty"))
+            emit(StreamChunk.TextDelta("empty", ""))
+            emit(StreamChunk.ReasoningStart("placeholder"))
+            emit(StreamChunk.ImageStart("placeholder"))
+            usage(5, 0)
+            throw failure
+        }
+
+        assertEquals(failure, runCatching { runToEnd(hooks = outputHooks) }.exceptionOrNull())
+        assertEquals(0, acknowledgements)
+        assertEquals(listOf(synthetic), provider.requests.single().messages.last().parts)
+    }
+
+    @Test
+    fun `cancelling before provider output does not acknowledge delivery`() = runTest {
+        var acknowledgements = 0
+        val waitingForOutput = CompletableDeferred<Unit>()
+        val outputHooks = object : AgentHooks by hooks {
+            override suspend fun prepareStep(messages: List<UIMessage>) =
+                hooks.prepareStep(messages).copy(onProviderOutput = { acknowledgements++ })
+        }
+        provider.stream {
+            emit(StreamChunk.TextStart("empty"))
+            waitingForOutput.complete(Unit)
+            awaitCancellation()
+        }
+
+        val job = launch { runToEnd(hooks = outputHooks) }
+        waitingForOutput.await()
+        job.cancelAndJoin()
+
+        assertEquals(0, acknowledgements)
+    }
+
+    @Test
+    fun `metadata-only completion does not acknowledge existing output`() = runTest {
+        var acknowledgements = 0
+        val outputHooks = object : AgentHooks by hooks {
+            override suspend fun prepareStep(messages: List<UIMessage>) =
+                hooks.prepareStep(messages).copy(onProviderOutput = { acknowledgements++ })
+        }
+        provider.stream {
+            usage(5, 0)
+            finish()
+        }
+        val history = listOf(UIMessage.user("hi"), UIMessage.assistant("earlier output"))
+
+        val finished = runToEnd(request(messages = history), outputHooks).finished()
+
+        assertEquals(listOf("earlier output"), finished.message.texts())
+        assertEquals(0, acknowledgements)
+    }
+
+    @Test
+    fun `acknowledgement occurs at first provider output only across attempts`() = runTest {
+        var acknowledgements = 0
+        val outputHooks = object : AgentHooks by hooks {
+            override suspend fun prepareStep(messages: List<UIMessage>) =
+                hooks.prepareStep(messages).copy(onProviderOutput = { acknowledgements++ })
+        }
+        provider.stream {
+            usage(5, 0)
+            throw IOException("failed before output")
+        }
+        provider.stream {
+            assertEquals(0, acknowledgements) // neither metadata nor Retrying signalled delivery
+            text("partial")
+            assertEquals(1, acknowledgements)
+            throw IOException("failed after output")
+        }
+        provider.stream {
+            text("complete")
+            finish()
+        }
+
+        val finished = runToEnd(request(retry = RetryPolicy.NETWORK), outputHooks).finished()
+
+        assertEquals(listOf("complete"), finished.message.texts())
+        assertEquals(1, acknowledgements)
+    }
+
+    @Test
+    fun `non-streaming output acknowledges a new tool call but not an empty result`() = runTest {
+        var acknowledgements = 0
+        val outputHooks = object : AgentHooks by hooks {
+            override suspend fun prepareStep(messages: List<UIMessage>) =
+                hooks.prepareStep(messages).copy(onProviderOutput = { acknowledgements++ })
+        }
+        provider.result(assistant(), usage = TokenUsage(promptTokens = 5, completionTokens = 0))
+        provider.result(assistant(UIMessagePart.Tool("call-1", "search", "{}")))
+
+        runToEnd(request(stream = false), outputHooks)
+        assertEquals(0, acknowledgements)
+        runToEnd(request(stream = false, tools = listOf(tool("search")), maxSteps = 1), outputHooks)
+        assertEquals(1, acknowledgements)
+    }
+
+    @Test
+    fun `request-only guidance appears once without an extra model call`() = runTest {
+        val guidance = UIMessage.user("live steering").copy(isSynthetic = true)
+        var claims = 0
+        val steeringHooks = object : AgentHooks by hooks {
+            override suspend fun pendingParts(current: UIMessage?): List<UIMessagePart> {
+                claims++
+                return emptyList()
+            }
+
+            override suspend fun prepareStep(messages: List<UIMessage>): StepRequest {
+                val step = hooks.prepareStep(messages)
+                return step.copy(messages = step.messages.withRequestInjectionsForTest(guidance))
+            }
+        }
+        provider.stream {
+            text("done")
+            finish()
+        }
+
+        val finished = runToEnd(hooks = steeringHooks).finished()
+
+        assertEquals(AgentFinishReason.Completed, finished.reason)
+        assertEquals(1, claims)
+        assertEquals(1, provider.requests.size)
+        assertEquals(1, provider.requests.single().messages.count { it.id == guidance.id })
+        assertTrue(guidance.getTools().isEmpty())
+        assertTrue(finished.message.parts.none { it is UIMessagePart.Tool })
+    }
+
+    @Test
+    fun `guidance arriving after the last checkpoint stays waiting on ordinary completion`() = runTest {
+        var waiting = false
+        var claims = 0
+        val steeringHooks = object : AgentHooks by hooks {
+            override suspend fun pendingParts(current: UIMessage?): List<UIMessagePart> {
+                if (waiting) claims++
+                return emptyList()
+            }
+
+            override suspend fun finishStep(message: UIMessage, newPartsFrom: Int): UIMessage {
+                waiting = true
+                return hooks.finishStep(message, newPartsFrom)
+            }
+        }
+        provider.stream {
+            text("ordinary answer")
+            finish()
+        }
+
+        val finished = runToEnd(hooks = steeringHooks).finished()
+
+        assertEquals(AgentFinishReason.Completed, finished.reason)
+        assertTrue(waiting)
+        assertEquals(0, claims)
+        assertEquals(1, provider.requests.size)
+    }
+
 }
 
 /** 按调用顺序依次返回预设的响应，并记录每次请求 */
@@ -776,3 +942,6 @@ private fun List<AgentEvent>.finished() = last() as AgentEvent.Finished
 
 private fun List<AgentEvent>.messageIds() =
     filterIsInstance<AgentEvent.MessageUpdated>().map { it.message.id }.toSet()
+
+private fun List<UIMessage>.withRequestInjectionsForTest(message: UIMessage): List<UIMessage> =
+    (this + message).distinctBy { it.id }

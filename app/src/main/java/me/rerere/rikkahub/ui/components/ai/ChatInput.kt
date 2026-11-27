@@ -113,6 +113,7 @@ import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Guidance
+import me.rerere.rikkahub.data.model.LiveGuidance
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.TodoItem
 import me.rerere.rikkahub.data.model.TodoStatus
@@ -179,8 +180,6 @@ fun ChatInput(
     onCancelClick: () -> Unit,
     onSendClick: () -> Unit,
     onLongSendClick: () -> Unit,
-    // 强制插话：打断当前回复，立刻发送输入框里的内容
-    onInterjectClick: () -> Unit = {},
     messageQueue: InboxState = InboxState(),
     onRemoveQueuedMessage: (Uuid) -> Unit = {},
     onBeginEditQueuedMessage: (Uuid) -> QueuedMessage? = { null },
@@ -192,6 +191,14 @@ fun ChatInput(
     onSendAsGuidance: () -> Unit = {},
     onGuidanceToggleMode: (Guidance) -> Unit = {},
     onGuidanceRemove: (Guidance) -> Unit = {},
+    conversationId: Uuid? = null,
+    liveGuidance: LiveGuidance? = null,
+    liveGuidanceDraft: String = "",
+    onLiveGuidanceDraftChange: (String) -> Unit = {},
+    onSubmitLiveGuidance: (String, () -> Unit) -> Unit = { _, _ -> },
+    onLiveGuidanceModeChange: (Uuid, Boolean) -> Unit = { _, _ -> },
+    onLiveGuidanceNextMessage: () -> Unit = {},
+    onLiveGuidanceRetry: () -> Unit = {},
     runningBackgroundTasks: Int = 0,
     onShowBackgroundTasks: () -> Unit = {},
     onStartVoiceMode: (() -> Unit)? = null,
@@ -359,6 +366,19 @@ fun ChatInput(
                 onFinishEdit = onFinishEditQueuedMessage,
                 onResume = onResumeMessageQueue,
             )
+            if (!LocalConversationStatusInSidePanel.current) {
+                LiveGuidancePanel(
+                    draftOwner = conversationId,
+                    guidance = liveGuidance,
+                    draft = liveGuidanceDraft,
+                    onDraftChange = onLiveGuidanceDraftChange,
+                    onSubmit = onSubmitLiveGuidance,
+                    onModeChange = onLiveGuidanceModeChange,
+                    onNextMessage = onLiveGuidanceNextMessage,
+                    onRetry = onLiveGuidanceRetry,
+                    modifier = Modifier.adaptiveHorizontalPadding(12.dp),
+                )
+            }
             if (injectedLorebookCount > 0) {
                 Text(
                     text = stringResource(R.string.chat_page_worldbook_injected, injectedLorebookCount),
@@ -503,12 +523,13 @@ fun ChatInput(
                             )
                         }
                     }
-                    val interjectButton: @Composable () -> Unit = {
-                        if (loading && settings.enableMessageQueue && !state.isEmpty()) {
-                            ActionIconButton(onClick = onInterjectClick) {
+                    // Busy input opens choices; only the labeled legacy dialog action interrupts.
+                    val busySendButton: @Composable () -> Unit = {
+                        if (loading && !state.isEmpty() && !state.isEditing()) {
+                            ActionIconButton(onClick = { sendMessage() }) {
                                 Icon(
                                     imageVector = HugeIcons.MessageAdd01,
-                                    contentDescription = stringResource(R.string.chat_page_interject),
+                                    contentDescription = stringResource(R.string.chat_page_busy_title),
                                 )
                             }
                         }
@@ -591,7 +612,7 @@ fun ChatInput(
                         }
                         val trailingActions: @Composable () -> Unit = {
                             asrButton()
-                            interjectButton()
+                            busySendButton()
                             if (chatModel?.abilities?.contains(ModelAbility.REASONING) == true) {
                                 reasoningButton()
                             } else {
@@ -706,7 +727,7 @@ fun ChatInput(
                             }
 
                             asrButton()
-                            interjectButton()
+                            busySendButton()
                             sendButton()
                         }
                     }

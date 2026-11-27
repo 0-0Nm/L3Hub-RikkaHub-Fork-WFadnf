@@ -79,6 +79,8 @@ interface AgentHooks {
 data class StepRequest(
     val messages: List<UIMessage>,
     val params: TextGenerationParams,
+    /** Called once for this step, on the first new provider output across all attempts. */
+    val onProviderOutput: (suspend () -> Unit)? = null,
 )
 
 sealed interface AgentEvent {

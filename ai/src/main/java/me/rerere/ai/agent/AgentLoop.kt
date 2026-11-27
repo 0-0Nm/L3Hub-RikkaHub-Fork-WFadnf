@@ -105,9 +105,9 @@ internal class AgentLoop(
                 modelId = params.model.id,
             )
         val generated = if (request.stream) {
-            stream(step.messages, params, base)
+            stream(step.messages, params, base, step.onProviderOutput)
         } else {
-            generate(step.messages, params, base)
+            generate(step.messages, params, base, step.onProviderOutput)
         }
         update(hooks.finishStep(generated, newPartsFrom = base.parts.size).copy(finishedAt = now()))
     }
@@ -126,10 +126,12 @@ internal class AgentLoop(
         messages: List<UIMessage>,
         params: TextGenerationParams,
         base: UIMessage,
+        onProviderOutput: (suspend () -> Unit)?,
     ): UIMessage {
         // 多轮工具调用共用同一条助手消息，消息上已有的 usage 和耗时来自之前的步骤。
         // 本步从清空的统计开始（merge 只适合同一次请求内的快照），再与之前的步骤累加。
         val stepStart = base.copy(usage = null, generationTimeMs = null)
+        var outputReported = false
         return try {
             withRetry(request.retry, onRetry = { events.emit(AgentEvent.Retrying(it)) }) {
                 // 每次重试都从本步开始时的消息重新合并，不会把重试的响应接在已经展示的半截回复后面；
@@ -141,6 +143,12 @@ internal class AgentLoop(
                     try {
                         val mark = firstChunk ?: TimeSource.Monotonic.markNow().also { firstChunk = it }
                         attempt = handler.handle(listOf(attempt), chunk).single()
+                        if (onProviderOutput != null && !outputReported &&
+                            attempt.parts.subList(base.parts.size, attempt.parts.size).any { it.isProviderOutput() }
+                        ) {
+                            outputReported = true
+                            onProviderOutput()
+                        }
                         preview(attempt.withStepStats(base, mark.elapsedNow()), newPartsFrom = base.parts.size)
                     } catch (e: CancellationException) {
                         throw e
@@ -160,6 +168,7 @@ internal class AgentLoop(
         messages: List<UIMessage>,
         params: TextGenerationParams,
         base: UIMessage,
+        onProviderOutput: (suspend () -> Unit)?,
     ): UIMessage {
         // 非流式拿不到首 token 时间，只能统计最后一次尝试的整个请求耗时
         var requestMark = TimeSource.Monotonic.markNow()
@@ -168,6 +177,9 @@ internal class AgentLoop(
             request.provider.generateText(request.providerSetting, messages, params)
         }
         val requestTime = requestMark.elapsedNow()
+        if (onProviderOutput != null && result.message.parts.any { it.isProviderOutput() }) {
+            onProviderOutput()
+        }
         // 和流式一样只追加 part，不并进之前步骤的文本或推理里，否则 newPartsFrom 之后就不全是这一步的内容了。
         // 一次请求只有一份 usage；没有返回时保持为空，累加时沿用之前步骤的统计
         val generated = base.copy(
@@ -280,6 +292,17 @@ internal class AgentLoop(
     private suspend fun finish(reason: AgentFinishReason) {
         events.emit(AgentEvent.Finished(checkNotNull(message), reason))
     }
+}
+
+// Only call this on newly generated parts, before any display transforms. Start/finish chunks,
+// usage, and metadata alone do not count; a newly named tool call does.
+private fun UIMessagePart.isProviderOutput(): Boolean = when (this) {
+    is UIMessagePart.Text -> text.isNotBlank()
+    is UIMessagePart.Reasoning -> reasoning.isNotBlank()
+    is UIMessagePart.Tool -> toolName.isNotBlank()
+    is UIMessagePart.ServerTool -> toolName.isNotBlank() || output != null
+    is UIMessagePart.Image -> url.isNotBlank() && (!url.startsWith("data:") || url.substringAfter(',', "").isNotBlank())
+    else -> false
 }
 
 private fun UIMessagePart?.isModelsTurn() =

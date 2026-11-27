@@ -27,6 +27,8 @@ data class ConversationConfig(
     val workspaceId: Uuid? = null,
     val workspaceIds: Set<Uuid> = emptySet(),
     val enabledSkills: Set<String> = emptySet(),
+    // Runtime steering is stored in this existing JSON column; defaults keep old backups readable.
+    val liveGuidance: LiveGuidance? = null,
 )
 
 // 内置搜索是模型的开关，不在助手上，由调用方另行填入
@@ -69,6 +71,7 @@ fun Conversation.withAssistantUpdate(updated: Assistant, settings: Settings): Co
     } else {
         copy(
             config = updated.toConversationConfig().copy(
+                liveGuidance = config.liveGuidance,
                 builtInSearch = if (updated.chatModelId == config.chatModelId) {
                     config.builtInSearch
                 } else {

@@ -12,6 +12,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -81,6 +82,17 @@ class ChatVM(
 
     // 聊天输入状态 - 保存在 ViewModel 中避免 TransactionTooLargeException
     val inputState = ChatInputState()
+
+    // Shared by portrait and landscape hosts; this VM is scoped to one conversation.
+    var liveGuidanceDraft by mutableStateOf("")
+        private set
+
+    private var liveGuidanceDraftRevision = 0L
+
+    fun updateLiveGuidanceDraft(value: String) {
+        if (value != liveGuidanceDraft) liveGuidanceDraftRevision++
+        liveGuidanceDraft = value
+    }
 
     val voiceSession = VoiceSessionController(viewModelScope, context::getString) {
         chatService.enqueueVoiceMessage(_conversationId, it)
@@ -316,6 +328,70 @@ class ChatVM(
         if (content.isEmptyInputMessage()) return false
 
         return chatService.sendMessage(_conversationId, content, answer, interject)
+    }
+
+    /** Explicit next-message choice, independent of the ordinary queue setting; never interjects. */
+    fun sendAfterCurrent(conversationId: Uuid, content: List<UIMessagePart>): Boolean {
+        if (conversationId != _conversationId || content.isEmptyInputMessage()) return false
+        return try {
+            chatService.sendAfterCurrent(conversationId, content)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** Both composer modes share the noninterrupting service path; temporary is the default. */
+    fun submitComposerLiveGuidance(
+        conversationId: Uuid,
+        content: String,
+        persistent: Boolean = false,
+        onResult: (Boolean) -> Unit,
+    ) {
+        if (conversationId != _conversationId || content.isBlank()) {
+            onResult(false)
+            return
+        }
+        viewModelScope.launch {
+            val accepted = try {
+                chatService.addLiveGuidance(conversationId, content, persistent)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // No success callback on persistence/service failure; retain the complete draft.
+                false
+            }
+            onResult(accepted)
+        }
+    }
+
+    fun submitLiveGuidance(text: String, onAccepted: () -> Unit) {
+        val revision = liveGuidanceDraftRevision
+        submitComposerLiveGuidance(_conversationId, text) { accepted ->
+            // VM-owned revision also guards edits that return to the original characters.
+            if (accepted && revision == liveGuidanceDraftRevision && liveGuidanceDraft == text) {
+                onAccepted()
+            }
+        }
+    }
+
+    fun setLiveGuidancePersistence(id: Uuid, persistent: Boolean) {
+        viewModelScope.launch {
+            chatService.setLiveGuidancePersistence(_conversationId, id, persistent)
+        }
+    }
+
+    fun armLiveGuidanceForNextMessage() {
+        viewModelScope.launch {
+            chatService.armLiveGuidanceForNextMessage(_conversationId)
+        }
+    }
+
+    fun retryLiveGuidance() {
+        viewModelScope.launch {
+            chatService.retryLiveGuidance(_conversationId)
+        }
     }
 
     /** 加入一条引导；预设用多轮，手输的用单轮，卡片上还能再切 */

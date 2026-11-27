@@ -61,6 +61,7 @@ import androidx.compose.material3.adaptive.currentWindowDpSize
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -139,6 +140,7 @@ import me.rerere.rikkahub.data.model.Folder
 import me.rerere.rikkahub.data.model.GuidanceMode
 import me.rerere.rikkahub.data.model.TodoItem
 import me.rerere.rikkahub.data.model.effectiveContextWindow
+import me.rerere.rikkahub.data.model.isAwaitingToolApproval
 import me.rerere.rikkahub.data.model.isContextLimitReached
 import me.rerere.rikkahub.data.model.lastContextTokens
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
@@ -147,6 +149,7 @@ import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.SessionActivity
 import me.rerere.rikkahub.ui.components.ai.BackgroundTasksContent
 import me.rerere.rikkahub.ui.components.ai.BackgroundTasksSheet
+import me.rerere.rikkahub.ui.components.ai.BusySendDialog
 import me.rerere.rikkahub.ui.components.ai.ChatAttachmentPickerActions
 import me.rerere.rikkahub.ui.components.ai.ChatInput
 import me.rerere.rikkahub.ui.components.ai.ChatTopBarCapsule
@@ -175,6 +178,7 @@ import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
 import me.rerere.rikkahub.ui.hooks.ChatInputState
+import me.rerere.rikkahub.ui.hooks.ComposerSendSnapshot
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.terminal.IconButton
@@ -517,6 +521,19 @@ private fun ChatPageContent(
     val currentMessages = remember(conversation.messageNodes) { conversation.currentMessages }
     // 回调里读最新节点，但不在组合期订阅会话，否则每来一个 token 都会换一个新 lambda
     val latestConversation by rememberUpdatedState(conversation)
+    val latestInputState by rememberUpdatedState(inputState)
+    var busySendSnapshot by remember(conversation.id) { mutableStateOf<ComposerSendSnapshot?>(null) }
+    var busySendSubmitting by remember(conversation.id) { mutableStateOf(false) }
+    val composerOwnerActive = remember(conversation.id, inputState) { mutableStateOf(true) }
+    DisposableEffect(conversation.id, inputState) {
+        onDispose { composerOwnerActive.value = false }
+    }
+
+    fun clearAcceptedComposerSnapshot(snapshot: ComposerSendSnapshot, textOnly: Boolean = false) {
+        if (composerOwnerActive.value && latestInputState === inputState) {
+            inputState.clearAcceptedSnapshot(snapshot, latestConversation.id, accepted = true, textOnly = textOnly)
+        }
+    }
 
     // 上下文占用取最近一次回复的真实用量, 到达模型的 MAX 门限后禁止再发送
     val contextTokens = remember(conversation.messageNodes) { conversation.lastContextTokens() }
@@ -558,13 +575,16 @@ private fun ChatPageContent(
                 messageId = inputState.editingMessage!!,
             )
             inputState.clearInput()
-        } else if (vm.handleMessageSend(inputState.getContents())) {
-            inputState.clearInput()
-            scope.launch {
-                delay(100.milliseconds)
-                chatListState.animateScrollToItem(
-                    index = (chatListState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0),
-                )
+        } else {
+            val snapshot = inputState.captureSendSnapshot(conversation.id)
+            if (vm.handleMessageSend(snapshot.parts)) {
+                clearAcceptedComposerSnapshot(snapshot)
+                scope.launch {
+                    delay(100.milliseconds)
+                    chatListState.animateScrollToItem(
+                        index = (chatListState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0),
+                    )
+                }
             }
         }
         // 没被受理（关闭队列后正在压缩上下文、或队列暂停还压着旧消息）则保留输入框内容
@@ -718,7 +738,8 @@ private fun ChatPageContent(
     }
 
     // 清单与引导：横屏收进右栏，出现时把标签页开出来，不抢当前看板
-    val hasStatusContent = conversation.todos.isNotEmpty() || messageQueue.guidances.isNotEmpty()
+    val hasStatusContent = conversation.todos.isNotEmpty() || messageQueue.guidances.isNotEmpty() ||
+        conversation.config?.liveGuidance != null
     LaunchedEffect(threePane, hasStatusContent) {
         if (!threePane || !hasStatusContent) return@LaunchedEffect
         if (openPaneNames.none { it == ChatSidePane.Status.name }) {
@@ -736,7 +757,11 @@ private fun ChatPageContent(
 
     // 发送入口：模型、上下文门限检查都走这里
     val sendInput: () -> Unit = {
-        if (currentChatModel == null) {
+        if (!inputState.isEditing() && !inputState.isEmpty() &&
+            (loadingJob != null || sessionActivity != null || conversation.isAwaitingToolApproval)
+        ) {
+            if (!busySendSubmitting) busySendSnapshot = inputState.captureSendSnapshot(conversation.id)
+        } else if (currentChatModel == null) {
             toaster.show(context.getString(R.string.media_creation_page_select_model_first), type = ToastType.Error)
         } else if (contextLimitBlocksSend && assistant.autoCompress) {
             showCompressAndSendDialog = true
@@ -748,13 +773,14 @@ private fun ChatPageContent(
         }
     }
 
-    val sendInterject: () -> Unit = interject@{
+    val sendInterjectSnapshot: (ComposerSendSnapshot) -> Unit = interject@{ snapshot ->
+        if (snapshot.conversationId != latestConversation.id || snapshot.parts.isEmpty()) return@interject
         if (contextLimitReached) {
             toaster.show(contextLimitMessage, type = ToastType.Error)
             if (contextLimitBlocksSend) return@interject
         }
-        if (vm.handleMessageSend(inputState.getContents(), interject = true)) {
-            inputState.clearInput()
+        if (vm.handleMessageSend(snapshot.parts, interject = true)) {
+            clearAcceptedComposerSnapshot(snapshot)
             scope.launch {
                 delay(100.milliseconds)
                 chatListState.animateScrollToItem(
@@ -822,6 +848,14 @@ private fun ChatPageContent(
             },
             onGuidanceToggleMode = vm::toggleGuidanceMode,
             onGuidanceRemove = vm::removeGuidance,
+            conversationId = conversation.id,
+            liveGuidance = conversation.config?.liveGuidance,
+            liveGuidanceDraft = vm.liveGuidanceDraft,
+            onLiveGuidanceDraftChange = vm::updateLiveGuidanceDraft,
+            onSubmitLiveGuidance = vm::submitLiveGuidance,
+            onLiveGuidanceModeChange = vm::setLiveGuidancePersistence,
+            onLiveGuidanceNextMessage = vm::armLiveGuidanceForNextMessage,
+            onLiveGuidanceRetry = vm::retryLiveGuidance,
             runningBackgroundTasks = backgroundTasks.count { it.status == BackgroundShellStatus.RUNNING },
             onShowBackgroundTasks = { openPane(ChatSidePane.BackgroundTasks) },
             loading = loadingJob != null,
@@ -845,21 +879,6 @@ private fun ChatPageContent(
                 vm.stopGeneration()
             },
             onSendClick = sendInput,
-            onInterjectClick = {
-                if (contextLimitReached) {
-                    toaster.show(contextLimitMessage, type = ToastType.Error)
-                    if (contextLimitBlocksSend) return@ChatInput
-                }
-                if (vm.handleMessageSend(inputState.getContents(), interject = true)) {
-                    inputState.clearInput()
-                    scope.launch {
-                        delay(100.milliseconds)
-                        chatListState.animateScrollToItem(
-                            index = (chatListState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0),
-                        )
-                    }
-                }
-            },
             onLongSendClick = {
                 if (contextLimitReached) {
                     toaster.show(contextLimitMessage, type = ToastType.Error)
@@ -1155,6 +1174,14 @@ private fun ChatPageContent(
                         onUpdateAssistant = vm::updateAssistant,
                         onGuidanceToggleMode = vm::toggleGuidanceMode,
                         onGuidanceRemove = vm::removeGuidance,
+                        conversationId = conversation.id,
+                        liveGuidance = conversation.config?.liveGuidance,
+                        liveGuidanceDraft = vm.liveGuidanceDraft,
+                        onLiveGuidanceDraftChange = vm::updateLiveGuidanceDraft,
+                        onSubmitLiveGuidance = vm::submitLiveGuidance,
+                        onLiveGuidanceModeChange = vm::setLiveGuidancePersistence,
+                        onLiveGuidanceNextMessage = vm::armLiveGuidanceForNextMessage,
+                        onLiveGuidanceRetry = vm::retryLiveGuidance,
                         modifier = Modifier.fillMaxSize(),
                     )
 
@@ -1233,6 +1260,57 @@ private fun ChatPageContent(
                 tasks = backgroundTasks,
                 onStop = vm::stopBackgroundTask,
                 onDismiss = { showBackgroundTasks = false },
+            )
+        }
+
+        busySendSnapshot?.let { snapshot ->
+            BusySendDialog(
+                snapshot = snapshot,
+                submitting = busySendSubmitting,
+                onDismiss = { if (!busySendSubmitting) busySendSnapshot = null },
+                onQueue = queue@{
+                    if (busySendSubmitting || latestConversation.id != snapshot.conversationId) return@queue
+                    if (currentChatModel == null) {
+                        toaster.show(context.getString(R.string.media_creation_page_select_model_first), type = ToastType.Error)
+                        return@queue
+                    }
+                    if (contextLimitBlocksSend) {
+                        toaster.show(contextLimitMessage, type = ToastType.Error)
+                        return@queue
+                    }
+                    if (vm.sendAfterCurrent(snapshot.conversationId, snapshot.parts)) {
+                        clearAcceptedComposerSnapshot(snapshot)
+                        busySendSnapshot = null
+                    } else {
+                        toaster.show(context.getString(R.string.chat_page_busy_rejected), type = ToastType.Error)
+                    }
+                },
+                onGuide = guide@{ persistent ->
+                    if (busySendSubmitting || !snapshot.canGuide ||
+                        latestConversation.id != snapshot.conversationId
+                    ) return@guide
+                    busySendSubmitting = true
+                    vm.submitComposerLiveGuidance(
+                        conversationId = snapshot.conversationId,
+                        content = snapshot.text,
+                        persistent = persistent,
+                    ) { accepted ->
+                        busySendSubmitting = false
+                        if (accepted) {
+                            // The service accepted text only: attachments remain in the composer.
+                            clearAcceptedComposerSnapshot(snapshot, textOnly = true)
+                            busySendSnapshot = null
+                        } else if (composerOwnerActive.value && latestConversation.id == snapshot.conversationId) {
+                            toaster.show(context.getString(R.string.chat_page_busy_rejected), type = ToastType.Error)
+                        }
+                    }
+                },
+                onLegacyInterrupt = {
+                    if (!busySendSubmitting && latestConversation.id == snapshot.conversationId) {
+                        busySendSnapshot = null
+                        sendInterjectSnapshot(snapshot)
+                    }
+                },
             )
         }
 

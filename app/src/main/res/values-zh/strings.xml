@@ -2624,6 +2624,15 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chat_page_select_all">全选</string>
   <string name="chat_page_deselect_all">取消全选</string>
   <string name="chat_page_clear_selection">清除选择</string>
+  <string name="chat_page_live_guidance_title">实时引导</string>
+  <string name="chat_page_live_guidance_placeholder">不打断当前工作，补充纯文本引导</string>
+  <string name="chat_page_live_guidance_submit">发送实时引导</string>
+  <string name="chat_page_live_guidance_persistent">在本会话持续保留</string>
+  <string name="chat_page_live_guidance_waiting">等待下一个安全模型请求</string>
+  <string name="chat_page_live_guidance_delivered">已在模型请求检查点投递</string>
+  <string name="chat_page_live_guidance_not_used">未使用：本轮在安全请求前已结束</string>
+  <string name="chat_page_live_guidance_next">随下一条消息使用</string>
+  <string name="chat_page_live_guidance_retry">带此引导重试</string>
   <string name="guidance_panel_title">引导</string>
   <string name="guidance_mode_single">单轮</string>
   <string name="guidance_mode_repeat">多轮</string>
@@ -2738,4 +2747,20 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
     <string name="mcp_probe_initialize">SDK 初始化未完成。检查传输类型、协议响应和服务日志；HTTP 200 本身不代表 MCP 成功。</string>
     <string name="mcp_probe_tools">初始化成功，但获取工具列表失败。检查服务能力、账号权限和服务端日志。</string>
     <string name="mcp_probe_no_tools_capability">初始化成功。服务未声明工具能力，未发送工具列表请求。</string>
+
+  <!-- Explicit composer busy-send choices; legacy guidance resources are unchanged. -->
+  <string name="chat_page_busy_title">当前回复进行中</string>
+  <string name="chat_page_busy_description">请选择发送方式。临时与长期引导都不打断当前回复。</string>
+  <string name="chat_page_busy_attachments">引导只发送文字，附件保留在输入框；下一条再发和打断发送会发送完整快照。</string>
+  <string name="chat_page_busy_queue">下一条再发</string>
+  <string name="chat_page_busy_queue_description">明确排到当前回复之后；普通消息队列关闭时也可请求，无法受理时安全拒绝。</string>
+  <string name="chat_page_busy_temporary">临时引导</string>
+  <string name="chat_page_busy_temporary_description">默认：在安全请求点引导本轮，不打断当前回复。</string>
+  <string name="chat_page_busy_persistent">长期引导</string>
+  <string name="chat_page_busy_persistent_description">同样不打断；也用于本会话的后续回复，不影响其他会话。</string>
+  <string name="chat_page_busy_text_required">引导需要文字，不能把纯附件作为引导发送。</string>
+  <string name="chat_page_busy_submitting">正在等待受理…</string>
+  <string name="chat_page_busy_legacy_interrupt">打断并立即发送（旧行为）</string>
+  <string name="chat_page_busy_cancel">取消，保留草稿</string>
+  <string name="chat_page_busy_rejected">未受理，文字和附件仍保留在输入框。</string>
 </resources>

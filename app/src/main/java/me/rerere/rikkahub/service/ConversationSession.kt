@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.finishReasoning
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.isAwaitingToolApproval
@@ -152,6 +153,24 @@ class ConversationSession(
         transform: (Conversation) -> Conversation,
         persist: suspend (Conversation) -> Unit,
         expectedIncarnation: Int = incarnation,
+    ): Boolean = updateMetadataChecked(
+        transform = transform,
+        persist = { conversation ->
+            persist(conversation)
+            true
+        },
+        expectedIncarnation = expectedIncarnation,
+    )
+
+    /**
+     * Checked variant for callers whose partial-column UPDATE can match no database row.
+     * The transformed value remains in memory on rejection so the caller can retain its draft;
+     * it is not marked clean and a later full save can still persist it without replacing history.
+     */
+    internal suspend fun updateMetadataChecked(
+        transform: (Conversation) -> Conversation,
+        persist: suspend (Conversation) -> Boolean,
+        expectedIncarnation: Int = incarnation,
     ): Boolean {
         return writeMutex.withLock {
             if (incarnation != expectedIncarnation) return@withLock false
@@ -159,11 +178,11 @@ class ConversationSession(
                 val before = _state.value
                 before to update(transform)
             }
-            persist(updated)
+            val retained = persist(updated)
             // 改之前内存和数据库一致，按列写完两边又一致了，回收时不必整份重写；
             // 之后如果又有别的修改，内存已经不是 updated 这个实例，仍然算作没落库
-            if (existsInDatabase && lastWritten === before) lastWritten = updated
-            true
+            if (retained && existsInDatabase && lastWritten === before) lastWritten = updated
+            retained
         }
     }
 
@@ -229,6 +248,41 @@ class ConversationSession(
     // 最近一次生成任务开始的时间，用来认出这一轮报的错。在任务启动前同步记下，任务里报的错不会早于它
     val generationStartedAt = MutableStateFlow<Long?>(null)
 
+    // Stable identity of the current model run, including its mid-turn compression continuations.
+    // Live steering uses this instead of Job identity so reopening a request cannot retarget an old note.
+    @Volatile
+    internal var generationRunId: Uuid? = null
+        private set
+
+    @Volatile
+    private var liveGuidanceCheckpoint: Pair<Uuid, UIMessage>? = null
+
+    @Synchronized
+    internal fun startGenerationRun(runId: Uuid) {
+        check(generationRunId == null || generationRunId == runId) { "A generation run is already active" }
+        liveGuidanceCheckpoint = null
+        generationRunId = runId
+    }
+
+    @Synchronized
+    internal fun finishGenerationRun(runId: Uuid) {
+        if (generationRunId == runId) {
+            generationRunId = null
+            liveGuidanceCheckpoint = null
+        }
+    }
+
+    /** Keep the request snapshot stable even if a newer card arrives before prepareStep. */
+    @Synchronized
+    internal fun updateLiveGuidanceCheckpoint(runId: Uuid, message: UIMessage?) {
+        if (generationRunId == runId) {
+            liveGuidanceCheckpoint = message?.let { runId to it }
+        }
+    }
+
+    internal fun liveGuidanceRequestMessage(runId: Uuid): UIMessage? =
+        liveGuidanceCheckpoint?.takeIf { it.first == runId }?.second
+
     // 生成任务（内聚在 session 中）
     private val _generationJob = MutableStateFlow<Job?>(null)
     private val activeJobs = mutableSetOf<Job>()
@@ -244,7 +298,27 @@ class ConversationSession(
      * 压缩也占任务槽，所以压缩期间同样不会开始。
      */
     val canStartNextTurn: Boolean
-        get() = _generationJob.value == null && !state.value.isAwaitingToolApproval
+        get() = _generationJob.value == null && !generationSlotReserved && !state.value.isAwaitingToolApproval
+
+    /** A retry owns the idle slot across its suspending config write, before its Job exists. */
+    @Volatile
+    internal var generationSlotReserved = false
+        private set
+
+    @Synchronized
+    internal fun reserveGenerationSlot(): Boolean {
+        if (_generationJob.value != null || generationSlotReserved || state.value.isAwaitingToolApproval) return false
+        generationSlotReserved = true
+        return true
+    }
+
+    @Synchronized
+    internal fun releaseGenerationSlot() {
+        generationSlotReserved = false
+    }
+
+    internal val hasGenerationWork: Boolean
+        @Synchronized get() = _generationJob.value != null || generationSlotReserved
 
     // 自动压缩已经为哪条回复试过；压缩失败后不再为同一条回复反复重试
     @Volatile
@@ -268,6 +342,7 @@ class ConversationSession(
     @Synchronized
     fun setJob(job: Job?, cancelPrevious: Boolean = true, activity: SessionActivity = SessionActivity.Generating) {
         val previous = _generationJob.value
+        generationSlotReserved = false
         if (job != null) generationStartedAt.value = System.currentTimeMillis()
         // 先于任务槽更新，界面看到新任务时类型已经对了
         _activity.value = activity.takeIf { job != null }
@@ -334,6 +409,7 @@ class ConversationSession(
     fun cleanup() {
         _generationJob.value = null
         _activity.value = null
+        generationSlotReserved = false
         cancelJobs()
         idleCheckJob?.cancel()
         idleCheckJob = null
