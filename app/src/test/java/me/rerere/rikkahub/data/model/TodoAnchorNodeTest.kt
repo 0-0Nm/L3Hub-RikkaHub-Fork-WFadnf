@@ -69,4 +69,12 @@ class TodoAnchorNodeTest {
         )
         assertEquals(newOwner.id, c.todoAnchorNode()?.id)
     }
+
+    @Test
+    fun `pending or ongoing means current plan and completed does not`() {
+        assertEquals(true, listOf(TodoItem(content = "next")).hasActiveTodo())
+        assertEquals(true, listOf(TodoItem(content = "doing", status = TodoStatus.IN_PROGRESS)).hasActiveTodo())
+        assertEquals(false, listOf(TodoItem(content = "done", status = TodoStatus.COMPLETED)).hasActiveTodo())
+        assertEquals(false, listOf(TodoItem(content = "skip", status = TodoStatus.CANCELLED)).hasActiveTodo())
+    }
 }

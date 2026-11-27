@@ -106,9 +106,16 @@ internal fun ConversationTodoCard(
     guidances: List<Guidance> = emptyList(),
     onGuidanceToggleMode: (Guidance) -> Unit = {},
     onGuidanceRemove: (Guidance) -> Unit = {},
+    // 顶部计划下拉由外部统一控制展开态；普通卡片仍走自己的 remember 状态。
+    expandedOverride: Boolean? = null,
+    onExpandedChange: ((Boolean) -> Unit)? = null,
 ) {
     if (todos.isEmpty() && guidances.isEmpty()) return
-    var expanded by remember(initiallyExpanded) { mutableStateOf(initiallyExpanded) }
+    var localExpanded by remember(initiallyExpanded) { mutableStateOf(initiallyExpanded) }
+    val expanded = expandedOverride ?: localExpanded
+    fun setExpanded(next: Boolean) {
+        if (onExpandedChange != null) onExpandedChange(next) else localExpanded = next
+    }
     // 正在输入新任务时整张卡片不折叠，否则手指一划输入框就没了
     var adding by remember { mutableStateOf(false) }
     val hasTodos = todos.isNotEmpty()
@@ -136,7 +143,7 @@ internal fun ConversationTodoCard(
     ) {
         Column(
             modifier = Modifier
-                .clickable(enabled = !adding) { expanded = !expanded }
+                .clickable(enabled = !adding) { setExpanded(!expanded) }
                 .padding(horizontal = 12.dp, vertical = 10.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {

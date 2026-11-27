@@ -121,8 +121,8 @@ import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.withConversation
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.TodoItem
-import me.rerere.rikkahub.data.model.TodoStatus
 import me.rerere.rikkahub.data.model.todoAnchorNode
+import me.rerere.rikkahub.data.model.hasActiveTodo
 import me.rerere.rikkahub.ui.components.message.ConversationTodoCard
 import me.rerere.rikkahub.ui.components.message.LocalConversationStatusInSidePanel
 import me.rerere.rikkahub.ui.components.message.TodoReminderUi
@@ -737,9 +737,9 @@ private fun ChatListNormal(
                             )
                         }
                         if (todoAnchorNodeId == node.id && !LocalConversationStatusInSidePanel.current) {
-                            val hideCompleted = settings.displaySetting.hideCompletedTodoCard &&
-                                conversation.todos.all { it.status == TodoStatus.COMPLETED }
-                            if (conversation.todos.isNotEmpty() && !hideCompleted) {
+                            // 进行中计划归右上角当前计划下拉；结束后只在原回复下保留历史清单。
+                            // 这里不再按 hideCompletedTodoCard 隐藏，否则完成后的历史快照会消失。
+                            if (conversation.todos.isNotEmpty() && !conversation.todos.hasActiveTodo()) {
                                 Spacer(Modifier.height(4.dp))
                                 ConversationTodoCard(
                                     todos = conversation.todos,

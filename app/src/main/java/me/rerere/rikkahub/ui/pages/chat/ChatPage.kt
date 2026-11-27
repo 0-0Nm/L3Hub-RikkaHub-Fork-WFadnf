@@ -169,6 +169,7 @@ import me.rerere.rikkahub.ui.components.message.tools.ToolDetailHostState
 import me.rerere.rikkahub.ui.components.message.EditedFilesList
 import me.rerere.rikkahub.ui.components.message.LocalTurnChangesInSidePanel
 import me.rerere.rikkahub.ui.components.message.LocalConversationStatusInSidePanel
+import me.rerere.rikkahub.ui.components.message.CurrentPlanOverlay
 import me.rerere.rikkahub.ui.components.message.editedFilesIn
 import me.rerere.rikkahub.ui.components.message.usageTokenSpeed
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
@@ -1132,6 +1133,19 @@ private fun ChatPageContent(
                         onUpdateAssistant = vm::updateAssistant,
                         emptyHero = null,
                         )
+                }
+                // 当前计划贴在右上角现有组件下缘展开：覆盖层不占聊天列表或输入区布局。
+                // 三栏沿用右侧状态面板；详情/概览展开时不叠加第二层浮层。
+                if (!threePane && !showDetails && !previewMode) {
+                    CurrentPlanOverlay(
+                        todos = conversation.todos,
+                        assistant = assistant,
+                        onTodosChange = vm::updateTodos,
+                        onUpdateAssistant = vm::updateAssistant,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = innerPadding.calculateTopPadding(), end = 8.dp),
+                    )
                 }
                 // 详情浮层盖在聊天内容上方：不占 Scaffold 的布局，展开和收起都不会推挤聊天区。
                 // 外层有 RowScope，直接写 AnimatedVisibility 会解析到 RowScope 的扩展，这里显式用顶层版本
