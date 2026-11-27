@@ -30,6 +30,7 @@ import me.rerere.rikkahub.data.ai.injectedToolFallback
 import me.rerere.rikkahub.data.ai.prompts.buildMemoryPrompt
 import me.rerere.rikkahub.data.ai.subagent.SUB_AGENT_NOTICE_FRAMING
 import me.rerere.rikkahub.data.ai.tools.ChatToolFactory
+import me.rerere.rikkahub.data.ai.tools.TODO_WRITE_TOOL_NAME
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
 import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
@@ -512,6 +513,15 @@ private fun buildSystemPrompt(
         if (assistant.enableMemory) {
             appendLine()
             append(buildMemoryPrompt(turn.memories, canWrite = assistant.enableMemoryWrite))
+        }
+        // 清单提示只在工具实际随请求声明时出现，避免无工具模型产生假成功预期
+        if (tools.any { it.name == TODO_WRITE_TOOL_NAME }) {
+            appendLine()
+            append(
+                "## Native checklist\n" +
+                    "todo_write/todo_update are available for this conversation. In ordinary chat, use them only for an explicit structured plan/checklist or meaningful multi-step work, never simple Q&A.\n" +
+                    "In plan mode, call todo_write first with pending steps for meaningful planning; mark items completed only after real progress, not merely because they were planned. Clarify first when the request is ambiguous."
+            )
         }
         // 工具prompt
         tools.forEach { tool ->

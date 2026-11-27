@@ -42,8 +42,8 @@ fun createTodoTools(
     Tool(
         name = TODO_WRITE_TOOL_NAME,
         description = """
-            Create or replace the task list for this conversation. Use it for multi-step work so progress survives context compression.
-            Pass the full list every time: it replaces the previous one. Keep exactly one item in_progress, mark items completed as soon as they are done,
+            Create or replace the native task list for this conversation. In ordinary chat use it only for an explicit structured plan/checklist or meaningful multi-step work, never simple Q&A.
+            In plan mode, write pending steps first for meaningful planning. Pass the full list every time: it replaces the previous one. Keep exactly one item in_progress, mark items completed only after real progress,
             and keep items short and concrete (one line each). The list is shown to the user as a pinned card in the chat, and the user can also edit it
             by hand between turns — if a status looks different from what you set, the user changed it; trust that, and never re-open a `cancelled` item.
         """.trimIndent().replace("\n", " "),
@@ -166,7 +166,7 @@ private fun createTodoUpdateTool(
 ): Tool = Tool(
     name = TODO_UPDATE_TOOL_NAME,
     description = """
-        Change the status of one task without rewriting the whole list.
+        Change the status of one task without rewriting the whole list, only after real progress.
         Use the id shown next to each item (for example `3f2a9c1d`). Prefer this over todo_write once the list exists.
     """.trimIndent().replace("\n", " "),
     parameters = {

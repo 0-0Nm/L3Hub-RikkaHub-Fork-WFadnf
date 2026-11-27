@@ -14,6 +14,7 @@ import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.ai.provider.ModelAbility
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
@@ -57,6 +58,14 @@ internal fun shouldUseExternalWebSearch(assistant: Assistant, model: Model): Boo
 
 class InvalidMcpServerNamesException(val names: List<String>) :
     IllegalStateException("Invalid MCP server names: ${names.joinToString(", ")}")
+
+/** Whether this request may expose the native conversation checklist. */
+internal fun shouldExposeTodoTools(
+    conversationId: Uuid?,
+    assistant: Assistant,
+    model: Model,
+): Boolean = conversationId != null &&
+    (assistant.allWorkspaceIds.isNotEmpty() || ModelAbility.TOOL in model.abilities)
 
 /** Creates the complete tool set for one generation run, including approval resumption. */
 class ChatToolFactory(
@@ -119,9 +128,9 @@ class ChatToolFactory(
                 addAll(createConversationTools(conversationRepository, assistant.id))
             }
             addAll(workspaceTools)
-            // 任务清单是 Coding Agent 的东西：只有绑了工作区才注册，
-            // 纯聊天不该凭空多出一个 todo 工具让模型给自己派活
-            if (conversationId != null && assistant.allWorkspaceIds.isNotEmpty()) {
+            // 原生清单只依赖会话和模型工具能力，不再要求绑定工作区；
+            // 已有工作区会话保持原注册行为，未声明工具能力的模型不会被强制调用。
+            if (shouldExposeTodoTools(conversationId, assistant, model)) {
                 addAll(createTodoTools(conversationRepository, conversationId))
             }
             if (assistant.enabledSkills.isNotEmpty()) {
