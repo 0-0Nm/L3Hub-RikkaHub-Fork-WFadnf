@@ -255,7 +255,7 @@ class ConversationSession(
         private set
 
     @Volatile
-    private var liveGuidanceCheckpoint: Pair<Uuid, UIMessage>? = null
+    private var liveGuidanceCheckpoint: Pair<Uuid, List<UIMessage>>? = null
 
     @Synchronized
     internal fun startGenerationRun(runId: Uuid) {
@@ -275,13 +275,21 @@ class ConversationSession(
     /** Keep the request snapshot stable even if a newer card arrives before prepareStep. */
     @Synchronized
     internal fun updateLiveGuidanceCheckpoint(runId: Uuid, message: UIMessage?) {
+        updateLiveGuidanceCheckpoints(runId, listOfNotNull(message))
+    }
+
+    @Synchronized
+    internal fun updateLiveGuidanceCheckpoints(runId: Uuid, messages: List<UIMessage>) {
         if (generationRunId == runId) {
-            liveGuidanceCheckpoint = message?.let { runId to it }
+            liveGuidanceCheckpoint = runId to messages.distinctBy { it.id }
         }
     }
 
     internal fun liveGuidanceRequestMessage(runId: Uuid): UIMessage? =
-        liveGuidanceCheckpoint?.takeIf { it.first == runId }?.second
+        liveGuidanceRequestMessages(runId).firstOrNull()
+
+    internal fun liveGuidanceRequestMessages(runId: Uuid): List<UIMessage> =
+        liveGuidanceCheckpoint?.takeIf { it.first == runId }?.second.orEmpty()
 
     // 生成任务（内聚在 session 中）
     private val _generationJob = MutableStateFlow<Job?>(null)

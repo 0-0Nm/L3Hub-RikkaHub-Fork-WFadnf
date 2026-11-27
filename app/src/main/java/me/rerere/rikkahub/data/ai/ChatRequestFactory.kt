@@ -240,6 +240,9 @@ class ChatRequestFactory(
         processingStatus: MutableStateFlow<String?>,
         pendingInjections: suspend () -> List<UIMessage> = { emptyList() },
         acknowledgeInjection: suspend (Uuid) -> Unit = {},
+        acknowledgeInjections: suspend (List<Uuid>) -> Unit = { ids ->
+            ids.forEach { acknowledgeInjection(it) }
+        },
         pauseAfterTools: (UIMessage) -> Boolean = { false },
         takePendingParts: suspend (UIMessage?) -> List<UIMessagePart> = { emptyList() },
         // 清单的开关、间隔和内容都按最新状态读：一轮可能跑很久，用户中途关掉插入要当步生效。
@@ -282,7 +285,7 @@ class ChatRequestFactory(
                     step.copy(
                         messages = step.messages.withRequestInjections(injectedMessages),
                         onProviderOutput = {
-                            injectedMessages.map { it.id }.distinct().forEach { acknowledgeInjection(it) }
+                            acknowledgeInjections(injectedMessages.map { it.id }.distinct())
                         },
                     )
                 }

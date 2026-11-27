@@ -74,6 +74,25 @@ class LiveGuidanceSessionTest {
     }
 
     @Test
+    fun `checkpoint keeps ordered ids and never leaks across runs`() = runBlocking {
+        val id = Uuid.random()
+        val session = ConversationSession(id, Conversation.ofId(id), this, FakeConversationStore(), {})
+        session.initialize(load = { null }, create = { Conversation.ofId(id) })
+        val oldRun = Uuid.random()
+        val newRun = Uuid.random()
+        val first = UIMessage.user("first").copy(id = Uuid.random())
+        val second = UIMessage.user("second").copy(id = Uuid.random())
+        session.startGenerationRun(oldRun)
+
+        session.updateLiveGuidanceCheckpoints(oldRun, listOf(first, second, first))
+
+        assertEquals(listOf(first, second), session.liveGuidanceRequestMessages(oldRun))
+        assertEquals(emptyList<UIMessage>(), session.liveGuidanceRequestMessages(newRun))
+        session.finishGenerationRun(oldRun)
+        assertEquals(emptyList<UIMessage>(), session.liveGuidanceRequestMessages(oldRun))
+    }
+
+    @Test
     fun `duplicate and stale provider callbacks cannot change delivery twice`() {
         val oldRun = Uuid.random()
         val newRun = Uuid.random()

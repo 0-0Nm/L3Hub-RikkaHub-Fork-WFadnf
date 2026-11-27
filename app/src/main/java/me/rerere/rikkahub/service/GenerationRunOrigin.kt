@@ -11,11 +11,11 @@ internal enum class GenerationRunOrigin {
 
 internal fun GenerationRunOrigin.consumesNextMessageGuidance(): Boolean = when (this) {
     GenerationRunOrigin.USER_MESSAGE,
-    GenerationRunOrigin.LIVE_GUIDANCE_RETRY,
     -> true
 
     GenerationRunOrigin.NOTICE,
     GenerationRunOrigin.REGENERATION,
+    GenerationRunOrigin.LIVE_GUIDANCE_RETRY,
     GenerationRunOrigin.TOOL_APPROVAL,
     -> false
 }

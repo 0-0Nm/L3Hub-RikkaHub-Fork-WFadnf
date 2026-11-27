@@ -143,6 +143,7 @@ import me.rerere.rikkahub.data.model.effectiveContextWindow
 import me.rerere.rikkahub.data.model.isAwaitingToolApproval
 import me.rerere.rikkahub.data.model.isContextLimitReached
 import me.rerere.rikkahub.data.model.lastContextTokens
+import me.rerere.rikkahub.data.model.liveGuidanceEntries
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.service.BackgroundShellStatus
 import me.rerere.rikkahub.service.ChatError
@@ -741,7 +742,7 @@ private fun ChatPageContent(
 
     // 清单与引导：横屏收进右栏，出现时把标签页开出来，不抢当前看板
     val hasStatusContent = conversation.todos.isNotEmpty() || messageQueue.guidances.isNotEmpty() ||
-        conversation.config?.liveGuidance != null
+        conversation.config?.liveGuidanceEntries().orEmpty().isNotEmpty()
     LaunchedEffect(threePane, hasStatusContent) {
         if (!threePane || !hasStatusContent) return@LaunchedEffect
         if (openPaneNames.none { it == ChatSidePane.Status.name }) {
@@ -884,9 +885,11 @@ private fun ChatPageContent(
             onGuidanceToggleMode = vm::toggleGuidanceMode,
             onGuidanceRemove = vm::removeGuidance,
             conversationId = conversation.id,
-            liveGuidance = conversation.config?.liveGuidance,
+            liveGuidanceEntries = conversation.config?.liveGuidanceEntries().orEmpty(),
             onLiveGuidanceModeChange = vm::setLiveGuidancePersistence,
             onLiveGuidanceNextMessage = vm::armLiveGuidanceForNextMessage,
+            onLiveGuidanceCancel = vm::cancelLiveGuidance,
+            liveGuidanceActionIds = vm.liveGuidanceActionIds,
             runningBackgroundTasks = backgroundTasks.count { it.status == BackgroundShellStatus.RUNNING },
             onShowBackgroundTasks = { openPane(ChatSidePane.BackgroundTasks) },
             loading = loadingJob != null || sessionActivity != null || conversation.isAwaitingToolApproval,
@@ -1210,9 +1213,11 @@ private fun ChatPageContent(
                         onGuidanceToggleMode = vm::toggleGuidanceMode,
                         onGuidanceRemove = vm::removeGuidance,
                         conversationId = conversation.id,
-                        liveGuidance = conversation.config?.liveGuidance,
+                        liveGuidanceEntries = conversation.config?.liveGuidanceEntries().orEmpty(),
                         onLiveGuidanceModeChange = vm::setLiveGuidancePersistence,
                         onLiveGuidanceNextMessage = vm::armLiveGuidanceForNextMessage,
+                        onLiveGuidanceCancel = vm::cancelLiveGuidance,
+                        liveGuidanceActionIds = vm.liveGuidanceActionIds,
                         modifier = Modifier.fillMaxSize(),
                     )
 

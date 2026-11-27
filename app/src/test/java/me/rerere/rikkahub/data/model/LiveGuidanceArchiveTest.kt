@@ -147,13 +147,16 @@ class LiveGuidanceArchiveTest {
             config = ConversationConfig(liveGuidanceArchive = listOf(delivered(run).finish(run).archiveRecord(
                 conversation.messageNodes[1].id,
                 conversation.currentMessages[1].id,
-            )!!))
+            )!!)).withLiveGuidanceEntries(listOf(delivered(run, "active one"), delivered(run, "active two")))
         )
 
         val forked = source.fork(conversation.currentMessages[1].id, emptySet()) { it }!!
 
         assertTrue(forked.config?.liveGuidanceArchive?.isEmpty() == true)
         assertNull(forked.config?.liveGuidance)
+        assertTrue(forked.config?.liveGuidances?.isEmpty() == true)
+        assertTrue(forked.config?.liveGuidanceEntries()?.isEmpty() == true)
+        assertEquals(2, source.config?.liveGuidanceEntries()?.size)
         assertEquals(1, source.config?.liveGuidanceArchive?.size)
     }
 }

@@ -43,6 +43,10 @@ data class LiveGuidance(
     /** The originating run finished; its last accepted mode choice must remain unchanged. */
     val finishLocked: Boolean = false,
 ) {
+    /** Only a missed/deferred entry offers the next-user-turn swipe action. */
+    val canSwipe: Boolean
+        get() = delivery == LiveGuidanceDelivery.NOT_USED
+
     /** Bind an explicitly armed next-message item when its real run starts. */
     fun beginRun(runId: Uuid): LiveGuidance =
         if (!finishLocked && delivery == LiveGuidanceDelivery.WAITING && this.runId == null) {

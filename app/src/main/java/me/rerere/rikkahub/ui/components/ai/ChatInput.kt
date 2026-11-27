@@ -191,9 +191,11 @@ fun ChatInput(
     onGuidanceToggleMode: (Guidance) -> Unit = {},
     onGuidanceRemove: (Guidance) -> Unit = {},
     conversationId: Uuid? = null,
-    liveGuidance: LiveGuidance? = null,
+    liveGuidanceEntries: List<LiveGuidance> = emptyList(),
     onLiveGuidanceModeChange: (Uuid, Boolean) -> Unit = { _, _ -> },
-    onLiveGuidanceNextMessage: () -> Unit = {},
+    onLiveGuidanceNextMessage: (Uuid) -> Unit = {},
+    onLiveGuidanceCancel: (Uuid) -> Unit = {},
+    liveGuidanceActionIds: Set<Uuid> = emptySet(),
     runningBackgroundTasks: Int = 0,
     onShowBackgroundTasks: () -> Unit = {},
     onStartVoiceMode: (() -> Unit)? = null,
@@ -367,10 +369,13 @@ fun ChatInput(
                 onResume = onResumeMessageQueue,
             )
             if (!LocalConversationStatusInSidePanel.current) {
-                LiveGuidancePanel(
-                    guidance = liveGuidance,
+                LiveGuidanceRows(
+                    entries = liveGuidanceEntries,
+                    conversationId = conversationId,
                     onModeChange = onLiveGuidanceModeChange,
                     onNextMessage = onLiveGuidanceNextMessage,
+                    onCancel = onLiveGuidanceCancel,
+                    actionIds = liveGuidanceActionIds,
                     modifier = Modifier.adaptiveHorizontalPadding(12.dp),
                 )
             }

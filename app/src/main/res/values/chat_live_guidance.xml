@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="chat_page_guidance_cancel">Cancel</string>
+  <string name="chat_page_guidance_next_round">Send next round</string>
+  <string name="chat_page_guidance_release_cancel">Release to cancel</string>
+  <string name="chat_page_guidance_release_next">Release to send next round</string>
+  <string name="chat_page_guidance_action_rejected">The action could not be completed. Check the current steering state before trying again.</string>
+</resources>

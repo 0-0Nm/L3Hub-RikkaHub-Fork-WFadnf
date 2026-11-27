@@ -43,7 +43,11 @@ internal fun Conversation.fork(
         modeInjectionIds = modeInjectionIds,
         lorebookIds = lorebookIds,
         // Steering is scoped to the source conversation, including persistent notes and history.
-        config = config?.copy(liveGuidance = null, liveGuidanceArchive = emptyList()),
+        config = config?.copy(
+            liveGuidance = null,
+            liveGuidances = emptyList(),
+            liveGuidanceArchive = emptyList(),
+        ),
         workspaceCwd = workspaceCwd,
         workspaceCwds = workspaceCwds,
         folderId = folderId,

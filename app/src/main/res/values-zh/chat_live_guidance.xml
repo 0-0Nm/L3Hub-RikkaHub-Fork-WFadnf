@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="chat_page_guidance_cancel">取消</string>
+  <string name="chat_page_guidance_next_round">下一轮再发</string>
+  <string name="chat_page_guidance_release_cancel">松开取消</string>
+  <string name="chat_page_guidance_release_next">松开后下一轮再发</string>
+  <string name="chat_page_guidance_action_rejected">未能完成操作，请检查引导的当前状态后重试。</string>
+</resources>

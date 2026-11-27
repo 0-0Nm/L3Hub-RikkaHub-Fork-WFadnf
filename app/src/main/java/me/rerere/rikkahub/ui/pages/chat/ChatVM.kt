@@ -382,9 +382,43 @@ class ChatVM(
         }
     }
 
-    fun armLiveGuidanceForNextMessage() {
+    var liveGuidanceActionIds by mutableStateOf<Set<Uuid>>(emptySet())
+        private set
+
+    fun cancelLiveGuidance(id: Uuid) = performLiveGuidanceAction(id) { conversationId ->
+        chatService.cancelLiveGuidance(conversationId, id)
+    }
+
+    fun armLiveGuidanceForNextMessage(id: Uuid) = performLiveGuidanceAction(id) { conversationId ->
+        chatService.armLiveGuidanceForNextMessage(conversationId, id)
+    }
+
+    /** ID-scoped, service-owned mutation. Never remove/reorder rows optimistically or touch inbox. */
+    private fun performLiveGuidanceAction(id: Uuid, action: suspend (Uuid) -> Boolean) {
+        if (id in liveGuidanceActionIds) return
+        val conversationId = _conversationId
+        // Before launch: a release followed by a click/accessibility action cannot double-submit.
+        liveGuidanceActionIds = liveGuidanceActionIds + id
         viewModelScope.launch {
-            chatService.armLiveGuidanceForNextMessage(_conversationId)
+            try {
+                if (!action(conversationId)) {
+                    chatService.addError(
+                        error = IllegalStateException(context.getString(R.string.chat_page_guidance_action_rejected)),
+                        conversationId = conversationId,
+                        title = context.getString(R.string.error_title_operation),
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                chatService.addError(
+                    error = error,
+                    conversationId = conversationId,
+                    title = context.getString(R.string.error_title_operation),
+                )
+            } finally {
+                liveGuidanceActionIds = liveGuidanceActionIds - id
+            }
         }
     }
 

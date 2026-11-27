@@ -69,21 +69,20 @@ fun ConversationConfig.finishLiveGuidance(
     runId: Uuid,
     anchor: () -> Pair<Uuid, Uuid>?,
 ): ConversationConfig {
-    val item = liveGuidance ?: return this
-    val finished = item.finish(runId)
-    val record = if (finished.finishLocked) {
-        anchor()?.let { (nodeId, messageId) -> finished.archiveRecord(nodeId, messageId) }
-    } else {
-        null
+    if (liveGuidanceEntries().isEmpty()) return this
+    val replyAnchor = anchor()
+    val records = mutableListOf<ArchivedLiveGuidance>()
+    val retained = liveGuidanceEntries().map { item ->
+        val finished = item.finish(runId)
+        if (finished.finishLocked && replyAnchor != null) {
+            finished.archiveRecord(replyAnchor.first, replyAnchor.second)?.let(records::add)
+        }
+        finished
+    }.filter { item -> records.none { record -> record.id == item.id } }
+    val archive = records.fold(liveGuidanceArchive) { current, record ->
+        current.upsertArchivedGuidance(record)
     }
-    return if (record != null) {
-        copy(
-            liveGuidance = null,
-            liveGuidanceArchive = liveGuidanceArchive.upsertArchivedGuidance(record),
-        )
-    } else {
-        copy(liveGuidance = finished)
-    }
+    return withLiveGuidanceEntries(retained).copy(liveGuidanceArchive = archive)
 }
 
 /**
@@ -93,23 +92,22 @@ fun ConversationConfig.finishLiveGuidance(
  */
 fun Conversation.recoverLiveGuidance(): Conversation {
     val current = config ?: return this
-    val item = current.liveGuidance ?: return this
-    val recovered = item.recoverAfterReopen()
-    val record = if (recovered.finishLocked && recovered.delivery == LiveGuidanceDelivery.DELIVERED) {
-        liveGuidanceAnchor(replyMessageId = null)?.let { (nodeId, messageId) ->
-            recovered.archiveRecord(nodeId, messageId)
+    if (current.liveGuidanceEntries().isEmpty()) return this
+    val replyAnchor = liveGuidanceAnchor(replyMessageId = null)
+    val records = mutableListOf<ArchivedLiveGuidance>()
+    val recovered = current.liveGuidanceEntries().map { item ->
+        item.recoverAfterReopen().also { restored ->
+            if (restored.finishLocked && restored.delivery == LiveGuidanceDelivery.DELIVERED &&
+                replyAnchor != null
+            ) {
+                restored.archiveRecord(replyAnchor.first, replyAnchor.second)?.let(records::add)
+            }
         }
-    } else {
-        null
+    }.filter { item -> records.none { record -> record.id == item.id } }
+    val archive = records.fold(current.liveGuidanceArchive) { entries, record ->
+        entries.upsertArchivedGuidance(record)
     }
-    val updated = if (record != null) {
-        current.copy(
-            liveGuidance = null,
-            liveGuidanceArchive = current.liveGuidanceArchive.upsertArchivedGuidance(record),
-        )
-    } else {
-        current.copy(liveGuidance = recovered)
-    }
+    val updated = current.withLiveGuidanceEntries(recovered).copy(liveGuidanceArchive = archive)
     return if (updated == current) this else copy(config = updated)
 }
 

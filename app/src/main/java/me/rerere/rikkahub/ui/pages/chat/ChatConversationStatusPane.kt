@@ -18,7 +18,7 @@ import me.rerere.rikkahub.data.model.Guidance
 import me.rerere.rikkahub.data.model.LiveGuidance
 import me.rerere.rikkahub.data.model.TodoItem
 import me.rerere.rikkahub.data.model.TodoStatus
-import me.rerere.rikkahub.ui.components.ai.LiveGuidancePanel
+import me.rerere.rikkahub.ui.components.ai.LiveGuidanceRows
 import me.rerere.rikkahub.ui.components.message.ConversationTodoCard
 import me.rerere.rikkahub.ui.components.message.TodoReminderUi
 import kotlin.uuid.Uuid
@@ -40,9 +40,11 @@ internal fun ConversationStatusPane(
     onGuidanceToggleMode: (Guidance) -> Unit,
     onGuidanceRemove: (Guidance) -> Unit,
     conversationId: Uuid,
-    liveGuidance: LiveGuidance?,
+    liveGuidanceEntries: List<LiveGuidance>,
     onLiveGuidanceModeChange: (Uuid, Boolean) -> Unit,
-    onLiveGuidanceNextMessage: () -> Unit,
+    onLiveGuidanceNextMessage: (Uuid) -> Unit,
+    onLiveGuidanceCancel: (Uuid) -> Unit,
+    liveGuidanceActionIds: Set<Uuid>,
     modifier: Modifier = Modifier,
 ) {
     // 和输入区那张一样：全部完成且开了开关时收起清单，引导不受影响
@@ -56,7 +58,7 @@ internal fun ConversationStatusPane(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-        if (shownTodos.isEmpty() && guidances.isEmpty() && liveGuidance == null) {
+        if (shownTodos.isEmpty() && guidances.isEmpty() && liveGuidanceEntries.isEmpty()) {
             Text(
                 text = stringResource(R.string.chat_page_status_empty),
                 style = MaterialTheme.typography.bodySmall,
@@ -90,10 +92,13 @@ internal fun ConversationStatusPane(
             onGuidanceRemove = onGuidanceRemove,
             modifier = Modifier.fillMaxWidth(),
         )
-        LiveGuidancePanel(
-            guidance = liveGuidance,
+        LiveGuidanceRows(
+            entries = liveGuidanceEntries,
+            conversationId = conversationId,
             onModeChange = onLiveGuidanceModeChange,
             onNextMessage = onLiveGuidanceNextMessage,
+            onCancel = onLiveGuidanceCancel,
+            actionIds = liveGuidanceActionIds,
             modifier = Modifier.fillMaxWidth(),
         )
     }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -33,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +45,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.AiMagic
 import me.rerere.hugeicons.stroke.Alert01
@@ -111,6 +114,25 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
     val filesManager: FilesManager = koinInject()
     val localNetworkPermission = rememberLocalNetworkPermissionState()
     val notificationPermission = rememberNotificationPermissionState()
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val showProviderWarning = settings.isNotConfigured()
+    val showLocalNetworkPermission = localNetworkPermission?.allRequiredPermissionsGranted == false
+    val showNotificationPermission = notificationPermission?.allRequiredPermissionsGranted == false
+    // The profile and visible permission/warning cards precede the actual section headings.
+    val firstSectionIndex = 1 + listOf(
+        showProviderWarning,
+        showLocalNetworkPermission,
+        showNotificationPermission,
+    ).count { it }
+    val sections = listOf(
+        "generalSettings" to R.string.setting_page_general_settings,
+        "modelServices" to R.string.setting_page_model_and_services,
+        "dataSettings" to R.string.setting_page_data_settings,
+        "aboutSettings" to R.string.setting_page_about,
+    ).mapIndexed { index, (key, titleRes) ->
+        SettingsTocEntry(key, titleRes, firstSectionIndex + index)
+    }
 
     Scaffold(
         topBar = {
@@ -124,11 +146,23 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 colors = CustomColors.topBarColors
             )
         },
+        floatingActionButton = {
+            SettingsTableOfContents(
+                entries = sections,
+                onSelect = { section ->
+                    scope.launch { listState.animateScrollToItem(section.itemIndex) }
+                },
+            )
+        },
         containerColor = CustomColors.topBarColors.containerColor
     ) { innerPadding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = innerPadding + PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            // Leave room for the compact trigger when the last section is reached.
+            contentPadding = innerPadding + PaddingValues(
+                start = 16.dp, end = 16.dp, top = 8.dp, bottom = 80.dp,
+            ),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item("profile") {
@@ -211,7 +245,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 }
             }
 
-            if (settings.isNotConfigured()) {
+            if (showProviderWarning) {
                 item {
                     ProviderConfigWarningCard(
                         onClick = { navController.navigate(Screen.SettingProvider) }
@@ -219,24 +253,24 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 }
             }
 
-            if (localNetworkPermission?.allRequiredPermissionsGranted == false) {
+            if (showLocalNetworkPermission) {
                 item("localNetworkPermission") {
                     LocalNetworkPermissionCard(permissionState = localNetworkPermission)
                 }
             }
 
-            if (notificationPermission?.allRequiredPermissionsGranted == false) {
+            if (showNotificationPermission) {
                 item("notificationPermission") {
                     NotificationPermissionCard(permissionState = notificationPermission)
                 }
             }
 
-            item("generalSettings") {
+            item(sections[0].key) {
                 var colorMode by rememberColorMode()
                 val containerColor = MaterialTheme.colorScheme.primaryContainer
                 val contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 CardGroup(
-                    title = { Text(stringResource(R.string.setting_page_general_settings)) },
+                    title = { Text(stringResource(sections[0].titleRes)) },
                 ) {
                     formItem {
                         Row(
@@ -323,11 +357,11 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 }
             }
 
-            item("modelServices") {
+            item(sections[1].key) {
                 val containerColor = MaterialTheme.colorScheme.tertiaryContainer
                 val contentColor = MaterialTheme.colorScheme.onTertiaryContainer
                 CardGroup(
-                    title = { Text(stringResource(R.string.setting_page_model_and_services)) },
+                    title = { Text(stringResource(sections[1].titleRes)) },
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.SettingModels) },
@@ -381,14 +415,14 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 }
             }
 
-            item("dataSettings") {
+            item(sections[2].key) {
                 val storageState by produceState(-1 to 0L) {
                     value = filesManager.countChatFiles()
                 }
                 val containerColor = MaterialTheme.colorScheme.secondaryContainer
                 val contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                 CardGroup(
-                    title = { Text(stringResource(R.string.setting_page_data_settings)) },
+                    title = { Text(stringResource(sections[2].titleRes)) },
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.Backup) },
@@ -419,7 +453,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 }
             }
 
-            item("aboutSettings") {
+            item(sections[3].key) {
                 val context = LocalContext.current
                 val shareText = stringResource(R.string.setting_page_share_text)
                 val share = stringResource(R.string.setting_page_share)
@@ -427,7 +461,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 val containerColor = MaterialTheme.colorScheme.primaryContainer
                 val contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 CardGroup(
-                    title = { Text(stringResource(R.string.setting_page_about)) },
+                    title = { Text(stringResource(sections[3].titleRes)) },
                 ) {
                     item(
                         onClick = { navController.navigate(Screen.SettingAbout) },

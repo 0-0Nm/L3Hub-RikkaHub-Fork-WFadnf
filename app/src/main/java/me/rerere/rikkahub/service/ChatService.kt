@@ -50,7 +50,7 @@ import me.rerere.rikkahub.data.ai.TranslationHandler
 import me.rerere.rikkahub.data.ai.guidanceToolPart
 import me.rerere.rikkahub.data.ai.requestMessage
 import me.rerere.rikkahub.data.ai.isInjectedTool
-import me.rerere.rikkahub.data.ai.liveGuidanceRequestMessage
+import me.rerere.rikkahub.data.ai.liveGuidanceRequestMessages
 import me.rerere.rikkahub.data.ai.stepsSinceLastGuidance
 import me.rerere.rikkahub.data.ai.stepsSinceLastTodoReminder
 import me.rerere.rikkahub.data.ai.todoReminderToolPart
@@ -104,8 +104,9 @@ import me.rerere.rikkahub.data.model.isContextLimitReached
 import me.rerere.rikkahub.data.model.lastContextTokens
 import me.rerere.rikkahub.data.model.finishLiveGuidance
 import me.rerere.rikkahub.data.model.liveGuidanceAnchor
-import me.rerere.rikkahub.data.model.liveGuidanceRetryTarget
+import me.rerere.rikkahub.data.model.liveGuidanceEntries
 import me.rerere.rikkahub.data.model.recoverLiveGuidance
+import me.rerere.rikkahub.data.model.withLiveGuidanceEntries
 import me.rerere.rikkahub.data.model.localFileUrls
 import me.rerere.rikkahub.data.model.replaceUserRegexes
 import me.rerere.rikkahub.data.model.selectBranch
@@ -1177,8 +1178,8 @@ class ChatService(
                     val config = checkNotNull(bound.config)
                     val runId = session.generationRunId
                     bound.copy(
-                        config = config.copy(
-                            liveGuidance = LiveGuidance(
+                        config = config.withLiveGuidanceEntries(
+                            config.liveGuidanceEntries() + LiveGuidance(
                                 content = text,
                                 mode = if (persistent) LiveGuidanceMode.PERSISTENT else LiveGuidanceMode.TEMPORARY,
                                 delivery = if (runId == null) {
@@ -1203,57 +1204,61 @@ class ChatService(
         guidanceId: Uuid,
         persistent: Boolean,
     ): Boolean = withLoadedSession(conversationId) { session ->
-        session.mutateLiveGuidance { current ->
-            current
-                ?.takeIf { it.id == guidanceId }
-                ?.withPersistence(persistent, session.generationRunId)
-                ?: current
+        session.mutateLiveGuidance(guidanceId) { current ->
+            current.withPersistence(persistent, session.generationRunId)
         }
     }
 
-    /** Arm a missed note for the next real run. This never opens a model call by itself. */
-    suspend fun armLiveGuidanceForNextMessage(conversationId: Uuid): Boolean =
+    /** Cancel exactly one card; a stale callback cannot remove a newer or different ID. */
+    suspend fun cancelLiveGuidance(conversationId: Uuid, guidanceId: Uuid): Boolean =
         withLoadedSession(conversationId) { session ->
-            session.mutateLiveGuidance { current -> current?.armForNextRun() }
+            session.mutateLiveGuidance { entries ->
+                entries.filterNot { it.id == guidanceId && it.canSwipe }
+            }
         }
 
-    /** Explicit retry: re-arm the same note, then use the existing regenerate route. */
-    suspend fun retryLiveGuidance(conversationId: Uuid): Boolean {
-        val reserved = withLoadedSession(conversationId) { session ->
-            if (!session.reserveGenerationSlot()) return@withLoadedSession false
-            val target = session.state.value.liveGuidanceRetryTarget()
-            val armed = target != null && session.mutateLiveGuidance { current -> current?.armForNextRun() }
-            if (target == null || !armed) {
-                session.releaseGenerationSlot()
-                return@withLoadedSession false
-            }
-            // Start through the reserved path; no previous Job is cancelled or replaced.
-            regenerateAtMessage(conversationId, target, reserved = true)
-            true
+    /** Arm exactly one missed note for the next user turn; never dispatch a run here. */
+    suspend fun armLiveGuidanceForNextMessage(conversationId: Uuid, guidanceId: Uuid): Boolean =
+        withLoadedSession(conversationId) { session ->
+            session.mutateLiveGuidance(guidanceId) { current -> current.armForNextRun() }
         }
-        return reserved
+
+    /** Compatibility alias: retry now defers the latest missed ID until the next real user turn. */
+    suspend fun retryLiveGuidance(conversationId: Uuid): Boolean {
+        val guidanceId = withLoadedSession(conversationId) { session ->
+            session.state.value.config?.liveGuidanceEntries()
+                ?.lastOrNull { it.delivery == LiveGuidanceDelivery.NOT_USED }?.id
+        }
+        return guidanceId != null && armLiveGuidanceForNextMessage(conversationId, guidanceId)
     }
 
     /** Atomic config-only mutation; message nodes, approvals and queue state are not rewritten. */
     private suspend fun ConversationSession.mutateLiveGuidance(
-        transform: (LiveGuidance?) -> LiveGuidance?,
+        transform: (List<LiveGuidance>) -> List<LiveGuidance>,
     ): Boolean {
         var changed = false
         val retained = updateMetadataChecked(
             transform = { latest ->
                 val config = latest.config ?: return@updateMetadataChecked latest
-                val previous = config.liveGuidance
-                val updated = transform(previous)
+                val previous = config.liveGuidanceEntries()
+                val updated = transform(previous).distinctBy { it.id }
                 if (updated == previous) {
                     latest
                 } else {
                     changed = true
-                    latest.copy(config = config.copy(liveGuidance = updated))
+                    latest.copy(config = config.withLiveGuidanceEntries(updated))
                 }
             },
             persist = conversationRepo::updateConversationConfig,
         )
         return changed && retained
+    }
+
+    private suspend fun ConversationSession.mutateLiveGuidance(
+        guidanceId: Uuid,
+        transform: (LiveGuidance) -> LiveGuidance,
+    ): Boolean = mutateLiveGuidance { entries ->
+        entries.map { current -> if (current.id == guidanceId) transform(current) else current }
     }
 
     /**
@@ -1272,16 +1277,19 @@ class ChatService(
         )
     }
 
-    private suspend fun ConversationSession.acknowledgeLiveGuidance(runId: Uuid, guidanceId: Uuid) {
-        val item = state.value.config?.liveGuidance
-        if (generationRunId != runId || item?.id != guidanceId || !item.isAwaitingOutput(runId)) return
-        // The provider has already produced output: a simultaneous stop must not drop the acknowledgement.
+    private suspend fun ConversationSession.acknowledgeLiveGuidance(runId: Uuid, guidanceIds: List<Uuid>) {
+        if (generationRunId != runId) return
+        val ids = guidanceIds.toSet()
+        // Mark the whole captured ID set in memory before one persistence call. If that call throws,
+        // no later ID loses its delivery bookkeeping and the dirty state remains available for flush.
         withContext(NonCancellable) {
-            mutateLiveGuidance { current ->
-                if (generationRunId == runId && current?.id == guidanceId) {
-                    current.acknowledgeDelivery(runId)
-                } else {
-                    current
+            mutateLiveGuidance { entries ->
+                entries.map { current ->
+                    if (generationRunId == runId && current.id in ids) {
+                        current.acknowledgeDelivery(runId)
+                    } else {
+                        current
+                    }
                 }
             }
         }
@@ -1334,7 +1342,7 @@ class ChatService(
         runId: Uuid,
     ): List<UIMessagePart> {
         // Capture without acknowledging: this step may fail before producing any provider output.
-        updateLiveGuidanceCheckpoint(runId, state.value.config?.liveGuidanceRequestMessage(runId))
+        updateLiveGuidanceCheckpoints(runId, state.value.config?.liveGuidanceRequestMessages(runId).orEmpty())
         val parts = mutableListOf<UIMessagePart>()
         parts += inbox.takeNotices()
         // 子代理结果也在这里进来：父会话正在跑的时候，结果不该等到这一轮收尾才被看到
@@ -1702,7 +1710,7 @@ class ChatService(
             session.startGenerationRun(runId)
             // Notice, ordinary regenerate and approval runs never consume a next-user-message note.
             if (origin.consumesNextMessageGuidance()) {
-                session.mutateLiveGuidance { current -> current?.beginRun(runId) }
+                session.mutateLiveGuidance { entries -> entries.map { it.beginRun(runId) } }
             }
             val settings = settingsStore.awaitLoaded()
             // 清掉上一轮的建议；没法继续执行的工具调用发给模型会被拒绝，先去掉。
@@ -1749,10 +1757,10 @@ class ChatService(
                         messages = target.history,
                         processingStatus = session.processingStatus,
                         pendingInjections = {
-                            listOfNotNull(session.liveGuidanceRequestMessage(runId))
+                            session.liveGuidanceRequestMessages(runId)
                         },
-                        acknowledgeInjection = { guidanceId ->
-                            session.acknowledgeLiveGuidance(runId, guidanceId)
+                        acknowledgeInjections = { guidanceIds ->
+                            session.acknowledgeLiveGuidance(runId, guidanceIds)
                         },
                         pauseAfterTools = pause@{ message ->
                             if (!canCompress || compressionUseless) return@pause false

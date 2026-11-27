@@ -28,10 +28,30 @@ data class ConversationConfig(
     val workspaceIds: Set<Uuid> = emptySet(),
     val enabledSkills: Set<String> = emptySet(),
     // Runtime steering is stored in this existing JSON column; defaults keep old backups readable.
+    // Legacy single-card mirror for older readers; canonical multi-card order is below.
     val liveGuidance: LiveGuidance? = null,
+    val liveGuidances: List<LiveGuidance> = emptyList(),
     // Run-finished steering history: metadata only, never a message node or a user turn.
     val liveGuidanceArchive: List<ArchivedLiveGuidance> = emptyList(),
 )
+
+/** Ordered active entries, including a legacy singleton that predates the multi-card field. */
+fun ConversationConfig.liveGuidanceEntries(): List<LiveGuidance> {
+    val legacy = liveGuidance
+    return if (legacy != null && liveGuidances.none { it.id == legacy.id }) {
+        listOf(legacy) + liveGuidances
+    } else {
+        liveGuidances
+    }
+}
+
+/** Canonical writer for active-card mutations; IDs are unique and order is stable. */
+fun ConversationConfig.withLiveGuidanceEntries(
+    entries: List<LiveGuidance>,
+): ConversationConfig {
+    val ordered = entries.distinctBy { it.id }
+    return copy(liveGuidance = ordered.firstOrNull(), liveGuidances = ordered)
+}
 
 // 内置搜索是模型的开关，不在助手上，由调用方另行填入
 private fun Assistant.toConversationConfig() = ConversationConfig(
@@ -74,6 +94,7 @@ fun Conversation.withAssistantUpdate(updated: Assistant, settings: Settings): Co
         copy(
             config = updated.toConversationConfig().copy(
                 liveGuidance = config.liveGuidance,
+                liveGuidances = config.liveGuidances,
                 liveGuidanceArchive = config.liveGuidanceArchive,
                 builtInSearch = if (updated.chatModelId == config.chatModelId) {
                     config.builtInSearch
