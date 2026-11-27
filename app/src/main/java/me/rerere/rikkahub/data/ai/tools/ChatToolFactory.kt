@@ -130,7 +130,7 @@ class ChatToolFactory(
             addAll(workspaceTools)
             // 原生清单只依赖会话和模型工具能力，不再要求绑定工作区；
             // 已有工作区会话保持原注册行为，未声明工具能力的模型不会被强制调用。
-            if (shouldExposeTodoTools(conversationId, assistant, model)) {
+            if (conversationId != null && shouldExposeTodoTools(conversationId, assistant, model)) {
                 addAll(createTodoTools(conversationRepository, conversationId))
             }
             if (assistant.enabledSkills.isNotEmpty()) {
