@@ -61,7 +61,8 @@ class LiveGuidanceArchiveInjectionTest {
         assertEquals(active.id, duringRun.id)
         assertTrue(duringRun.id != archivedId)
         // Once the new note is archived too it is temporary, so the persistent record still steers.
-        val finished = withActive.finishLiveGuidance(run) { Uuid.random() to Uuid.random() }
+        val deliveredActive = withActive.copy(liveGuidance = active.acknowledgeDelivery(run))
+        val finished = deliveredActive.finishLiveGuidance(run) { Uuid.random() to Uuid.random() }
         assertEquals(2, finished.liveGuidanceArchive.size)
         assertNull(finished.liveGuidance)
         assertEquals(archivedId, finished.liveGuidanceRequestMessage(Uuid.random())!!.id)
