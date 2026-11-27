@@ -2604,5 +2604,8 @@
   <string name="chat_page_guidance_compact_not_used">未採用</string>
   <string name="chat_page_guidance_details">詳情</string>
   <string name="chat_page_guidance_close">關閉</string>
+  <string name="chat_page_guidance_archived">本輪已結束</string>
+  <string name="chat_page_guidance_archived_temporary_hint">臨時引導僅作為歷史保留：可在這裡查看原文，不會再傳給模型。</string>
+  <string name="chat_page_guidance_archived_persistent_hint">長期引導繼續只作用於本對話的後續回覆；不會變成歷史中的使用者訊息，也不會進入其他對話。</string>
   <string name="chat_page_guidance_mode_hint">本輪仍可編輯時，點按記錄可切換臨時／持續。已送達表示攜帶引導的請求收到了模型輸出，不代表模型遵循了引導。</string>
 </resources>

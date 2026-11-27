@@ -2770,5 +2770,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chat_page_guidance_compact_not_used">未采用</string>
   <string name="chat_page_guidance_details">详情</string>
   <string name="chat_page_guidance_close">关闭</string>
+  <string name="chat_page_guidance_archived">本轮已结束</string>
+  <string name="chat_page_guidance_archived_temporary_hint">临时引导仅作为历史保留：在这里可查看原文，不会再发给模型。</string>
+  <string name="chat_page_guidance_archived_persistent_hint">长期引导继续只作用于本会话的后续回复；不会变成历史里的用户消息，也不会进入其他会话。</string>
   <string name="chat_page_guidance_mode_hint">本轮仍可编辑时，点按记录可切换临时／持续。已送达表示携带引导的请求收到了模型输出，不代表模型遵循了引导。</string>
 </resources>

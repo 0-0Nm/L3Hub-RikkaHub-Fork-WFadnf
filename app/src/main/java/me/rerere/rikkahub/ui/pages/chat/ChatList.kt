@@ -116,9 +116,11 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.archivedGuidanceByNode
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.withConversation
 import me.rerere.rikkahub.service.ChatError
+import me.rerere.rikkahub.ui.components.ai.ArchivedLiveGuidanceCard
 import me.rerere.rikkahub.ui.components.message.ChatMessage
 import me.rerere.rikkahub.ui.components.ui.ErrorCardsDisplay
 import me.rerere.rikkahub.ui.components.ui.glassOverlayColor
@@ -348,6 +350,8 @@ private fun ChatListNormal(
     val loadingState by rememberUpdatedState(loading)
     var isRecentScroll by remember { mutableStateOf(false) }
     val conversationUpdated by rememberUpdatedState(conversation)
+    // Archived steering is metadata anchored to a reply node, not an extra message in the list.
+    val archivedByNode = remember(conversation.config) { conversation.config.archivedGuidanceByNode() }
     val density = LocalDensity.current
     val activity = LocalContext.current as? me.rerere.rikkahub.RouteActivity
 
@@ -709,6 +713,13 @@ private fun ChatListNormal(
                                 lastMessage = index == lastMessageIndex,
                                 joinedToPrevious = joinedToPrevious,
                                 joinedToNext = joinedToNext,
+                            )
+                        }
+                        archivedByNode[node.id]?.forEach { entry ->
+                            Spacer(Modifier.height(4.dp))
+                            ArchivedLiveGuidanceCard(
+                                entry = entry,
+                                modifier = Modifier.padding(horizontal = 8.dp),
                             )
                         }
                     }

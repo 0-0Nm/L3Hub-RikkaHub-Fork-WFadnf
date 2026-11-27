@@ -29,6 +29,8 @@ data class ConversationConfig(
     val enabledSkills: Set<String> = emptySet(),
     // Runtime steering is stored in this existing JSON column; defaults keep old backups readable.
     val liveGuidance: LiveGuidance? = null,
+    // Run-finished steering history: metadata only, never a message node or a user turn.
+    val liveGuidanceArchive: List<ArchivedLiveGuidance> = emptyList(),
 )
 
 // 内置搜索是模型的开关，不在助手上，由调用方另行填入
@@ -72,6 +74,7 @@ fun Conversation.withAssistantUpdate(updated: Assistant, settings: Settings): Co
         copy(
             config = updated.toConversationConfig().copy(
                 liveGuidance = config.liveGuidance,
+                liveGuidanceArchive = config.liveGuidanceArchive,
                 builtInSearch = if (updated.chatModelId == config.chatModelId) {
                     config.builtInSearch
                 } else {

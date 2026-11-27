@@ -50,6 +50,7 @@ import me.rerere.rikkahub.data.ai.TranslationHandler
 import me.rerere.rikkahub.data.ai.guidanceToolPart
 import me.rerere.rikkahub.data.ai.requestMessage
 import me.rerere.rikkahub.data.ai.isInjectedTool
+import me.rerere.rikkahub.data.ai.liveGuidanceRequestMessage
 import me.rerere.rikkahub.data.ai.stepsSinceLastGuidance
 import me.rerere.rikkahub.data.ai.stepsSinceLastTodoReminder
 import me.rerere.rikkahub.data.ai.todoReminderToolPart
@@ -101,7 +102,10 @@ import me.rerere.rikkahub.data.model.insertContextCheckpoint
 import me.rerere.rikkahub.data.model.isAwaitingToolApproval
 import me.rerere.rikkahub.data.model.isContextLimitReached
 import me.rerere.rikkahub.data.model.lastContextTokens
+import me.rerere.rikkahub.data.model.finishLiveGuidance
+import me.rerere.rikkahub.data.model.liveGuidanceAnchor
 import me.rerere.rikkahub.data.model.liveGuidanceRetryTarget
+import me.rerere.rikkahub.data.model.recoverLiveGuidance
 import me.rerere.rikkahub.data.model.localFileUrls
 import me.rerere.rikkahub.data.model.replaceUserRegexes
 import me.rerere.rikkahub.data.model.selectBranch
@@ -565,12 +569,8 @@ class ChatService(
         val conversation = conversationRepo.getConversationById(conversationId) ?: return null
         // settingsFlow 在启动初期还是占位值，固定配置必须基于真实设置
         val bound = conversation.bindConfig(settingsStore.awaitLoaded())
-        val recoveredLive = bound.config?.liveGuidance?.recoverAfterReopen()
-        val recovered = if (recoveredLive == bound.config?.liveGuidance) {
-            bound
-        } else {
-            bound.copy(config = bound.config?.copy(liveGuidance = recoveredLive))
-        }
+        // Also migrates an old delivered config into anchored history, without touching messages.
+        val recovered = bound.recoverLiveGuidance()
         if (recovered !== conversation) conversationRepo.updateConversationConfig(recovered)
         return recovered
     }
@@ -1256,6 +1256,22 @@ class ChatService(
         return changed && retained
     }
 
+    /**
+     * Run-finish archival: a delivered note leaves the composer card and becomes an anchored history
+     * entry in the same atomic config write. Missed notes are only finish-locked, never archived.
+     */
+    private suspend fun ConversationSession.finishLiveGuidanceRun(runId: Uuid) {
+        val replyId = replyMessageId.value
+        updateMetadataChecked(
+            transform = { latest ->
+                val config = latest.config ?: return@updateMetadataChecked latest
+                val updated = config.finishLiveGuidance(runId) { latest.liveGuidanceAnchor(replyId) }
+                if (updated == config) latest else latest.copy(config = updated)
+            },
+            persist = conversationRepo::updateConversationConfig,
+        )
+    }
+
     private suspend fun ConversationSession.acknowledgeLiveGuidance(runId: Uuid, guidanceId: Uuid) {
         val item = state.value.config?.liveGuidance
         if (generationRunId != runId || item?.id != guidanceId || !item.isAwaitingOutput(runId)) return
@@ -1318,7 +1334,7 @@ class ChatService(
         runId: Uuid,
     ): List<UIMessagePart> {
         // Capture without acknowledging: this step may fail before producing any provider output.
-        updateLiveGuidanceCheckpoint(runId, state.value.config?.liveGuidance?.requestMessage(runId))
+        updateLiveGuidanceCheckpoint(runId, state.value.config?.liveGuidanceRequestMessage(runId))
         val parts = mutableListOf<UIMessagePart>()
         parts += inbox.takeNotices()
         // 子代理结果也在这里进来：父会话正在跑的时候，结果不该等到这一轮收尾才被看到
@@ -1847,7 +1863,7 @@ class ChatService(
             withContext(NonCancellable) {
                 // Clear first: a submission after this point belongs to no active run.
                 session.finishGenerationRun(runId)
-                session.mutateLiveGuidance { current -> current?.finish(runId) }
+                session.finishLiveGuidanceRun(runId)
             }
         }
     }

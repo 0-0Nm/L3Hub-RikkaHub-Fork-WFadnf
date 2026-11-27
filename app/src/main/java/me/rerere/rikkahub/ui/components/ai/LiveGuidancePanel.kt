@@ -132,3 +132,83 @@ fun LiveGuidancePanel(
         )
     }
 }
+
+/**
+ * Durable run-finish history entry. Read-only: the mode was locked with its originating run, and a
+ * delivered note has no next-message recovery. It lives in the scrollable history, not in the
+ * composer and not as a model/user message.
+ */
+@Composable
+fun ArchivedLiveGuidanceCard(
+    entry: me.rerere.rikkahub.data.model.ArchivedLiveGuidance,
+    modifier: Modifier = Modifier,
+) {
+    var showDetails by remember(entry.id) { mutableStateOf(false) }
+    val persistent = entry.mode == LiveGuidanceMode.PERSISTENT
+    val modeLabel = stringResource(
+        if (persistent) R.string.chat_page_busy_persistent else R.string.chat_page_busy_temporary
+    )
+    Surface(
+        modifier = modifier.fillMaxWidth().testTag("archived_live_guidance_card"),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f).padding(horizontal = 4.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.chat_page_guidance_archived) + " · " + modeLabel +
+                        " · " + stringResource(R.string.chat_page_guidance_compact_delivered),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    entry.content,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            TextButton(
+                onClick = { showDetails = true },
+                modifier = Modifier.heightIn(min = 48.dp).testTag("archived_live_guidance_details"),
+            ) { Text(stringResource(R.string.chat_page_guidance_details)) }
+        }
+    }
+    if (showDetails) {
+        AlertDialog(
+            onDismissRequest = { showDetails = false },
+            title = { Text(stringResource(R.string.chat_page_guidance_archived)) },
+            text = {
+                Column(
+                    modifier = Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(stringResource(R.string.chat_page_live_guidance_delivered))
+                    Text(entry.content, modifier = Modifier.testTag("archived_live_guidance_full_content"))
+                    Text(
+                        stringResource(
+                            if (persistent) {
+                                R.string.chat_page_guidance_archived_persistent_hint
+                            } else {
+                                R.string.chat_page_guidance_archived_temporary_hint
+                            }
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDetails = false }) {
+                    Text(stringResource(R.string.chat_page_guidance_close))
+                }
+            },
+        )
+    }
+}

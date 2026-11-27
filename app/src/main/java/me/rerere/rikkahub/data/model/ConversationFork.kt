@@ -42,8 +42,8 @@ internal fun Conversation.fork(
         customSystemPrompt = customSystemPrompt,
         modeInjectionIds = modeInjectionIds,
         lorebookIds = lorebookIds,
-        // Steering is scoped to the source conversation, including persistent notes.
-        config = config?.copy(liveGuidance = null),
+        // Steering is scoped to the source conversation, including persistent notes and history.
+        config = config?.copy(liveGuidance = null, liveGuidanceArchive = emptyList()),
         workspaceCwd = workspaceCwd,
         workspaceCwds = workspaceCwds,
         folderId = folderId,

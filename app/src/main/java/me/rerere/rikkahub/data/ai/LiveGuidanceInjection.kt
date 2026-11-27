@@ -1,7 +1,10 @@
 package me.rerere.rikkahub.data.ai
 
 import me.rerere.ai.ui.UIMessage
+import me.rerere.rikkahub.data.model.ArchivedLiveGuidance
+import me.rerere.rikkahub.data.model.ConversationConfig
 import me.rerere.rikkahub.data.model.LiveGuidance
+import me.rerere.rikkahub.data.model.LiveGuidanceMode
 import kotlin.uuid.Uuid
 
 private const val LIVE_GUIDANCE_FRAME =
@@ -12,9 +15,21 @@ private const val LIVE_GUIDANCE_FRAME =
  * provider output arrives; building the message does not acknowledge delivery.
  */
 fun LiveGuidance.requestMessage(runId: Uuid): UIMessage? =
-    takeIf { shouldInject(runId) }?.let {
-        UIMessage.user(LIVE_GUIDANCE_FRAME + content).copy(id = id, isSynthetic = true)
-    }
+    takeIf { shouldInject(runId) }?.let { steeringRequestMessage(id, content) }
+
+/** Same request-only frame for an archived note; no history message is ever created. */
+fun ArchivedLiveGuidance.requestMessage(): UIMessage = steeringRequestMessage(id, content)
+
+private fun steeringRequestMessage(id: Uuid, content: String): UIMessage =
+    UIMessage.user(LIVE_GUIDANCE_FRAME + content).copy(id = id, isSynthetic = true)
+
+/**
+ * Request snapshot for one run: the active card wins while it is eligible; otherwise the latest
+ * persistent archived note keeps steering THIS conversation. Temporary archives stay UI-only.
+ */
+fun ConversationConfig.liveGuidanceRequestMessage(runId: Uuid): UIMessage? =
+    liveGuidance?.requestMessage(runId)
+        ?: liveGuidanceArchive.lastOrNull { it.mode == LiveGuidanceMode.PERSISTENT }?.requestMessage()
 
 /** Request-scoped only: a replacement never leaves the previous synthetic message in this request. */
 internal fun List<UIMessage>.withRequestInjections(injected: List<UIMessage>): List<UIMessage> =
