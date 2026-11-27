@@ -2584,9 +2584,9 @@
 
   <!-- Explicit composer busy-send choices; legacy guidance resources are unchanged. -->
   <string name="chat_page_busy_title">目前回覆進行中</string>
-  <string name="chat_page_busy_description">請選擇傳送方式。臨時與長期引導都不打斷目前回覆。</string>
+  <string name="chat_page_busy_description">短按傳送為臨時、不中斷的補充；長按傳送開啟這些操作。補充只傳送文字，附件留在主輸入框。</string>
   <string name="chat_page_busy_attachments">引導只傳送文字，附件保留在輸入框；下一則再傳和打斷傳送會傳送完整快照。</string>
-  <string name="chat_page_busy_queue">下一則再傳</string>
+  <string name="chat_page_busy_queue">下一條再發</string>
   <string name="chat_page_busy_queue_description">明確排到目前回覆之後；一般訊息佇列關閉時也可請求，無法受理時安全拒絕。</string>
   <string name="chat_page_busy_temporary">臨時引導</string>
   <string name="chat_page_busy_temporary_description">預設：在安全請求點引導本輪，不打斷目前回覆。</string>
@@ -2597,4 +2597,12 @@
   <string name="chat_page_busy_legacy_interrupt">打斷並立即傳送（舊行為）</string>
   <string name="chat_page_busy_cancel">取消，保留草稿</string>
   <string name="chat_page_busy_rejected">未受理，文字和附件仍保留在輸入框。</string>
+
+  <!-- E346: compact recorded steering; no second composer. -->
+  <string name="chat_page_guidance_compact_waiting">待採用</string>
+  <string name="chat_page_guidance_compact_delivered">已送達</string>
+  <string name="chat_page_guidance_compact_not_used">未採用</string>
+  <string name="chat_page_guidance_details">詳情</string>
+  <string name="chat_page_guidance_close">關閉</string>
+  <string name="chat_page_guidance_mode_hint">本輪仍可編輯時，點按記錄可切換臨時／持續。已送達表示攜帶引導的請求收到了模型輸出，不代表模型遵循了引導。</string>
 </resources>

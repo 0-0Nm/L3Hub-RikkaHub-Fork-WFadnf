@@ -41,12 +41,8 @@ internal fun ConversationStatusPane(
     onGuidanceRemove: (Guidance) -> Unit,
     conversationId: Uuid,
     liveGuidance: LiveGuidance?,
-    liveGuidanceDraft: String,
-    onLiveGuidanceDraftChange: (String) -> Unit,
-    onSubmitLiveGuidance: (String, () -> Unit) -> Unit,
     onLiveGuidanceModeChange: (Uuid, Boolean) -> Unit,
     onLiveGuidanceNextMessage: () -> Unit,
-    onLiveGuidanceRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // 和输入区那张一样：全部完成且开了开关时收起清单，引导不受影响
@@ -60,7 +56,7 @@ internal fun ConversationStatusPane(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-        if (shownTodos.isEmpty() && guidances.isEmpty()) {
+        if (shownTodos.isEmpty() && guidances.isEmpty() && liveGuidance == null) {
             Text(
                 text = stringResource(R.string.chat_page_status_empty),
                 style = MaterialTheme.typography.bodySmall,
@@ -95,14 +91,9 @@ internal fun ConversationStatusPane(
             modifier = Modifier.fillMaxWidth(),
         )
         LiveGuidancePanel(
-            draftOwner = conversationId,
             guidance = liveGuidance,
-            draft = liveGuidanceDraft,
-            onDraftChange = onLiveGuidanceDraftChange,
-            onSubmit = onSubmitLiveGuidance,
             onModeChange = onLiveGuidanceModeChange,
             onNextMessage = onLiveGuidanceNextMessage,
-            onRetry = onLiveGuidanceRetry,
             modifier = Modifier.fillMaxWidth(),
         )
     }

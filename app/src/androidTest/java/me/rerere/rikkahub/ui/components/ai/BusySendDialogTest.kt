@@ -5,6 +5,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertWidthIsAtLeast
+import androidx.compose.ui.test.assertHeightIsAtMost
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -16,7 +26,6 @@ import me.rerere.rikkahub.data.model.LiveGuidanceDelivery
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.ui.hooks.ComposerSendSnapshot
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -98,101 +107,6 @@ class BusySendDialogTest {
     }
 
     @Test
-    fun panelDelayedAcceptanceKeepsNewerDraft() {
-        val draft = mutableStateOf("old draft")
-        var accepted: (() -> Unit)? = null
-        val owner = Uuid.random()
-        rule.setContent {
-            MaterialTheme {
-                LiveGuidancePanel(
-                    guidance = null,
-                    draft = draft.value,
-                    draftOwner = owner,
-                    onDraftChange = { draft.value = it },
-                    onSubmit = { _, callback -> accepted = callback },
-                    onModeChange = { _, _ -> },
-                    onNextMessage = {},
-                    onRetry = {},
-                )
-            }
-        }
-        rule.onNodeWithTag("live_guidance_submit").performScrollTo().performClick()
-        rule.runOnIdle { assertNotNull(accepted); draft.value = "new draft" }
-        rule.waitForIdle()
-        rule.runOnIdle { accepted!!(); assertEquals("new draft", draft.value) }
-    }
-
-    @Test
-    fun panelDelayedAcceptanceKeepsChangedConversationDraft() {
-        val draft = mutableStateOf("same text")
-        val owner = mutableStateOf(Uuid.random())
-        var accepted: (() -> Unit)? = null
-        rule.setContent {
-            MaterialTheme {
-                LiveGuidancePanel(
-                    guidance = null,
-                    draft = draft.value,
-                    draftOwner = owner.value,
-                    onDraftChange = { draft.value = it },
-                    onSubmit = { _, callback -> accepted = callback },
-                    onModeChange = { _, _ -> },
-                    onNextMessage = {},
-                    onRetry = {},
-                )
-            }
-        }
-        rule.onNodeWithTag("live_guidance_submit").performScrollTo().performClick()
-        rule.runOnIdle { owner.value = Uuid.random() }
-        rule.waitForIdle()
-        rule.runOnIdle { accepted!!(); assertEquals("same text", draft.value) }
-    }
-
-    @Test
-    fun cardModeUsesTheExistingIdAndWaitsForServiceOwnedState() {
-        val id = Uuid.random()
-        val item = LiveGuidance(id = id, content = "guide", runId = Uuid.random())
-        var modeCall: Pair<Uuid, Boolean>? = null
-        rule.setContent {
-            MaterialTheme {
-                LiveGuidancePanel(
-                    guidance = item,
-                    draft = "",
-                    onDraftChange = {},
-                    onSubmit = { _, _ -> },
-                    onModeChange = { cardId, persistent -> modeCall = cardId to persistent },
-                    onNextMessage = {},
-                    onRetry = {},
-                )
-            }
-        }
-        rule.onNodeWithTag("live_guidance_mode").performScrollTo().performClick()
-        rule.runOnIdle { assertEquals(id to true, modeCall) }
-        rule.onNodeWithTag("live_guidance_mode").assertIsOff()
-    }
-
-    @Test
-    fun recoveryButtonsOnlyInvokeTheirExistingCallbacks() {
-        val item = LiveGuidance(content = "missed", delivery = LiveGuidanceDelivery.NOT_USED, finishLocked = true)
-        rule.setContent {
-            MaterialTheme {
-                LiveGuidancePanel(
-                    guidance = item,
-                    draft = "",
-                    onDraftChange = {},
-                    onSubmit = { _, _ -> },
-                    onModeChange = { _, _ -> calls += "mode" },
-                    onNextMessage = { calls += "next" },
-                    onRetry = { calls += "retry" },
-                )
-            }
-        }
-        rule.onNodeWithTag("live_guidance_mode").assertIsNotEnabled()
-        rule.onNodeWithTag("live_guidance_next").performScrollTo().performClick()
-        rule.onNodeWithTag("live_guidance_retry").performScrollTo().performClick()
-        rule.runOnIdle { assertEquals(listOf("next", "retry"), calls) }
-    }
-
-    @Test
     fun cancelNeverRoutesToAnySendAction() {
         showChooser()
         rule.onNodeWithTag("busy_send_cancel").performScrollTo().performClick()
@@ -200,49 +114,96 @@ class BusySendDialogTest {
     }
 
     @Test
-    fun panelUnchangedAcceptedDraftCanClear() {
-        val draft = mutableStateOf("accepted draft")
-        var accepted: (() -> Unit)? = null
+    fun absentRecordEmitsNoCardOrEditor() {
         rule.setContent {
-            MaterialTheme {
-                LiveGuidancePanel(
-                    guidance = null,
-                    draft = draft.value,
-                    onDraftChange = { draft.value = it },
-                    onSubmit = { _, callback -> accepted = callback },
-                    onModeChange = { _, _ -> },
-                    onNextMessage = {},
-                    onRetry = {},
-                )
-            }
+            MaterialTheme { LiveGuidancePanel(null, { _, _ -> }, {}) }
         }
-        rule.onNodeWithTag("live_guidance_submit").performScrollTo().performClick()
-        rule.runOnIdle { accepted!!(); assertEquals("", draft.value) }
+        rule.onNodeWithTag("live_guidance_card").assertDoesNotExist()
+        rule.onAllNodes(hasSetTextAction()).assertCountEquals(0)
     }
 
     @Test
-    fun disposedPanelDoesNotClearItsOldDraft() {
-        val show = mutableStateOf(true)
-        val draft = mutableStateOf("retained")
-        var accepted: (() -> Unit)? = null
+    fun cardIsCompactAndHasNoSecondEditorOrEagerDetails() {
+        rule.setContent {
+            MaterialTheme { LiveGuidancePanel(LiveGuidance(content = "retained"), { _, _ -> }, {}) }
+        }
+        rule.onNodeWithTag("live_guidance_card").assertHeightIsAtMost(64.dp)
+        rule.onAllNodes(hasSetTextAction()).assertCountEquals(0)
+        rule.onNodeWithTag("live_guidance_full_content").assertDoesNotExist()
+        rule.onNodeWithTag("live_guidance_next").assertDoesNotExist()
+    }
+
+    @Test
+    fun modeSwitchUsesSameIdWithoutOptimisticModelChange() {
+        val item = LiveGuidance(content = "guide", runId = Uuid.random())
+        var modeCall: Pair<Uuid, Boolean>? = null
         rule.setContent {
             MaterialTheme {
-                if (show.value) {
-                    LiveGuidancePanel(
-                        guidance = null,
-                        draft = draft.value,
-                        onDraftChange = { draft.value = it },
-                        onSubmit = { _, callback -> accepted = callback },
-                        onModeChange = { _, _ -> },
-                        onNextMessage = {},
-                        onRetry = {},
-                    )
-                }
+                LiveGuidancePanel(item, { id, persistent -> modeCall = id to persistent }, {})
             }
         }
-        rule.onNodeWithTag("live_guidance_submit").performScrollTo().performClick()
-        rule.runOnIdle { show.value = false }
-        rule.waitForIdle()
-        rule.runOnIdle { accepted!!(); assertEquals("retained", draft.value) }
+        rule.onNodeWithTag("live_guidance_mode").performClick()
+        rule.runOnIdle { assertEquals(item.id to true, modeCall) }
+        rule.onNodeWithTag("live_guidance_mode").assertIsOff()
+    }
+
+    @Test
+    fun serviceOwnedModeCanSwitchBothDirectionsOnSameItem() {
+        val item = mutableStateOf(LiveGuidance(content = "guide", runId = Uuid.random()))
+        val id = item.value.id
+        rule.setContent {
+            MaterialTheme {
+                LiveGuidancePanel(item.value, { cardId, persistent ->
+                    calls += cardId.toString()
+                    item.value = item.value.withPersistence(persistent, item.value.runId)
+                }, {})
+            }
+        }
+        rule.onNodeWithTag("live_guidance_mode").performClick().assertIsOn()
+        rule.onNodeWithTag("live_guidance_mode").performClick().assertIsOff()
+        rule.runOnIdle { assertEquals(listOf(id.toString(), id.toString()), calls) }
+    }
+
+    @Test
+    fun missedItemRetainsFullTextAndExposesOnlySafeRecoveryOnDemand() {
+        val content = "full original guidance ".repeat(50)
+        val item = LiveGuidance(content = content, delivery = LiveGuidanceDelivery.NOT_USED, finishLocked = true)
+        rule.setContent {
+            MaterialTheme {
+                LiveGuidancePanel(item, { _, _ -> calls += "mode" }, { calls += "next" })
+            }
+        }
+        rule.onNodeWithTag("live_guidance_mode").assertIsNotEnabled()
+        rule.onNodeWithTag("live_guidance_next").assertDoesNotExist()
+        rule.onNodeWithTag("live_guidance_details").performClick()
+        rule.onNodeWithTag("live_guidance_full_content").assertTextEquals(content)
+        rule.onNodeWithTag("live_guidance_retry").assertDoesNotExist()
+        rule.onNodeWithTag("live_guidance_next").performClick()
+        rule.runOnIdle { assertEquals(listOf("next"), calls) }
+    }
+
+    @Test
+    fun newItemClosesOldDetails() {
+        val item = mutableStateOf(LiveGuidance(content = "first"))
+        rule.setContent {
+            MaterialTheme { LiveGuidancePanel(item.value, { _, _ -> }, {}) }
+        }
+        rule.onNodeWithTag("live_guidance_details").performClick()
+        rule.runOnIdle { item.value = LiveGuidance(content = "second") }
+        rule.onNodeWithTag("live_guidance_full_content").assertDoesNotExist()
+    }
+
+    @Test
+    fun mainSendSupportsSeparateShortAndLongGestures() {
+        rule.setContent {
+            MaterialTheme {
+                SendButton(loading = true, empty = false, busyInput = true,
+                    onClick = { calls += "short" }, onLongClick = { calls += "long" })
+            }
+        }
+        rule.onNodeWithTag("chat_send_button").assertHeightIsAtLeast(48.dp).assertWidthIsAtLeast(48.dp)
+        rule.onNodeWithTag("chat_send_button").performClick()
+        rule.onNodeWithTag("chat_send_button").performTouchInput { longClick() }
+        rule.runOnIdle { assertEquals(listOf("short", "long"), calls) }
     }
 }

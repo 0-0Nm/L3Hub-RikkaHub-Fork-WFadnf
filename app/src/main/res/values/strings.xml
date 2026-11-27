@@ -2748,9 +2748,9 @@
 
   <!-- Explicit composer busy-send choices; legacy guidance resources are unchanged. -->
   <string name="chat_page_busy_title">Current reply is busy</string>
-  <string name="chat_page_busy_description">Choose how to send. Live guidance never interrupts the current reply.</string>
+  <string name="chat_page_busy_description">Tap send for temporary, noninterrupting guidance; hold send for these actions. Guidance sends text only; attachments stay in the composer.</string>
   <string name="chat_page_busy_attachments">Live guidance sends text only. Attachments stay in the composer; next-message and interrupt actions send the full snapshot.</string>
-  <string name="chat_page_busy_queue">Send after this reply</string>
+  <string name="chat_page_busy_queue">Send next</string>
   <string name="chat_page_busy_queue_description">Explicitly queue this message, even when the ordinary message queue is off. It may be safely rejected.</string>
   <string name="chat_page_busy_temporary">Temporary guidance</string>
   <string name="chat_page_busy_temporary_description">Default: guide this run at a safe checkpoint without interrupting it.</string>
@@ -2761,4 +2761,12 @@
   <string name="chat_page_busy_legacy_interrupt">Interrupt and send now (legacy)</string>
   <string name="chat_page_busy_cancel">Cancel — keep draft</string>
   <string name="chat_page_busy_rejected">Not accepted. Your text and attachments are still in the composer.</string>
+
+  <!-- E346: compact recorded steering; no second composer. -->
+  <string name="chat_page_guidance_compact_waiting">Pending</string>
+  <string name="chat_page_guidance_compact_delivered">Delivered</string>
+  <string name="chat_page_guidance_compact_not_used">Not used</string>
+  <string name="chat_page_guidance_details">Details</string>
+  <string name="chat_page_guidance_close">Close</string>
+  <string name="chat_page_guidance_mode_hint">Tap the recorded item to switch temporary/persistent while this run is editable. Delivery means provider output acknowledged the request, not that the model followed it.</string>
 </resources>

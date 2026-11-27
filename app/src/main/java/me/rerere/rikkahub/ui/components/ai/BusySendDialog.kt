@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import me.rerere.rikkahub.R
@@ -36,21 +37,21 @@ internal fun BusySendDialog(
 ) {
     Dialog(onDismissRequest = { if (!submitting) onDismiss() }) {
         Surface(
-            modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth(),
+            modifier = Modifier.widthIn(max = 400.dp).fillMaxWidth(),
             shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
             Column(
                 modifier = Modifier
-                    .heightIn(max = 560.dp)
+                    .heightIn(max = 440.dp)
                     .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text(stringResource(R.string.chat_page_busy_title), style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(R.string.chat_page_busy_title), style = MaterialTheme.typography.titleMedium)
                 Text(stringResource(R.string.chat_page_busy_description), style = MaterialTheme.typography.bodyMedium)
                 if (snapshot.text.isNotBlank()) {
-                    Text(snapshot.text.take(400), maxLines = 4, style = MaterialTheme.typography.bodySmall)
+                    Text(snapshot.text.take(400), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
                 }
                 if (snapshot.attachments.isNotEmpty()) {
                     Text(stringResource(R.string.chat_page_busy_attachments), style = MaterialTheme.typography.bodySmall)
@@ -60,19 +61,16 @@ internal fun BusySendDialog(
                     enabled = !submitting,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("busy_send_queue"),
                 ) { Text(stringResource(R.string.chat_page_busy_queue)) }
-                Text(stringResource(R.string.chat_page_busy_queue_description), style = MaterialTheme.typography.bodySmall)
                 FilledTonalButton(
                     onClick = { onGuide(false) },
                     enabled = !submitting && snapshot.canGuide,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("busy_send_temporary"),
                 ) { Text(stringResource(R.string.chat_page_busy_temporary)) }
-                Text(stringResource(R.string.chat_page_busy_temporary_description), style = MaterialTheme.typography.bodySmall)
                 OutlinedButton(
                     onClick = { onGuide(true) },
                     enabled = !submitting && snapshot.canGuide,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("busy_send_persistent"),
                 ) { Text(stringResource(R.string.chat_page_busy_persistent)) }
-                Text(stringResource(R.string.chat_page_busy_persistent_description), style = MaterialTheme.typography.bodySmall)
                 if (!snapshot.canGuide) {
                     Text(stringResource(R.string.chat_page_busy_text_required), style = MaterialTheme.typography.bodySmall)
                 }

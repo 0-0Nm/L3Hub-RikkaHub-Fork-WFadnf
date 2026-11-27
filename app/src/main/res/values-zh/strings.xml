@@ -2750,7 +2750,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
 
   <!-- Explicit composer busy-send choices; legacy guidance resources are unchanged. -->
   <string name="chat_page_busy_title">当前回复进行中</string>
-  <string name="chat_page_busy_description">请选择发送方式。临时与长期引导都不打断当前回复。</string>
+  <string name="chat_page_busy_description">短按发送为临时、不打断的补充；长按发送打开这些操作。补充只发送文字，附件留在主输入框。</string>
   <string name="chat_page_busy_attachments">引导只发送文字，附件保留在输入框；下一条再发和打断发送会发送完整快照。</string>
   <string name="chat_page_busy_queue">下一条再发</string>
   <string name="chat_page_busy_queue_description">明确排到当前回复之后；普通消息队列关闭时也可请求，无法受理时安全拒绝。</string>
@@ -2763,4 +2763,12 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chat_page_busy_legacy_interrupt">打断并立即发送（旧行为）</string>
   <string name="chat_page_busy_cancel">取消，保留草稿</string>
   <string name="chat_page_busy_rejected">未受理，文字和附件仍保留在输入框。</string>
+
+  <!-- E346: compact recorded steering; no second composer. -->
+  <string name="chat_page_guidance_compact_waiting">待采用</string>
+  <string name="chat_page_guidance_compact_delivered">已送达</string>
+  <string name="chat_page_guidance_compact_not_used">未采用</string>
+  <string name="chat_page_guidance_details">详情</string>
+  <string name="chat_page_guidance_close">关闭</string>
+  <string name="chat_page_guidance_mode_hint">本轮仍可编辑时，点按记录可切换临时／持续。已送达表示携带引导的请求收到了模型输出，不代表模型遵循了引导。</string>
 </resources>

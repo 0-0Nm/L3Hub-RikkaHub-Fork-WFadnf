@@ -100,7 +100,6 @@ import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.ComputerTerminal01
 import me.rerere.hugeicons.stroke.Fullscreen
-import me.rerere.hugeicons.stroke.MessageAdd01
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.BackgroundEffectType
@@ -193,12 +192,8 @@ fun ChatInput(
     onGuidanceRemove: (Guidance) -> Unit = {},
     conversationId: Uuid? = null,
     liveGuidance: LiveGuidance? = null,
-    liveGuidanceDraft: String = "",
-    onLiveGuidanceDraftChange: (String) -> Unit = {},
-    onSubmitLiveGuidance: (String, () -> Unit) -> Unit = { _, _ -> },
     onLiveGuidanceModeChange: (Uuid, Boolean) -> Unit = { _, _ -> },
     onLiveGuidanceNextMessage: () -> Unit = {},
-    onLiveGuidanceRetry: () -> Unit = {},
     runningBackgroundTasks: Int = 0,
     onShowBackgroundTasks: () -> Unit = {},
     onStartVoiceMode: (() -> Unit)? = null,
@@ -233,14 +228,19 @@ fun ChatInput(
     )
 
     fun sendMessage() {
-        focusManager.clearFocus(force = true)
-        keyboardController?.hide()
+        // Busy input may be rejected or retain attachments. Keep it focused and editable.
+        if (!loading || state.isEditing() || state.isEmpty()) {
+            focusManager.clearFocus(force = true)
+            keyboardController?.hide()
+        }
         if (loading && state.isEmpty()) onCancelClick() else onSendClick()
     }
 
     fun sendMessageWithoutAnswer() {
-        focusManager.clearFocus(force = true)
-        keyboardController?.hide()
+        if (!loading || state.isEditing() || state.isEmpty()) {
+            focusManager.clearFocus(force = true)
+            keyboardController?.hide()
+        }
         if (loading && state.isEmpty()) onCancelClick() else onLongSendClick()
     }
 
@@ -368,14 +368,9 @@ fun ChatInput(
             )
             if (!LocalConversationStatusInSidePanel.current) {
                 LiveGuidancePanel(
-                    draftOwner = conversationId,
                     guidance = liveGuidance,
-                    draft = liveGuidanceDraft,
-                    onDraftChange = onLiveGuidanceDraftChange,
-                    onSubmit = onSubmitLiveGuidance,
                     onModeChange = onLiveGuidanceModeChange,
                     onNextMessage = onLiveGuidanceNextMessage,
-                    onRetry = onLiveGuidanceRetry,
                     modifier = Modifier.adaptiveHorizontalPadding(12.dp),
                 )
             }
@@ -523,13 +518,14 @@ fun ChatInput(
                             )
                         }
                     }
-                    // Busy input opens choices; only the labeled legacy dialog action interrupts.
-                    val busySendButton: @Composable () -> Unit = {
-                        if (loading && !state.isEmpty() && !state.isEditing()) {
-                            ActionIconButton(onClick = { sendMessage() }) {
+                    // The main send button owns both busy gestures. Stop remains independently
+                    // available while a nonempty draft is being composed (empty input uses send/stop).
+                    val stopButton: @Composable () -> Unit = {
+                        if (loading && !state.isEmpty()) {
+                            ActionIconButton(onClick = onCancelClick) {
                                 Icon(
-                                    imageVector = HugeIcons.MessageAdd01,
-                                    contentDescription = stringResource(R.string.chat_page_busy_title),
+                                    imageVector = HugeIcons.Cancel01,
+                                    contentDescription = stringResource(R.string.stop),
                                 )
                             }
                         }
@@ -546,6 +542,7 @@ fun ChatInput(
                             SendButton(
                                 loading = loading,
                                 empty = state.isEmpty(),
+                                busyInput = loading && !state.isEmpty() && !state.isEditing(),
                                 onClick = { sendMessage() },
                                 onLongClick = { sendMessageWithoutAnswer() },
                             )
@@ -612,7 +609,7 @@ fun ChatInput(
                         }
                         val trailingActions: @Composable () -> Unit = {
                             asrButton()
-                            busySendButton()
+                            stopButton()
                             if (chatModel?.abilities?.contains(ModelAbility.REASONING) == true) {
                                 reasoningButton()
                             } else {
@@ -727,7 +724,7 @@ fun ChatInput(
                             }
 
                             asrButton()
-                            busySendButton()
+                            stopButton()
                             sendButton()
                         }
                     }
@@ -754,13 +751,15 @@ fun ChatInput(
 }
 
 @Composable
-private fun SendButton(
+internal fun SendButton(
     loading: Boolean,
     empty: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    busyInput: Boolean = false,
 ) {
+    val longClickLabel = if (busyInput) stringResource(R.string.chat_page_busy_title) else null
     val showStop = loading && empty
     val shape = when {
         LocalFullWidthComponents.current -> RoundedCornerShape(0.dp)
@@ -779,18 +778,19 @@ private fun SendButton(
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
-            .size(30.dp)
+            .size(if (busyInput) 48.dp else 30.dp)
             .testTag("chat_send_button")
             .clip(shape)
             .combinedClickable(
                 enabled = showStop || !empty,
                 onClick = onClick,
+                onLongClickLabel = longClickLabel,
                 onLongClick = onLongClick,
             )
     ) {
         Surface(
             modifier = Modifier
-                .fillMaxSize()
+                .size(30.dp)
                 .appButtonShadow(shape, 2.dp),
             shape = shape,
             color = containerColor,
@@ -798,7 +798,11 @@ private fun SendButton(
         )
         Icon(
             imageVector = if (showStop) HugeIcons.Cancel01 else HugeIcons.ArrowUp02,
-            contentDescription = stringResource(if (showStop) R.string.stop else R.string.send),
+            contentDescription = stringResource(when {
+                showStop -> R.string.stop
+                busyInput -> R.string.chat_page_busy_temporary
+                else -> R.string.send
+            }),
             tint = contentColor,
             modifier = Modifier.size(18.dp)
         )

@@ -178,6 +178,8 @@ import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
 import me.rerere.rikkahub.ui.hooks.ChatInputState
+import me.rerere.rikkahub.ui.hooks.BusyComposerAction
+import me.rerere.rikkahub.ui.hooks.busyComposerAction
 import me.rerere.rikkahub.ui.hooks.ComposerSendSnapshot
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.useEditState
@@ -755,11 +757,44 @@ private fun ChatPageContent(
     val allowAudioVideoAttachments =
         currentChatModel?.findProvider(setting.providers) is ProviderSetting.Google
 
+    // Busy submissions use the exact E345 snapshot/acceptance guards. No focus or IME change:
+    // a rejection/new edit remains editable, and mixed-input attachments stay in the composer.
+    fun submitBusyGuidance(snapshot: ComposerSendSnapshot, persistent: Boolean = false) {
+        if (busySendSubmitting || !snapshot.canGuide || !composerOwnerActive.value ||
+            latestInputState !== inputState || latestConversation.id != snapshot.conversationId
+        ) return
+        busySendSubmitting = true
+        vm.submitComposerLiveGuidance(
+            conversationId = snapshot.conversationId,
+            content = snapshot.text,
+            persistent = persistent,
+        ) { accepted ->
+            if (!composerOwnerActive.value || latestInputState !== inputState ||
+                latestConversation.id != snapshot.conversationId
+            ) return@submitComposerLiveGuidance
+            busySendSubmitting = false
+            if (accepted) {
+                clearAcceptedComposerSnapshot(snapshot, textOnly = true)
+                busySendSnapshot = null
+            } else if (composerOwnerActive.value && latestConversation.id == snapshot.conversationId) {
+                toaster.show(context.getString(R.string.chat_page_busy_rejected), type = ToastType.Error)
+            }
+        }
+    }
+
+    fun busyAction(longPress: Boolean = false) = busyComposerAction(
+        busy = loadingJob != null || sessionActivity != null || conversation.isAwaitingToolApproval,
+        hasText = inputState.textContent.text.isNotBlank(),
+        hasAttachments = inputState.messageContent.isNotEmpty(),
+        editing = inputState.isEditing(),
+        longPress = longPress,
+    )
+
     // 发送入口：模型、上下文门限检查都走这里
     val sendInput: () -> Unit = {
-        if (!inputState.isEditing() && !inputState.isEmpty() &&
-            (loadingJob != null || sessionActivity != null || conversation.isAwaitingToolApproval)
-        ) {
+        if (busyAction() == BusyComposerAction.TEMPORARY) {
+            submitBusyGuidance(inputState.captureSendSnapshot(conversation.id))
+        } else if (busyAction() == BusyComposerAction.CHOOSER) {
             if (!busySendSubmitting) busySendSnapshot = inputState.captureSendSnapshot(conversation.id)
         } else if (currentChatModel == null) {
             toaster.show(context.getString(R.string.media_creation_page_select_model_first), type = ToastType.Error)
@@ -850,15 +885,11 @@ private fun ChatPageContent(
             onGuidanceRemove = vm::removeGuidance,
             conversationId = conversation.id,
             liveGuidance = conversation.config?.liveGuidance,
-            liveGuidanceDraft = vm.liveGuidanceDraft,
-            onLiveGuidanceDraftChange = vm::updateLiveGuidanceDraft,
-            onSubmitLiveGuidance = vm::submitLiveGuidance,
             onLiveGuidanceModeChange = vm::setLiveGuidancePersistence,
             onLiveGuidanceNextMessage = vm::armLiveGuidanceForNextMessage,
-            onLiveGuidanceRetry = vm::retryLiveGuidance,
             runningBackgroundTasks = backgroundTasks.count { it.status == BackgroundShellStatus.RUNNING },
             onShowBackgroundTasks = { openPane(ChatSidePane.BackgroundTasks) },
-            loading = loadingJob != null,
+            loading = loadingJob != null || sessionActivity != null || conversation.isAwaitingToolApproval,
             settings = setting,
             assistant = assistant,
             chatModel = currentChatModel,
@@ -880,6 +911,10 @@ private fun ChatPageContent(
             },
             onSendClick = sendInput,
             onLongSendClick = {
+                if (busyAction(longPress = true) == BusyComposerAction.CHOOSER) {
+                    if (!busySendSubmitting) busySendSnapshot = inputState.captureSendSnapshot(conversation.id)
+                    return@ChatInput
+                }
                 if (contextLimitReached) {
                     toaster.show(contextLimitMessage, type = ToastType.Error)
                     if (contextLimitBlocksSend) return@ChatInput
@@ -1176,12 +1211,8 @@ private fun ChatPageContent(
                         onGuidanceRemove = vm::removeGuidance,
                         conversationId = conversation.id,
                         liveGuidance = conversation.config?.liveGuidance,
-                        liveGuidanceDraft = vm.liveGuidanceDraft,
-                        onLiveGuidanceDraftChange = vm::updateLiveGuidanceDraft,
-                        onSubmitLiveGuidance = vm::submitLiveGuidance,
                         onLiveGuidanceModeChange = vm::setLiveGuidancePersistence,
                         onLiveGuidanceNextMessage = vm::armLiveGuidanceForNextMessage,
-                        onLiveGuidanceRetry = vm::retryLiveGuidance,
                         modifier = Modifier.fillMaxSize(),
                     )
 
@@ -1285,26 +1316,7 @@ private fun ChatPageContent(
                         toaster.show(context.getString(R.string.chat_page_busy_rejected), type = ToastType.Error)
                     }
                 },
-                onGuide = guide@{ persistent ->
-                    if (busySendSubmitting || !snapshot.canGuide ||
-                        latestConversation.id != snapshot.conversationId
-                    ) return@guide
-                    busySendSubmitting = true
-                    vm.submitComposerLiveGuidance(
-                        conversationId = snapshot.conversationId,
-                        content = snapshot.text,
-                        persistent = persistent,
-                    ) { accepted ->
-                        busySendSubmitting = false
-                        if (accepted) {
-                            // The service accepted text only: attachments remain in the composer.
-                            clearAcceptedComposerSnapshot(snapshot, textOnly = true)
-                            busySendSnapshot = null
-                        } else if (composerOwnerActive.value && latestConversation.id == snapshot.conversationId) {
-                            toaster.show(context.getString(R.string.chat_page_busy_rejected), type = ToastType.Error)
-                        }
-                    }
-                },
+                onGuide = { persistent -> submitBusyGuidance(snapshot, persistent) },
                 onLegacyInterrupt = {
                     if (!busySendSubmitting && latestConversation.id == snapshot.conversationId) {
                         busySendSnapshot = null
