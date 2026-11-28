@@ -27,7 +27,7 @@ class LiveGuidanceInjectionTest {
         assertTrue(first.isSynthetic)
         assertTrue(first.parts.single() is UIMessagePart.Text)
         assertTrue(first.getTools().isEmpty())
-        assertTrue((first.parts.single() as UIMessagePart.Text).text.endsWith(item.content))
+        assertEquals(item.content, (first.parts.single() as UIMessagePart.Text).text)
     }
 
     @Test

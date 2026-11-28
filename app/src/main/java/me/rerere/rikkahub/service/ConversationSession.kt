@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.finishReasoning
 import me.rerere.rikkahub.data.ai.liveGuidanceRequestMessages
+import me.rerere.rikkahub.data.model.ArchivedLiveGuidance
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.LiveGuidanceActionTarget
 import me.rerere.rikkahub.data.model.liveGuidanceEntries
@@ -304,6 +305,13 @@ class ConversationSession(
             messages
         }
     }
+
+    /**
+     * Read-only archive snapshot for chronological request projection. No claim, no ack and no
+     * state change: archived notes are ordinary history, only active cards need delivery tracking.
+     */
+    internal fun archivedLiveGuidanceSnapshot(): List<ArchivedLiveGuidance> =
+        _state.value.config?.liveGuidanceArchive.orEmpty()
 
     /**
      * A swipe applies only to the displayed state in this session. Keep claims until run finish:

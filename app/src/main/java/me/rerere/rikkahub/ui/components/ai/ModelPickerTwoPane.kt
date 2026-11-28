@@ -13,13 +13,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -30,6 +33,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,8 +68,16 @@ import java.util.Locale
 import kotlin.uuid.Uuid
 
 private const val UNGROUPED_KEY = "__ungrouped"
-private const val SIDEBAR_WIDTH_DP = 80
+private const val SIDEBAR_WIDTH_DP = 64
 private const val COMPACT_WIDTH_DP = 360
+
+// Use the configured display name, never a model name or the provider implementation type.
+// Favorites (and an absent/stale/unnamed provider) retain the original localized heading.
+internal fun modelPickerProviderTitle(
+    selectedProvider: ProviderSetting?,
+    showFavorites: Boolean,
+    fallback: String,
+): String = if (showFavorites) fallback else selectedProvider?.name?.takeIf { it.isNotBlank() } ?: fallback
 
 /**
  * 双列模型选择：左侧是能整条收起的导航栏，右侧是模型卡片。
@@ -223,14 +235,23 @@ fun ModelPickerTwoPane(
                         )
                     }
                 }
+                val titleScrollState = key(selectedProviderId, selectedProvider?.name, showFavorites) {
+                    rememberScrollState()
+                }
                 Text(
-                    text = stringResource(R.string.model_list_select_model),
+                    text = modelPickerProviderTitle(
+                        selectedProvider = selectedProvider,
+                        showFavorites = showFavorites,
+                        fallback = stringResource(R.string.model_list_select_model),
+                    ),
                     style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    // Wrap the full name; exceptionally long names scroll locally rather than
+                    // hiding the search/list or stealing the close button's horizontal space.
                     modifier = Modifier
                         .weight(1f)
-                        .padding(start = 4.dp),
+                        .padding(start = 4.dp)
+                        .heightIn(max = 144.dp)
+                        .verticalScroll(titleScrollState),
                 )
                 IconButton(
                     onClick = onDismiss,
@@ -387,7 +408,7 @@ private fun ModelPickerSidebar(
             onClick = onCollapse,
             modifier = Modifier
                 .padding(top = 2.dp)
-                .size(36.dp),
+                .size(48.dp),
         ) {
             Icon(
                 imageVector = HugeIcons.ArrowLeft01,
@@ -470,7 +491,7 @@ private fun ModelPickerSidebar(
             onClick = onOpenProviderSettings,
             modifier = Modifier
                 .padding(vertical = 4.dp)
-                .size(40.dp),
+                .size(48.dp),
         ) {
             Icon(
                 imageVector = HugeIcons.Settings02,
@@ -492,6 +513,7 @@ private fun GroupLabel(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 48.dp)
             .clip(MaterialTheme.shapes.small)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 2.dp, vertical = 6.dp),
@@ -530,8 +552,8 @@ private fun ProviderLogoButton(
     val shape = RoundedCornerShape(14.dp)
     Surface(
         modifier = Modifier
-            .padding(horizontal = 10.dp)
-            .size(44.dp)
+            .padding(horizontal = 4.dp)
+            .size(48.dp)
             .clip(shape)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             // 供应商图标自带 contentDescription，再叠一层会被读两遍；收藏入口的心形没有，才补

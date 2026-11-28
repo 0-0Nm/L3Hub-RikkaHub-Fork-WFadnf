@@ -7,7 +7,6 @@ import me.rerere.rikkahub.data.model.LiveGuidanceMode
 import me.rerere.rikkahub.data.model.archiveRecord
 import me.rerere.rikkahub.data.model.finishLiveGuidance
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.uuid.Uuid
@@ -24,61 +23,57 @@ class LiveGuidanceArchiveInjectionTest {
     }
 
     @Test
-    fun `temporary archive is UI only and never enters a request again`() {
+    fun `temporary archive never re-enters as an active end-of-request direction`() {
         val config = archived(persistent = false)
 
-        assertNull(config.liveGuidance)
-        assertNull(config.liveGuidanceRequestMessage(Uuid.random()))
+        assertEquals(null, config.liveGuidance)
+        assertTrue(config.liveGuidanceRequestMessages(Uuid.random()).isEmpty())
         assertEquals(1, config.liveGuidanceArchive.size)
     }
 
     @Test
-    fun `persistent archive keeps steering only as a synthetic request message`() {
+    fun `persistent archive also stays out of the active claim and ack channel`() {
         val config = archived(persistent = true)
         val entry = config.liveGuidanceArchive.single()
 
-        val request = config.liveGuidanceRequestMessage(Uuid.random())!!
-
-        assertEquals(entry.id, request.id)
-        assertEquals(MessageRole.USER, request.role)
-        assertTrue(request.isSynthetic)
-        assertTrue(request.getTools().isEmpty())
         assertEquals(LiveGuidanceMode.PERSISTENT, entry.mode)
-        // Reading a request snapshot never re-acknowledges or rewrites the archived record.
+        assertTrue(config.liveGuidanceRequestMessages(Uuid.random()).isEmpty())
+        // Reading snapshots never re-acknowledges or rewrites the archived record.
         assertEquals(entry, config.liveGuidanceArchive.single())
-        assertNull(config.liveGuidance)
+        assertEquals(null, config.liveGuidance)
     }
 
     @Test
-    fun `an eligible active card wins over the archived persistent note and ids never mix`() {
+    fun `an eligible active card keeps its own id and never mixes with archived ids`() {
         val config = archived(persistent = true)
         val archivedId = config.liveGuidanceArchive.single().id
         val run = Uuid.random()
         val active = LiveGuidance(content = "new live note", runId = run)
         val withActive = config.copy(liveGuidance = active)
 
-        val duringRun = withActive.liveGuidanceRequestMessage(run)!!
-        assertEquals(active.id, duringRun.id)
-        assertTrue(duringRun.id != archivedId)
-        // Once the new note is archived too it is temporary, so the persistent record still steers.
+        val duringRun = withActive.liveGuidanceRequestMessages(run)
+        assertEquals(listOf(active.id), duringRun.map { it.id })
+        assertTrue(active.id != archivedId)
+        // Once the new note is archived too, both records are history, not active directions.
         val deliveredActive = withActive.copy(liveGuidance = active.acknowledgeDelivery(run))
         val finished = deliveredActive.finishLiveGuidance(run) { Uuid.random() to Uuid.random() }
         assertEquals(2, finished.liveGuidanceArchive.size)
-        assertNull(finished.liveGuidance)
-        assertEquals(archivedId, finished.liveGuidanceRequestMessage(Uuid.random())!!.id)
+        assertEquals(null, finished.liveGuidance)
+        assertTrue(finished.liveGuidanceRequestMessages(Uuid.random()).isEmpty())
     }
 
     @Test
-    fun `archived request message keeps the original text and never becomes a history turn`() {
+    fun `archived history message keeps the original wording as a plain user text`() {
         val run = Uuid.random()
         val item = LiveGuidance(content = "original wording", runId = run).acknowledgeDelivery(run)
         val entry = item.finish(run).archiveRecord(Uuid.random(), Uuid.random())!!
 
-        val message = entry.requestMessage()
+        val message = entry.historyMessage()
 
         assertTrue(message.isSynthetic)
+        assertEquals(MessageRole.USER, message.role)
         assertTrue(message.parts.none { it is me.rerere.ai.ui.UIMessagePart.Notice })
-        assertTrue(message.toText().endsWith("original wording"))
+        assertEquals("original wording", message.toText())
         assertEquals(entry.content, item.content)
     }
 }

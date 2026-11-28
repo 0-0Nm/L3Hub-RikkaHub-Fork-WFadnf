@@ -79,7 +79,7 @@ class LiveGuidanceClaimRaceTest {
             assertFalse(snapshot.isCompleted)
             releaseWrite.complete(Unit)
             assertTrue(swipe.await())
-            assertEquals(listOf(f.archive.id, f.second.id), snapshot.await().map { it.id })
+            assertEquals(listOf(f.second.id), snapshot.await().map { it.id })
             assertEquals(listOf(f.archive), f.persisted.config?.liveGuidanceArchive)
             val saved = f.entries.firstOrNull { it.id == f.first.id }
             if (defer) {
@@ -93,14 +93,14 @@ class LiveGuidanceClaimRaceTest {
                 for (origin in GenerationRunOrigin.entries.filterNot { it.consumesNextMessageGuidance() }) {
                     val unrelated = Uuid.random()
                     f.start(unrelated, origin)
-                    assertEquals(listOf(f.archive.id), f.session.claimLiveGuidanceRequest(unrelated).map { it.id })
+                    assertTrue(f.session.claimLiveGuidanceRequest(unrelated).isEmpty())
                     f.finish(unrelated)
                 }
                 val actualUserTurn = Uuid.random()
                 f.start(actualUserTurn, GenerationRunOrigin.USER_MESSAGE)
                 assertFalse(f.session.swipeLiveGuidance(f.first.actionTarget, true, ::persistUnexpected))
                 assertEquals(
-                    listOf(f.archive.id, f.first.id),
+                    listOf(f.first.id),
                     f.session.claimLiveGuidanceRequest(actualUserTurn).map { it.id },
                 )
             }
@@ -133,7 +133,7 @@ class LiveGuidanceClaimRaceTest {
             releaseBinding.complete(Unit)
             start.await()
             assertTrue(defer.await())
-            assertEquals(listOf(f.archive.id), snapshot.await().map { it.id })
+            assertTrue(snapshot.await().isEmpty())
             assertEquals(f.first.copy(runId = null), f.entries.first())
         }
     }
@@ -144,7 +144,7 @@ class LiveGuidanceClaimRaceTest {
         f.start()
         assertEquals(emptySet<Uuid>(), f.session.liveGuidanceClaims.value?.ids)
         val snapshot = f.session.claimLiveGuidanceRequest(f.run)
-        assertEquals(listOf(f.archive.id, f.first.id, f.second.id), snapshot.map { it.id })
+        assertEquals(listOf(f.first.id, f.second.id), snapshot.map { it.id })
         assertEquals(snapshot.map { it.id }.toSet(), f.session.liveGuidanceClaims.value?.ids)
         for (defer in listOf(false, true)) {
             assertFalse(f.session.swipeLiveGuidance(f.first.actionTarget, defer, ::persistUnexpected))
@@ -155,6 +155,8 @@ class LiveGuidanceClaimRaceTest {
         assertNull(f.session.liveGuidanceClaims.value)
         assertEquals(listOf(f.first.finish(f.run), f.second.finish(f.run)), f.entries)
         assertEquals(listOf(f.archive), f.persisted.config?.liveGuidanceArchive)
+        // Archives are projected as history, never claimed or acknowledged as active directions.
+        assertEquals(listOf(f.archive), f.session.archivedLiveGuidanceSnapshot())
         assertFalse(f.session.swipeLiveGuidance(f.first.actionTarget, true, ::persistUnexpected))
         assertTrue(f.session.swipeLiveGuidance(f.entries.first().actionTarget, true, f::persist))
     }
@@ -173,7 +175,7 @@ class LiveGuidanceClaimRaceTest {
                 if (throws) assertTrue(result.exceptionOrNull() is IllegalStateException)
                 else assertFalse(result.getOrThrow())
                 assertEquals(f.first.finish(f.run), f.entries.first())
-                assertEquals(listOf(f.archive.id, f.second.id), f.session.claimLiveGuidanceRequest(f.run).map { it.id })
+                assertEquals(listOf(f.second.id), f.session.claimLiveGuidanceRequest(f.run).map { it.id })
                 assertEquals(listOf(f.first, f.second), f.persisted.config?.liveGuidanceEntries())
             }
         }
@@ -198,7 +200,7 @@ class LiveGuidanceClaimRaceTest {
             assertTrue(swipe.isCancelled)
             assertEquals(f.first.copy(runId = null), f.entries.first())
             assertEquals(f.entries, f.persisted.config?.liveGuidanceEntries())
-            assertEquals(listOf(f.archive.id, f.second.id), snapshot.await().map { it.id })
+            assertEquals(listOf(f.second.id), snapshot.await().map { it.id })
         }
     }
 
@@ -220,7 +222,7 @@ class LiveGuidanceClaimRaceTest {
         otherSession.initialize(load = { otherConversation })
         otherSession.startGenerationRun(f.run)
         assertTrue(otherSession.swipeLiveGuidance(f.first.actionTarget, false) { true })
-        assertEquals(listOf(f.archive.id, f.second.id), otherSession.claimLiveGuidanceRequest(f.run).map { it.id })
+        assertEquals(listOf(f.second.id), otherSession.claimLiveGuidanceRequest(f.run).map { it.id })
         assertEquals(LiveGuidanceDelivery.WAITING, f.entries.first().delivery)
     }
 

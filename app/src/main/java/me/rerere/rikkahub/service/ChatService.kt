@@ -1753,6 +1753,9 @@ class ChatService(
                         pendingInjections = {
                             session.claimLiveGuidanceRequest(runId)
                         },
+                        archivedGuidance = {
+                            session.archivedLiveGuidanceSnapshot()
+                        },
                         acknowledgeInjections = { guidanceIds ->
                             session.acknowledgeLiveGuidance(runId, guidanceIds)
                         },

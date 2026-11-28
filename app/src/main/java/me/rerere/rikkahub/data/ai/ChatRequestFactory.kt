@@ -51,6 +51,7 @@ import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.ai.transformers.visualTransforms
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
+import me.rerere.rikkahub.data.model.ArchivedLiveGuidance
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MemoryFile
@@ -232,7 +233,10 @@ class ChatRequestFactory(
      * 本轮交给 runAgent 的请求和钩子。[messages] 的最后一条是助手消息时从它继续，否则新建一条助手消息。
      * [processingStatus] 用来显示 OCR 这类输入转换的进度；[takePendingParts] 取出要在请求模型前写进助手消息的
      * 通知和合成工具调用（引导、任务清单），参数是本轮正在写的助手消息，第一步还没有内容时为 null。
-     * [pendingInjections] 每个请求重新读取，只负责请求级纯文本；其作用域由调用方管理，不写入会话历史。
+     * [pendingInjections] 每个请求重新读取，只负责请求级纯文本（活动引导，末尾安全检查点的普通 USER 消息）；
+     * 其作用域由调用方管理，不写入会话历史。
+     * [archivedGuidance] 已交付存档的快照：按锚点投影成历史时序里的普通 USER 消息，
+     * 锚点丢失的持久偏好退化为保留历史之前的带前缀旧偏好，不再追加到最新用户消息之后。
      * [pauseAfterTools] 在一批工具执行完之后调用，返回 true 时这次运行以 Paused 结束。
      */
     fun createAgent(
@@ -240,6 +244,7 @@ class ChatRequestFactory(
         messages: List<UIMessage>,
         processingStatus: MutableStateFlow<String?>,
         pendingInjections: suspend () -> List<UIMessage> = { emptyList() },
+        archivedGuidance: suspend () -> List<ArchivedLiveGuidance> = { emptyList() },
         acknowledgeInjection: suspend (Uuid) -> Unit = {},
         acknowledgeInjections: suspend (List<Uuid>) -> Unit = { ids ->
             ids.forEach { acknowledgeInjection(it) }
@@ -277,13 +282,20 @@ class ChatRequestFactory(
                     todoRemindersEnabled = liveAssistant().todoReminderEnabled,
                     todos = liveTodos(),
                 )
+                // 存档先做历史时序投影：只读快照，不参与 claim/ack，也不改变会话状态。
+                val archived = archivedGuidance()
+                val projectedStep = if (archived.isEmpty()) {
+                    step
+                } else {
+                    step.copy(messages = step.messages.withArchivedGuidance(archived))
+                }
                 // Claim only as we assemble the request, after the suspending input preparation.
                 val injectedMessages = pendingInjections()
                 return if (injectedMessages.isEmpty()) {
-                    step
+                    projectedStep
                 } else {
-                    step.copy(
-                        messages = step.messages.withRequestInjections(injectedMessages),
+                    projectedStep.copy(
+                        messages = projectedStep.messages.withRequestInjections(injectedMessages),
                         onProviderOutput = {
                             acknowledgeInjections(injectedMessages.map { it.id }.distinct())
                         },
