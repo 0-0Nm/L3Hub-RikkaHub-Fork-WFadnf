@@ -362,6 +362,13 @@ fun ModelListSheet(
     }
 }
 
+// The rail owns the visible start gap of its 48dp tile (7dp in the 62dp rail).
+// An outer start inset would add a second, asymmetric gap before the tile.
+// Keep the other three insets; do not change the divider/card gutter.
+// Shared with the native geometry test so it exercises the production inset.
+internal fun Modifier.modelPickerContentInsets(): Modifier =
+    padding(top = 8.dp, end = 8.dp, bottom = 8.dp)
+
 /**
  * 模型列表的内容，不含外层 sheet。
  *
@@ -383,7 +390,7 @@ fun ModelListContent(
 
     Column(
         modifier = Modifier
-            .padding(8.dp)
+            .modelPickerContentInsets()
             .then(modifier)
             .imePadding(),
         verticalArrangement = Arrangement.spacedBy(4.dp)

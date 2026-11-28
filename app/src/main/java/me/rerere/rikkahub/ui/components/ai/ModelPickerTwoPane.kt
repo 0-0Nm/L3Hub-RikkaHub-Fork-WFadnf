@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -68,7 +69,9 @@ import java.util.Locale
 import kotlin.uuid.Uuid
 
 private const val UNGROUPED_KEY = "__ungrouped"
-private const val SIDEBAR_WIDTH_DP = 64
+// 62dp centres the 48dp tile + 4dp side padding wrapper (56dp) with 3dp each
+// side, so A-B = C-D = 7dp, matching D-E (1dp divider stroke + 6dp clear).
+private const val SIDEBAR_WIDTH_DP = 62
 private const val COMPACT_WIDTH_DP = 360
 
 // Use the configured display name, never a model name or the provider implementation type.
@@ -178,7 +181,9 @@ fun ModelPickerTwoPane(
         listState.scrollToItem(if (selectedIndex >= 0) selectedIndex else 0)
     }
 
-    Row(modifier = Modifier.fillMaxSize()) {
+    // The expanded rail owns its 7dp tile start gap. When it is hidden, restore
+    // the former outer start inset so the collapsed picker stays unchanged.
+    Row(modifier = Modifier.fillMaxSize().padding(start = if (sidebarExpanded) 0.dp else 8.dp)) {
         // 在 Row 里直接写 AnimatedVisibility 会命中 RowScope 的那个重载（自带 weight 语义），
         // 这里要的是不带作用域的动画，所以上面的 import 起了别名
         PlainAnimatedVisibility(
@@ -211,6 +216,7 @@ fun ModelPickerTwoPane(
                     modifier = Modifier
                         .width(1.dp)
                         .fillMaxHeight()
+                        .testTag("model_picker_divider")
                         .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
                 )
             }
@@ -336,6 +342,7 @@ fun ModelPickerTwoPane(
                 }
                 items(models, key = { "${it.second.id}:${it.first.id}" }) { (model, provider) ->
                     ModelItem(
+                        modifier = Modifier.testTag("model_picker_card"),
                         model = model,
                         providerSetting = provider,
                         select = model.id == currentModel,
