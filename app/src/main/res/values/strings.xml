@@ -2474,6 +2474,8 @@
   <string name="workspace_review_reading_file">Reading file…</string>
   <string name="workspace_review_no_workspace">This conversation is not bound to a workspace</string>
   <string name="workspace_review_no_readable_path">No readable path</string>
+  <string name="todo_plan_empty_title">No task list</string>
+  <string name="todo_plan_empty_desc">There is no active task list in this conversation.</string>
   <string name="todo_title">Tasks</string>
   <string name="todo_actions">Task actions</string>
   <string name="todo_mark_in_progress">Mark in progress</string>

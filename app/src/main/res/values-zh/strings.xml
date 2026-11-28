@@ -2476,6 +2476,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_review_reading_file">正在读取文件…</string>
   <string name="workspace_review_no_workspace">这个会话未绑定工作区</string>
   <string name="workspace_review_no_readable_path">没有可读取的路径</string>
+  <string name="todo_plan_empty_title">无任务清单</string>
+  <string name="todo_plan_empty_desc">当前会话暂无活动任务清单。</string>
   <string name="todo_title">任务清单</string>
   <string name="todo_actions">任务操作</string>
   <string name="todo_mark_in_progress">标记为进行中</string>

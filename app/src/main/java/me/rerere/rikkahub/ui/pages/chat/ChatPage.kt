@@ -72,10 +72,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -851,6 +858,11 @@ private fun ChatPageContent(
         }
     }
 
+    // Anchor and overlay use root coordinates, not Scaffold's unrelated content inset.
+    var planAnchor by remember { mutableStateOf<Rect?>(null) }
+    var planHostOrigin by remember { mutableStateOf(Offset.Zero) }
+    val attachPlan = !threePane && !showDetails && !previewMode
+
     TTSAutoPlay(vm = vm, setting = setting)
 
     // 概览页按返回键先回聊天页，不再直接退出会话
@@ -1020,6 +1032,8 @@ private fun ChatPageContent(
                         showCapsuleBackground = listScrolledUnderTopBar,
                         // 横屏的详情在右侧栏里，而侧栏是模态的、整高盖住顶栏：
                         // 这个提亮只在竖屏（顶栏底下展开）时看得见
+                        planAttached = attachPlan && planAnchor != null,
+                        onPlanAnchorPositioned = { planAnchor = it },
                         detailsExpanded = showDetails,
                         onToggleDetails = { toggleDetailsPane() },
                     )
@@ -1032,7 +1046,9 @@ private fun ChatPageContent(
             },
             containerColor = Color.Transparent,
         ) { innerPadding ->
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.fillMaxSize().onGloballyPositioned {
+                planHostOrigin = it.boundsInRoot().topLeft
+            }) {
                 if (currentMessages.isEmpty()) {
                     EmptyChatContent(
                         innerPadding = innerPadding,
@@ -1134,17 +1150,25 @@ private fun ChatPageContent(
                         emptyHero = null,
                         )
                 }
-                // 当前计划贴在右上角现有组件下缘展开：覆盖层不占聊天列表或输入区布局。
-                // 三栏沿用右侧状态面板；详情/概览展开时不叠加第二层浮层。
-                if (!threePane && !showDetails && !previewMode) {
+                // One joined background is drawn over the body and behind the transparent
+                // top-bar buttons. The pill's measured bounds own both position and right edge.
+                val anchor = planAnchor
+                if (attachPlan && anchor != null) {
+                    val density = LocalDensity.current
                     CurrentPlanOverlay(
                         todos = conversation.todos,
                         assistant = assistant,
                         onTodosChange = vm::updateTodos,
                         onUpdateAssistant = vm::updateAssistant,
+                        sessionKey = conversation.id.toString(),
+                        anchorWidth = with(density) { anchor.width.toDp() },
+                        anchorHeight = with(density) { anchor.height.toDp() },
+                        settings = setting,
+                        hazeState = backgroundHazeState,
                         modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = innerPadding.calculateTopPadding(), end = 8.dp),
+                            .align(AbsoluteAlignment.TopLeft)
+                            .width(with(density) { (anchor.right - planHostOrigin.x).coerceAtLeast(0f).toDp() })
+                            .offset { IntOffset(0, (anchor.top - planHostOrigin.y).roundToInt()) },
                     )
                 }
                 // 详情浮层盖在聊天内容上方：不占 Scaffold 的布局，展开和收起都不会推挤聊天区。
@@ -1682,6 +1706,8 @@ private fun TopBar(
     onShowOverview: () -> Unit,
     onExport: () -> Unit,
     onDelete: () -> Unit,
+    planAttached: Boolean,
+    onPlanAnchorPositioned: (Rect) -> Unit,
     detailsExpanded: Boolean,
     onToggleDetails: () -> Unit,
 ) {
@@ -1778,7 +1804,14 @@ private fun TopBar(
             ) {
                 // 和左侧的会话胶囊共用同一个容器，入口之间同样用一条细线隔开，
                 // 顶栏两头的胶囊才是同一套东西
-                TopBarPill(settings = settings, hazeState = hazeState) {
+                TopBarPill(
+                    settings = settings,
+                    hazeState = hazeState,
+                    joinedBackground = planAttached,
+                    modifier = Modifier.onGloballyPositioned {
+                        onPlanAnchorPositioned(it.boundsInRoot())
+                    },
+                ) {
                     // 详情和任务树在横屏是右栏的标签页，顶栏不再重复两个入口
                     if (!threePane) {
                         IconButton(onClick = onToggleDetails, modifier = Modifier.size(TopBarButtonSize)) {
@@ -1838,6 +1871,7 @@ private fun TopBarPill(
     settings: Settings,
     hazeState: HazeState,
     modifier: Modifier = Modifier,
+    joinedBackground: Boolean = false,
     content: @Composable RowScope.() -> Unit,
 ) {
     val effect = settings.displaySetting.effectiveBackgroundEffect
@@ -1851,6 +1885,7 @@ private fun TopBarPill(
     Row(
         modifier = modifier
             .height(TopBarButtonSize)
+            .then(if (joinedBackground) Modifier else Modifier
             .appButtonShadow(shape, 2.dp)
             .clip(shape)
             .background(if (effect == BackgroundEffectType.OFF) containerColor else Color.Transparent)
@@ -1870,7 +1905,7 @@ private fun TopBarPill(
                 } else {
                     Modifier
                 }
-            ),
+            )),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // 入口按 45dp 铺满胶囊，不被 M3 的最小触控尺寸撑大，左右两侧才同高
