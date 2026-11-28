@@ -365,6 +365,59 @@ class ConversationSession(
         }
     }
 
+    /**
+     * Convert exactly the displayed, unclaimed card into one after-current USER message.
+     * Admission, persistence and queue insertion share the metadata/claim critical section, while
+     * dispatch remains the caller's job after the transfer has committed. A rejected or failed
+     * pending transfer becomes NOT_USED in memory so the old request can never claim it later.
+     */
+    internal suspend fun transferLiveGuidanceToInbox(
+        target: LiveGuidanceActionTarget,
+        admit: () -> Boolean,
+        enqueue: (String) -> Unit,
+        persist: suspend (Conversation) -> Boolean,
+    ): Boolean {
+        val expectedIncarnation = incarnation
+        return writeMutex.withLock {
+            if (incarnation != expectedIncarnation) return@withLock false
+            val before = state.value
+            val config = before.config ?: return@withLock false
+            val entries = config.liveGuidanceEntries()
+            val current = entries.firstOrNull { it.actionTarget == target } ?: return@withLock false
+            if (current.content.isBlank()) return@withLock false
+            val claims = _liveGuidanceClaims.value
+            val pending = claims != null && current.isAwaitingOutput(claims.runId)
+            if ((!pending && !current.canSwipe) || claims?.ids?.contains(current.id) == true) {
+                return@withLock false
+            }
+            val missed = if (pending) current.finish(checkNotNull(claims).runId) else current
+            val updated = config.withLiveGuidanceEntries(entries.filterNot { it.id == current.id })
+            withContext(NonCancellable) {
+                var transferred = false
+                try {
+                    if (!admit()) return@withContext false
+                    if (!persist(before.copy(config = updated))) return@withContext false
+                    enqueue(current.content)
+                    transferred = true
+                    true
+                } finally {
+                    if (transferred || pending) {
+                        val nextConfig = if (transferred) updated else config.withLiveGuidanceEntries(
+                            entries.map { if (it.id == current.id) missed else it },
+                        )
+                        val (previous, published) = synchronized(this@ConversationSession) {
+                            val previous = _state.value
+                            previous to update { it.copy(config = nextConfig) }
+                        }
+                        if (transferred && existsInDatabase && lastWritten === before && previous === before) {
+                            lastWritten = published
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // 生成任务（内聚在 session 中）
     private val _generationJob = MutableStateFlow<Job?>(null)
     private val activeJobs = mutableSetOf<Job>()

@@ -29,6 +29,8 @@ data class QueuedMessage(
     val sentWithoutQueue: Boolean = false,
     // Explicit send-after-current choice: queue-off approval interruption does not apply to it.
     val afterCurrent: Boolean = false,
+    // This item is the complete USER turn converted from a live card. Do not bind older armed cards to it.
+    val liveGuidanceTransfer: Boolean = false,
     // Optional in-memory observer; null result means the queued message was withdrawn.
     val reply: CompletableDeferred<String?>? = null,
 ) : InboxItem
@@ -93,6 +95,7 @@ class ConversationInbox {
         notice: Boolean = false,
         sentWithoutQueue: Boolean = false,
         afterCurrent: Boolean = false,
+        liveGuidanceTransfer: Boolean = false,
     ) {
         if (parts.isEmptyInputMessage()) {
             reply?.complete(null)
@@ -106,6 +109,7 @@ class ConversationInbox {
                 notice = notice,
                 sentWithoutQueue = sentWithoutQueue,
                 afterCurrent = afterCurrent,
+                liveGuidanceTransfer = liveGuidanceTransfer,
             ),
         )
     }

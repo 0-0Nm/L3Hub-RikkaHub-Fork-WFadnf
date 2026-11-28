@@ -706,20 +706,40 @@ class ChatService(
         if (content.isEmptyInputMessage()) return false
         val session = sessionManager.getOrCreate(conversationId)
         return synchronized(session) {
-            if (session.maxContextReached() && !autoCompressEnabled(session)) {
-                reportContextLimit(conversationId)
-                return@synchronized false
-            }
-            val inbox = session.inbox.state.value
-            if (inbox.paused && inbox.messages.isNotEmpty()) {
-                reportUnqueueableSend(conversationId, R.string.chat_page_voice_resume_queue)
-                return@synchronized false
-            }
-            if (inbox.messages.isEmpty()) session.inbox.resume()
-            session.inbox.enqueue(content, afterCurrent = true)
+            if (!canEnqueueAfterCurrent(session)) return@synchronized false
+            enqueueAfterCurrentAdmitted(session, content)
             dispatchInbox(conversationId)
             true
         }
+    }
+
+    /** Caller holds the session monitor; no queue state or generation job is changed by admission. */
+    private fun canEnqueueAfterCurrent(session: ConversationSession): Boolean {
+        if (session.maxContextReached() && !autoCompressEnabled(session)) {
+            reportContextLimit(session.id)
+            return false
+        }
+        val inbox = session.inbox.state.value
+        if (inbox.paused && inbox.messages.isNotEmpty()) {
+            reportUnqueueableSend(session.id, R.string.chat_page_voice_resume_queue)
+            return false
+        }
+        return true
+    }
+
+    /** Admission and insertion are separate so a persisted card transfer never dispatches half-way. */
+    private fun enqueueAfterCurrentAdmitted(
+        session: ConversationSession,
+        content: List<UIMessagePart>,
+        liveGuidanceTransfer: Boolean = false,
+    ) {
+        if (session.inbox.state.value.messages.isEmpty()) session.inbox.resume()
+        session.inbox.enqueue(
+            content,
+            answer = true,
+            afterCurrent = true,
+            liveGuidanceTransfer = liveGuidanceTransfer,
+        )
     }
 
     fun sendMessage(
@@ -1218,19 +1238,38 @@ class ChatService(
             session.swipeLiveGuidance(target, defer = false, persist = conversationRepo::updateConversationConfig)
         }
 
-    /** Defer an unclaimed or missed card for the next true user turn; never dispatch a run here. */
+    /**
+     * Convert an unclaimed or missed card to one standalone USER turn. The ordinary inbox dispatcher
+     * starts it immediately when idle or after the active job finishes; no active job is cancelled.
+     */
     suspend fun armLiveGuidanceForNextMessage(conversationId: Uuid, target: LiveGuidanceActionTarget): Boolean =
         withLoadedSession(conversationId) { session ->
-            session.swipeLiveGuidance(target, defer = true, persist = conversationRepo::updateConversationConfig)
+            // A caller disappearing during the metadata write must not strand an admitted idle item.
+            withContext(NonCancellable) {
+                val transferred = session.transferLiveGuidanceToInbox(
+                    target = target,
+                    admit = { synchronized(session) { canEnqueueAfterCurrent(session) } },
+                    enqueue = { text ->
+                        synchronized(session) {
+                            enqueueAfterCurrentAdmitted(
+                                session,
+                                listOf(UIMessagePart.Text(text)),
+                                liveGuidanceTransfer = true,
+                            )
+                        }
+                    },
+                    persist = conversationRepo::updateConversationConfig,
+                )
+                if (transferred) dispatchInbox(conversationId)
+                transferred
+            }
         }
 
-    /** Compatibility alias: retry now defers the latest missed ID until the next real user turn. */
+    /** Explicit retry has the same standalone-user semantics as the card's next-round action. */
     suspend fun retryLiveGuidance(conversationId: Uuid): Boolean = withLoadedSession(conversationId) { session ->
         val target = session.state.value.config?.liveGuidanceEntries()
             ?.lastOrNull { it.delivery == LiveGuidanceDelivery.NOT_USED }?.actionTarget
-        target != null && session.swipeLiveGuidance(
-            target, defer = true, persist = conversationRepo::updateConversationConfig,
-        )
+        target != null && armLiveGuidanceForNextMessage(conversationId, target)
     }
 
     /** Atomic config-only mutation; message nodes, approvals and queue state are not rewritten. */
@@ -1485,7 +1524,13 @@ class ChatService(
                 val result = if (queued.answer) {
                     runTurn(
                         session,
-                        origin = if (queued.notice) GenerationRunOrigin.NOTICE else GenerationRunOrigin.USER_MESSAGE,
+                        origin = when {
+                            queued.notice -> GenerationRunOrigin.NOTICE
+                            // The converted card is already the complete USER turn. Legacy armed cards
+                            // must wait for a later human submission instead of riding this auto-dispatch.
+                            queued.liveGuidanceTransfer -> GenerationRunOrigin.LIVE_GUIDANCE_RETRY
+                            else -> GenerationRunOrigin.USER_MESSAGE
+                        },
                     )
                 } else {
                     null
