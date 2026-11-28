@@ -2774,4 +2774,6 @@
   <string name="chat_page_guidance_archived_temporary_hint">Temporary steering is history only: it is shown here and is never sent to the model again.</string>
   <string name="chat_page_guidance_archived_persistent_hint">Persistent steering keeps guiding later replies of this conversation only. It is never added to history as a user turn and never reaches other conversations.</string>
   <string name="chat_page_guidance_mode_hint">Tap the recorded item to switch temporary/persistent while this run is editable. Delivery means provider output acknowledged the request, not that the model followed it.</string>
+    <string name="setting_display_page_pull_new_chat_threshold_title">Pull up to create chat distance</string>
+    <string name="setting_display_page_pull_new_chat_threshold_desc">Distance in dp after reaching the bottom. Blank or 0 keeps 300; positive values start at 48. Invalid input is not applied.</string>
 </resources>

@@ -336,6 +336,8 @@ data class DisplaySetting(
     val floatingPanelHeightRatio: Float = 1.0f,
     // 面板里预览区的最大高度(dp)，超出后在预览区内部滚动
     val floatingPreviewMaxHeight: Int = 200,
+    // 到底后继续上拉新建会话的触发距离(dp)；0/空白沿用原来的 300，正数最小 48
+    val pullNewChatThreshold: Int = 0,
     val floatingBubbleIcon: FloatingBubbleIcon = FloatingBubbleIcon.AppLogo,
     // 悬浮球整体（球+角标）缩放比例；100% 是现有 52dp 的样子，触控区不跟着缩
     val floatingBubbleScale: Float = 1.0f,

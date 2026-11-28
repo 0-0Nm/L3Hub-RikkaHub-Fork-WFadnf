@@ -449,7 +449,10 @@ private fun ChatListNormal(
     // 滚到最底部以后继续上拉：拉满才认。
     // available 沿用原始手势符号（手指上滑是负值），到底以后列表吃不下，多出来的这段就是拉伸量。
     // 300dp 接近半屏，而且进度按开方衰减：前面涨得快、越往后越慢，最后那一段要实打实拉上去。
-    val createPullMax = with(LocalDensity.current) { 300.dp.toPx() }
+    // 触发、armed 判定和进度条始终使用同一个有效距离；非法/负值回落到原始 300dp
+    val createPullMax = with(LocalDensity.current) {
+        effectivePullNewChatThresholdDp(settings.displaySetting.pullNewChatThreshold).dp.toPx()
+    }
     var createPull by remember { mutableFloatStateOf(0f) }
     var createPullArmed by remember { mutableStateOf(false) }
     // 回调每次重组都是新实例，当 remember 的 key 用会让连接对象每帧重建

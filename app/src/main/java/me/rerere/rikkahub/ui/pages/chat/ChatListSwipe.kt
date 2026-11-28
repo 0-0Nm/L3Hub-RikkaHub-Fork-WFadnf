@@ -43,7 +43,7 @@ internal fun rememberPreviewSwipeProgress(previewMode: Boolean): Animatable<Floa
 }
 
 /**
- * 聊天页向左滑进入概览，概览页向右滑返回（RTL 下方向相反）。
+ * 聊天页只从物理右侧 10% 起手向左滑进入概览；概览页向右滑返回（RTL 下向左）。
  * 只在方向对的时候才接管手势，反方向留给侧边抽屉；横向滚动的子组件（代码块、表格）会先消费掉事件，不受影响。
  */
 internal fun Modifier.previewSwipeGesture(
@@ -54,13 +54,11 @@ internal fun Modifier.previewSwipeGesture(
     isPreviewMode: () -> Boolean,
     onPreviewModeChange: (Boolean) -> Unit,
 ): Modifier = pointerInput(layoutDirection) {
-    // 手指往左（LTR）是进入概览的方向
-    val sign = if (layoutDirection == LayoutDirection.Rtl) -1f else 1f
     val flingThreshold = 400.dp.toPx()
 
     // 拖动进度自己记，不读 progress.value：snapTo 可能要等上一段动画取消才生效
     var dragProgress = 0f
-    fun dragBy(dx: Float, width: Float) {
+    fun dragBy(dx: Float, width: Float, sign: Float) {
         dragProgress = (dragProgress - dx * sign / width).coerceIn(0f, 1f)
         val value = dragProgress
         scope.launch(start = CoroutineStart.UNDISPATCHED) { progress.snapTo(value) }
@@ -69,8 +67,13 @@ internal fun Modifier.previewSwipeGesture(
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
         val startInPreview = isPreviewMode()
-        // 空对话没什么可概览的
-        if (!startInPreview && !canEnterPreview()) return@awaitEachGesture
+        if (!startInPreview) {
+            val width = size.width
+            val x = down.position.x
+            val insideRightEdge = x >= width * 0.9 && x < width
+            if (!insideRightEdge || !canEnterPreview()) return@awaitEachGesture
+        }
+        val sign = if (startInPreview && layoutDirection == LayoutDirection.Rtl) -1f else 1f
         var slop = 0f
         val drag = awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
             val towardsPreview = -over * sign > 0
@@ -84,7 +87,7 @@ internal fun Modifier.previewSwipeGesture(
         val tracker = VelocityTracker()
         tracker.addPointerInputChange(drag)
         dragProgress = progress.value
-        dragBy(slop, width)
+        dragBy(slop, width, sign)
 
         // 接管后在 Initial 阶段就消费掉，避免斜着拖时消息列表同时纵向滚动、长按菜单误触
         var completed = false
@@ -96,7 +99,7 @@ internal fun Modifier.previewSwipeGesture(
                 completed = true
                 break
             }
-            dragBy(change.positionChangeIgnoreConsumed().x, width)
+            dragBy(change.positionChangeIgnoreConsumed().x, width, sign)
             change.consume()
         }
 

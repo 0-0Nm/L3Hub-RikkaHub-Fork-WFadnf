@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -42,6 +43,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -70,6 +72,8 @@ import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceLabel
 import me.rerere.rikkahub.ui.components.ui.NumberSlider
 import me.rerere.rikkahub.ui.components.ui.switchItem
 import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.rikkahub.ui.pages.chat.effectivePullNewChatThresholdDp
+import me.rerere.rikkahub.ui.pages.chat.parsePullNewChatThresholdInput
 import me.rerere.rikkahub.ui.terminal.IconButton
 import me.rerere.rikkahub.ui.terminal.TextButton
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -193,6 +197,32 @@ fun SettingPreferencesUIPage(embedded: Boolean = false, vm: SettingVM = koinView
                     supportingContent = { Text(stringResource(R.string.setting_display_page_show_assistant_bubble_desc)) },
                     headlineContent = { Text(stringResource(R.string.setting_display_page_show_assistant_bubble_title)) },
                 )
+                formItem(
+                    headlineContent = { Text(stringResource(R.string.setting_display_page_pull_new_chat_threshold_title)) },
+                    supportingContent = { Text(stringResource(R.string.setting_display_page_pull_new_chat_threshold_desc)) },
+                    trailingContent = {
+                        CardGroupValue("${effectivePullNewChatThresholdDp(displaySetting.pullNewChatThreshold)} dp")
+                    },
+                ) {
+                    var thresholdText by remember(displaySetting.pullNewChatThreshold) {
+                        mutableStateOf(displaySetting.pullNewChatThreshold.takeIf { it > 0 }?.toString().orEmpty())
+                    }
+                    OutlinedTextField(
+                        value = thresholdText,
+                        onValueChange = { input ->
+                            thresholdText = input
+                            // 非法、负数和溢出只保留输入文本，不写入一个更小的触发距离
+                            parsePullNewChatThresholdInput(input)?.let { value ->
+                                updateDisplaySetting(displaySetting.copy(pullNewChatThreshold = value))
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("300") },
+                        suffix = { Text("dp") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                    )
+                }
                 formItem(
                     headlineContent = { Text(stringResource(R.string.setting_display_page_empty_slogan_title)) },
                     supportingContent = { Text(stringResource(R.string.setting_display_page_empty_slogan_desc)) },
