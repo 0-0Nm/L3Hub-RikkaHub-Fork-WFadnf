@@ -66,7 +66,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.TodoItem
 import me.rerere.rikkahub.data.model.TodoStatus
 import me.rerere.rikkahub.data.model.hasActiveTodo
-import me.rerere.rikkahub.ui.components.ai.chatInputHaze
+import me.rerere.rikkahub.ui.components.ui.effectSurface
 import me.rerere.rikkahub.ui.theme.LocalFullWidthComponents
 import me.rerere.rikkahub.ui.theme.appButtonShadow
 
@@ -117,10 +117,10 @@ internal fun CurrentPlanOverlay(
             .appButtonShadow(shape, 2.dp)
             .clip(shape)
             .background(if (effect == BackgroundEffectType.OFF) containerColor else Color.Transparent)
-            .chatInputHaze(
+            .effectSurface(
                 hazeState = hazeState,
                 displaySetting = settings.displaySetting,
-                containerColor = containerColor,
+                baseColor = containerColor,
                 shape = shape,
             )
             .then(if (effect == BackgroundEffectType.BLUR) Modifier.border(
